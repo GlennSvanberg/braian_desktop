@@ -90,10 +90,16 @@ export function patchDocumentArtifactBody(sessionKey: string, body: string) {
   })
 }
 
+type SeedCanvasOpts = {
+  title?: string
+  canvasKind?: 'document' | 'tabular' | 'visual'
+}
+
 /** Open the workspace canvas with the mock payload for this saved chat (empty threads only). */
 export function seedCanvasPreviewIfEmpty(
   sessionKey: string,
   conversationId: string | null,
+  opts?: SeedCanvasOpts,
 ) {
   if (conversationId === null) return
   const prev = getThread(sessionKey)
@@ -101,6 +107,10 @@ export function seedCanvasPreviewIfEmpty(
 
   const conv = getConversationById(conversationId)
   const demoMessages = conv?.demoMessages
+  const payloadOpts = {
+    title: opts?.title,
+    canvasKind: opts?.canvasKind,
+  }
   if (demoMessages && demoMessages.length > 0) {
     patchThread(sessionKey, {
       messages: demoMessages.map((m, i) => ({
@@ -110,7 +120,10 @@ export function seedCanvasPreviewIfEmpty(
         status: 'complete' as const,
       })),
       artifactOpen: true,
-      artifactPayload: getMockArtifactPayloadForChat(conversationId),
+      artifactPayload: getMockArtifactPayloadForChat(
+        conversationId,
+        payloadOpts,
+      ),
     })
     return
   }
@@ -118,7 +131,10 @@ export function seedCanvasPreviewIfEmpty(
   if (prev.artifactPayload !== null) return
   patchThread(sessionKey, {
     artifactOpen: true,
-    artifactPayload: getMockArtifactPayloadForChat(conversationId),
+    artifactPayload: getMockArtifactPayloadForChat(
+      conversationId,
+      payloadOpts,
+    ),
   })
 }
 

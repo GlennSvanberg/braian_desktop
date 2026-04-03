@@ -1,13 +1,17 @@
-import { getConversationById } from '@/lib/mock-workspace-data'
+import {
+  getConversationById,
+  type MockCanvasKind,
+} from '@/lib/mock-workspace-data'
 
 import type { WorkspaceArtifactPayload } from './types'
 
 export function getMockArtifactPayloadForChat(
   conversationId: string | null,
+  opts?: { title?: string; canvasKind?: MockCanvasKind },
 ): WorkspaceArtifactPayload {
   const conv = conversationId ? getConversationById(conversationId) : null
-  const kind = conv?.canvasKind ?? 'document'
-  const chatTitle = conv?.title ?? 'New chat'
+  const kind = opts?.canvasKind ?? conv?.canvasKind ?? 'document'
+  const chatTitle = opts?.title ?? conv?.title ?? 'New chat'
 
   switch (kind) {
     case 'tabular':

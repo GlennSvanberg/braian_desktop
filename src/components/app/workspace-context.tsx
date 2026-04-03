@@ -1,40 +1,156 @@
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
 
-import { MOCK_WORKSPACES, type MockWorkspace } from '@/lib/mock-workspace-data'
+import { isTauri } from '@/lib/tauri-env'
+import {
+  type ConversationDto,
+  type WorkspaceDto,
+  conversationList,
+  workspaceGetDefaultRoot,
+  workspaceList,
+} from '@/lib/workspace-api'
+
+const ACTIVE_WS_KEY = 'braian.io.activeWorkspaceId'
+
+export type WorkspaceConversation = ConversationDto & {
+  updatedLabel: string
+}
 
 type WorkspaceContextValue = {
+  workspaces: WorkspaceDto[]
   activeWorkspaceId: string
+  activeWorkspace: WorkspaceDto | null
   setActiveWorkspaceId: (id: string) => void
-  activeWorkspace: MockWorkspace
+  refreshWorkspaces: () => Promise<void>
+  conversations: WorkspaceConversation[]
+  refreshConversations: () => Promise<void>
+  createConversation: () => Promise<string>
+  defaultWorkspacesRoot: string | null
+  loading: boolean
+  isTauriRuntime: boolean
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(
-    MOCK_WORKSPACES[0].id,
+  const [workspaces, setWorkspaces] = useState<WorkspaceDto[]>([])
+  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState('')
+  const [conversations, setConversations] = useState<WorkspaceConversation[]>(
+    [],
   )
+  const [defaultWorkspacesRoot, setDefaultWorkspacesRoot] = useState<
+    string | null
+  >(null)
+  const [loading, setLoading] = useState(true)
+  const isTauriRuntime = isTauri()
+
+  const refreshWorkspaces = useCallback(async () => {
+    setLoading(true)
+    try {
+      const list = await workspaceList()
+      setWorkspaces(list)
+      setActiveWorkspaceIdState((prev) => {
+        const fromStorage =
+          typeof localStorage !== 'undefined'
+            ? localStorage.getItem(ACTIVE_WS_KEY)
+            : null
+        const candidate = list.some((w) => w.id === prev)
+          ? prev
+          : fromStorage && list.some((w) => w.id === fromStorage)
+            ? fromStorage
+            : (list[0]?.id ?? '')
+        if (candidate && typeof localStorage !== 'undefined') {
+          localStorage.setItem(ACTIVE_WS_KEY, candidate)
+        }
+        return candidate
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshWorkspaces()
+  }, [refreshWorkspaces])
+
+  useEffect(() => {
+    void workspaceGetDefaultRoot().then(setDefaultWorkspacesRoot)
+  }, [])
+
+  const setActiveWorkspaceId = useCallback((id: string) => {
+    setActiveWorkspaceIdState(id)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(ACTIVE_WS_KEY, id)
+    }
+  }, [])
 
   const activeWorkspace = useMemo(() => {
-    return (
-      MOCK_WORKSPACES.find((w) => w.id === activeWorkspaceId) ??
-      MOCK_WORKSPACES[0]
+    return workspaces.find((w) => w.id === activeWorkspaceId) ?? null
+  }, [workspaces, activeWorkspaceId])
+
+  const refreshConversations = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setConversations([])
+      return
+    }
+    const { formatUpdatedLabel } = await import('@/lib/format-updated')
+    const rows = await conversationList(activeWorkspaceId)
+    setConversations(
+      rows.map((c) => ({
+        ...c,
+        updatedLabel: formatUpdatedLabel(c.updatedAtMs),
+      })),
     )
   }, [activeWorkspaceId])
 
+  useEffect(() => {
+    void refreshConversations()
+  }, [refreshConversations])
+
+  const createConversation = useCallback(async () => {
+    const { conversationCreate } = await import('@/lib/workspace-api')
+    if (!activeWorkspaceId) {
+      throw new Error('No workspace selected.')
+    }
+    const c = await conversationCreate(activeWorkspaceId)
+    await refreshConversations()
+    return c.id
+  }, [activeWorkspaceId, refreshConversations])
+
   const value = useMemo(
     () => ({
+      workspaces,
       activeWorkspaceId,
-      setActiveWorkspaceId,
       activeWorkspace,
+      setActiveWorkspaceId,
+      refreshWorkspaces,
+      conversations,
+      refreshConversations,
+      createConversation,
+      defaultWorkspacesRoot,
+      loading,
+      isTauriRuntime,
     }),
-    [activeWorkspace, activeWorkspaceId],
+    [
+      workspaces,
+      activeWorkspaceId,
+      activeWorkspace,
+      setActiveWorkspaceId,
+      refreshWorkspaces,
+      conversations,
+      refreshConversations,
+      createConversation,
+      defaultWorkspacesRoot,
+      loading,
+      isTauriRuntime,
+    ],
   )
 
   return (

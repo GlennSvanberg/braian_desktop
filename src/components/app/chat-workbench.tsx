@@ -19,14 +19,27 @@ import {
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
 import { getConversationById } from '@/lib/mock-workspace-data'
+import type { ConversationDto } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
 
-type ChatWorkbenchProps = {
-  /** Mock conversation id from the sidebar, or `null` for a fresh “new chat” session. */
-  conversationId: string | null
+function normalizeCanvasKind(
+  s: string | undefined,
+): 'document' | 'tabular' | 'visual' {
+  if (s === 'tabular' || s === 'visual') return s
+  return 'document'
 }
 
-export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
+type ChatWorkbenchProps = {
+  /** Conversation id from the sidebar, or `null` for a fresh “new chat” session. */
+  conversationId: string | null
+  /** When set (saved chat from DB), drives title and canvas kind for previews. */
+  conversationMeta?: ConversationDto | null
+}
+
+export function ChatWorkbench({
+  conversationId,
+  conversationMeta,
+}: ChatWorkbenchProps) {
   const { activeWorkspaceId } = useWorkspace()
   const sessionKey = chatSessionKey(activeWorkspaceId, conversationId)
   const thread = useChatThread(sessionKey)
@@ -36,15 +49,21 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
   const saved = conversationId
     ? getConversationById(conversationId)
     : undefined
-  const chatTitle = saved?.title ?? 'New chat'
+  const chatTitle =
+    conversationMeta?.title ?? saved?.title ?? 'New chat'
   const isNewChat = conversationId === null
 
   const isMobile = useIsMobile()
   const { messages, artifactOpen, artifactPayload, draft, generating } = thread
 
   useEffect(() => {
-    seedCanvasPreviewIfEmpty(sessionKey, conversationId)
-  }, [sessionKey, conversationId])
+    seedCanvasPreviewIfEmpty(sessionKey, conversationId, {
+      title: conversationMeta?.title,
+      canvasKind: conversationMeta
+        ? normalizeCanvasKind(conversationMeta.canvasKind)
+        : undefined,
+    })
+  }, [sessionKey, conversationId, conversationMeta])
 
   const sendMessage = useCallback(() => {
     sendChatTurn(sessionKey, draft)

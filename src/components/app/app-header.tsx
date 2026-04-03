@@ -1,22 +1,31 @@
-import { useRouterState } from '@tanstack/react-router'
+import { useMatches, useRouterState } from '@tanstack/react-router'
 
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { getConversationById } from '@/lib/mock-workspace-data'
+import type { ConversationDto } from '@/lib/workspace-api'
 
 import { useWorkspace } from './workspace-context'
 
+type ChatRouteContext = { conversation: ConversationDto }
+
 export function AppHeader() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const matches = useMatches()
   const { activeWorkspace } = useWorkspace()
 
-  const chatMatch = pathname.match(/^\/chat\/([^/]+)/)
-  const conversationId = chatMatch?.[1]
-  const isNewChatRoute = pathname === '/chat/new'
-  const conversation =
-    conversationId && !isNewChatRoute
-      ? getConversationById(conversationId)
+  const chatMatch = matches.find(
+    (m) => m.routeId === '/_shell/chat/$conversationId',
+  )
+  const routeConversation =
+    chatMatch?.context &&
+    typeof chatMatch.context === 'object' &&
+    'conversation' in chatMatch.context
+      ? (chatMatch.context as ChatRouteContext).conversation
       : undefined
+
+  const isNewChatRoute = pathname === '/chat/new'
+  const conversationIdMatch = pathname.match(/^\/chat\/([^/]+)/)
+  const conversationIdFromPath = conversationIdMatch?.[1]
 
   const isDashboard = pathname.startsWith('/dashboard')
   const isHome = pathname === '/'
@@ -25,17 +34,20 @@ export function AppHeader() {
     if (isHome) return 'Welcome'
     if (isDashboard) return 'Dashboard'
     if (isNewChatRoute) return 'New chat'
-    if (conversation) return conversation.title
-    if (conversationId) return 'Conversation'
+    if (routeConversation) return routeConversation.title
+    if (conversationIdFromPath && conversationIdFromPath !== 'new') {
+      return 'Conversation'
+    }
     return 'Braian'
   })()
 
   const subtitle = (() => {
-    if (isHome) return activeWorkspace.name
-    if (isDashboard) return `${activeWorkspace.name} · Overview`
-    if (isNewChatRoute) return `${activeWorkspace.name} · Chat`
-    if (conversation) return `${activeWorkspace.name} · Chat`
-    return activeWorkspace.name
+    const wsName = activeWorkspace?.name ?? 'Workspace'
+    if (isHome) return wsName
+    if (isDashboard) return `${wsName} · Overview`
+    if (isNewChatRoute) return `${wsName} · Chat`
+    if (routeConversation) return `${wsName} · Chat`
+    return wsName
   })()
 
   return (

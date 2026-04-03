@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Braian Desktop",
   "version": "0.1.0",
-  "identifier": "com.braian.desktop",
+  "identifier": "io.braian.desktop",
   "build": {
     "frontendDist": "../dist/client",
     "devUrl": "http://localhost:3000",
