@@ -30,7 +30,8 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
   const { activeWorkspaceId } = useWorkspace()
   const sessionKey = chatSessionKey(activeWorkspaceId, conversationId)
   const thread = useChatThread(sessionKey)
-  const { sendChatTurn, setChatDraft } = useChatThreadActions()
+  const { sendChatTurn, setChatDraft, patchDocumentArtifactBody } =
+    useChatThreadActions()
 
   const saved = conversationId
     ? getConversationById(conversationId)
@@ -196,7 +197,12 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
                 !isMobile && 'md:rounded-r-xl',
               )}
             >
-              <ArtifactPanel payload={artifactPayload} />
+              <ArtifactPanel
+                payload={artifactPayload}
+                onDocumentBodyChange={(body) =>
+                  patchDocumentArtifactBody(sessionKey, body)
+                }
+              />
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

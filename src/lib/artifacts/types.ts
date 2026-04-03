@@ -2,7 +2,7 @@
  * Workspace canvas payloads — discriminated union the real LLM/tools should emit.
  * User-facing labels: Document, Data, Visual (avoid "artifact" in UI).
  */
-export type ArtifactKind = 'document' | 'tabular' | 'visual'
+export type ArtifactKind = 'document' | 'tabular' | 'tabular-multi' | 'visual'
 
 export type TabularColumn = {
   id: string
@@ -18,7 +18,7 @@ export type TabularRow = Record<string, string | number | boolean | null>
 export type DocumentArtifactPayload = {
   kind: 'document'
   title?: string
-  /** Plain text; future: markdown */
+  /** GitHub-flavored markdown */
   body: string
 }
 
@@ -29,6 +29,21 @@ export type TabularArtifactPayload = {
   sourceLabel?: string
   columns: TabularColumn[]
   rows: TabularRow[]
+}
+
+/** One sheet/table block inside a multi-file canvas */
+export type TabularSection = {
+  title?: string
+  sourceLabel?: string
+  columns: TabularColumn[]
+  rows: TabularRow[]
+}
+
+export type TabularMultiArtifactPayload = {
+  kind: 'tabular-multi'
+  title?: string
+  /** Several tables at once (e.g. multiple Excel files + AI-merged result). */
+  sections: TabularSection[]
 }
 
 export type VisualArtifactPayload = {
@@ -44,6 +59,7 @@ export type VisualArtifactPayload = {
 export type WorkspaceArtifactPayload =
   | DocumentArtifactPayload
   | TabularArtifactPayload
+  | TabularMultiArtifactPayload
   | VisualArtifactPayload
 
 export function isDocumentArtifact(
@@ -56,6 +72,12 @@ export function isTabularArtifact(
   p: WorkspaceArtifactPayload,
 ): p is TabularArtifactPayload {
   return p.kind === 'tabular'
+}
+
+export function isTabularMultiArtifact(
+  p: WorkspaceArtifactPayload,
+): p is TabularMultiArtifactPayload {
+  return p.kind === 'tabular-multi'
 }
 
 export function isVisualArtifact(

@@ -149,3 +149,39 @@ html:not(.light):not(.dark) {
     @apply min-h-screen bg-background font-sans text-foreground antialiased;
   }
 }
+
+/* MDXEditor: align content surface with Braian tokens (toolbar uses package light/dark-theme). */
+.markdown-document-canvas .prose-markdown-canvas {
+  color: var(--app-text-2);
+  outline: none;
+}
+
+.markdown-document-canvas .prose-markdown-canvas h1,
+.markdown-document-canvas .prose-markdown-canvas h2,
+.markdown-document-canvas .prose-markdown-canvas h3 {
+  color: var(--app-text-1);
+  font-weight: 600;
+}
+
+.markdown-document-canvas .prose-markdown-canvas a {
+  color: var(--app-accent-600);
+}
+
+.markdown-document-canvas .prose-markdown-canvas blockquote {
+  border-left-color: var(--app-accent-500);
+  color: var(--app-text-3);
+}
+
+.markdown-document-canvas .prose-markdown-canvas code {
+  background: var(--app-muted);
+  color: var(--app-text-1);
+}
+
+.markdown-document-canvas .prose-markdown-canvas pre {
+  background: var(--app-bg-2);
+  border: 1px solid var(--app-border);
+}
+
+.markdown-document-canvas .mdxeditor {
+  --basePageBg: transparent;
+}

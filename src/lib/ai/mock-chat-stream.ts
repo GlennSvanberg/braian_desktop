@@ -65,6 +65,8 @@ function canvasHint(kind: string): string {
   switch (kind) {
     case 'tabular':
       return 'Updated your data table on the right — same shape the live assistant will use for Excel/CSV views.'
+    case 'tabular-multi':
+      return 'Refreshed the data canvas with multiple tables — use this for several files or a merged sheet in one view.'
     case 'visual':
       return 'Refreshed the visual canvas — when image gen is wired, `imageSrc` will show the real bitmap.'
     case 'document':

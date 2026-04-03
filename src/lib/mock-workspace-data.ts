@@ -7,12 +7,19 @@ export type MockWorkspace = {
 /** Which primary canvas the mock assistant opens for this thread (demo + AI contract). */
 export type MockCanvasKind = 'document' | 'tabular' | 'visual'
 
+export type MockDemoMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export type MockConversation = {
   id: string
   workspaceId: string
   title: string
   updatedLabel: string
   canvasKind: MockCanvasKind
+  /** Pre-filled thread + canvas when opening an empty session (product demos). */
+  demoMessages?: MockDemoMessage[]
 }
 
 export const MOCK_WORKSPACES: MockWorkspace[] = [
@@ -68,6 +75,35 @@ export const MOCK_CONVERSATIONS: MockConversation[] = [
     title: 'Dashboard mockups',
     updatedLabel: 'Wed',
     canvasKind: 'tabular',
+  },
+  {
+    id: 'conv-excel-merge',
+    workspaceId: 'ws-acme',
+    title: 'Merge Q1 + Q2 sales',
+    updatedLabel: 'Today',
+    canvasKind: 'tabular',
+    demoMessages: [
+      {
+        role: 'user',
+        content:
+          'In the sales folder I have two Excel exports for Q1 and Q2. Can you find them and show what’s in each file side by side?',
+      },
+      {
+        role: 'assistant',
+        content:
+          'I found Q1_sales.xlsx and Q2_sales.xlsx. Both are on the canvas now — same columns (SKU, product, revenue, units) so you can scan them together. Q2 adds a row for SKU D-900 that isn’t in Q1.',
+      },
+      {
+        role: 'user',
+        content:
+          'Merge them into one table by SKU: keep product name, add Q1 revenue, Q2 revenue, and a total column. Fill missing quarters with empty cells.',
+      },
+      {
+        role: 'assistant',
+        content:
+          'Done. The third block is merged_by_ai.xlsx — one row per SKU with Q1 revenue, Q2 revenue, and Total. SKUs only in one quarter show a single side populated. Say if you want this exported or charted.',
+      },
+    ],
   },
   {
     id: 'conv-paper',

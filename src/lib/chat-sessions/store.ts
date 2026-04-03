@@ -2,6 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 
 import { streamChatTurn } from '@/lib/ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
+import { getConversationById } from '@/lib/mock-workspace-data'
 
 import { parseChatSessionKey } from './keys'
 import { DEFAULT_CHAT_THREAD, type ChatThreadState } from './types'
@@ -80,6 +81,15 @@ export function setChatDraft(sessionKey: string, draft: string) {
   )
 }
 
+export function patchDocumentArtifactBody(sessionKey: string, body: string) {
+  patchThread(sessionKey, (prev) => {
+    const p = prev.artifactPayload
+    if (!p || p.kind !== 'document') return prev
+    if (p.body === body) return prev
+    return { ...prev, artifactPayload: { ...p, body } }
+  })
+}
+
 /** Open the workspace canvas with the mock payload for this saved chat (empty threads only). */
 export function seedCanvasPreviewIfEmpty(
   sessionKey: string,
@@ -88,6 +98,23 @@ export function seedCanvasPreviewIfEmpty(
   if (conversationId === null) return
   const prev = getThread(sessionKey)
   if (prev.messages.length > 0) return
+
+  const conv = getConversationById(conversationId)
+  const demoMessages = conv?.demoMessages
+  if (demoMessages && demoMessages.length > 0) {
+    patchThread(sessionKey, {
+      messages: demoMessages.map((m, i) => ({
+        id: `seed-${conversationId}-${i}`,
+        role: m.role,
+        content: m.content,
+        status: 'complete' as const,
+      })),
+      artifactOpen: true,
+      artifactPayload: getMockArtifactPayloadForChat(conversationId),
+    })
+    return
+  }
+
   if (prev.artifactPayload !== null) return
   patchThread(sessionKey, {
     artifactOpen: true,
@@ -221,5 +248,12 @@ export function useChatThreadActions() {
   const setDraft = useCallback((sessionKey: string, draft: string) => {
     setChatDraft(sessionKey, draft)
   }, [])
-  return { sendChatTurn: send, setChatDraft: setDraft }
+  const patchDocBody = useCallback((sessionKey: string, body: string) => {
+    patchDocumentArtifactBody(sessionKey, body)
+  }, [])
+  return {
+    sendChatTurn: send,
+    setChatDraft: setDraft,
+    patchDocumentArtifactBody: patchDocBody,
+  }
 }

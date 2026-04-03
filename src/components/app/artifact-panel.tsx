@@ -1,16 +1,20 @@
 import { ImageIcon } from 'lucide-react'
 
+import { MarkdownDocumentCanvas } from '@/components/workspace/markdown-document-canvas'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
+import type { TabularSection } from '@/lib/artifacts/types'
 import {
   isDocumentArtifact,
   isTabularArtifact,
+  isTabularMultiArtifact,
   isVisualArtifact,
 } from '@/lib/artifacts/types'
 import { cn } from '@/lib/utils'
 
 type ArtifactPanelProps = {
   payload: WorkspaceArtifactPayload | null
+  onDocumentBodyChange?: (body: string) => void
 }
 
 function formatCell(value: string | number | boolean | null): string {
@@ -19,13 +23,45 @@ function formatCell(value: string | number | boolean | null): string {
   return String(value)
 }
 
-function DocumentCanvas({ body }: { body: string }) {
+function TabularTable({
+  columns,
+  rows,
+}: {
+  columns: { id: string; label: string }[]
+  rows: Record<string, string | number | boolean | null>[]
+}) {
   return (
-    <ScrollArea className="min-h-0 flex-1">
-      <article className="bg-background border-border text-text-2 mx-auto max-w-2xl rounded-lg border px-5 py-6 text-sm leading-relaxed shadow-sm">
-        <div className="whitespace-pre-wrap">{body}</div>
-      </article>
-    </ScrollArea>
+    <table className="w-full min-w-max border-collapse text-left text-sm">
+      <thead>
+        <tr className="bg-muted/50 border-border border-b">
+          {columns.map((col) => (
+            <th
+              key={col.id}
+              className="text-text-1 whitespace-nowrap px-3 py-2.5 font-medium"
+            >
+              {col.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, ri) => (
+          <tr
+            key={ri}
+            className="border-border hover:bg-muted/30 border-b last:border-b-0"
+          >
+            {columns.map((col) => (
+              <td
+                key={col.id}
+                className="text-text-2 whitespace-nowrap px-3 py-2.5"
+              >
+                {formatCell(row[col.id] ?? null)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -38,37 +74,43 @@ function TabularCanvas({
 }) {
   return (
     <ScrollArea className="min-h-0 flex-1 rounded-lg border border-border">
-      <table className="w-full min-w-max border-collapse text-left text-sm">
-        <thead>
-          <tr className="bg-muted/50 border-border border-b">
-            {columns.map((col) => (
-              <th
-                key={col.id}
-                className="text-text-1 whitespace-nowrap px-3 py-2.5 font-medium"
-              >
-                {col.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr
-              key={ri}
-              className="border-border hover:bg-muted/30 border-b last:border-b-0"
-            >
-              {columns.map((col) => (
-                <td
-                  key={col.id}
-                  className="text-text-2 whitespace-nowrap px-3 py-2.5"
-                >
-                  {formatCell(row[col.id] ?? null)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <TabularTable columns={columns} rows={rows} />
+    </ScrollArea>
+  )
+}
+
+function TabularSectionBlock({ section }: { section: TabularSection }) {
+  const heading = section.title ?? 'Table'
+  const file = section.sourceLabel
+
+  return (
+    <section className="border-border flex flex-col gap-2 rounded-lg border bg-background/80">
+      <header className="border-border flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b px-3 py-2.5">
+        <h3 className="text-text-1 text-sm font-semibold">{heading}</h3>
+        {file ? (
+          <span className="text-text-3 font-mono text-xs tracking-tight">
+            {file}
+          </span>
+        ) : null}
+      </header>
+      <div className="overflow-x-auto px-1 pb-2">
+        <TabularTable columns={section.columns} rows={section.rows} />
+      </div>
+    </section>
+  )
+}
+
+function TabularMultiCanvas({ sections }: { sections: TabularSection[] }) {
+  return (
+    <ScrollArea className="min-h-0 flex-1">
+      <div className="flex flex-col gap-4 pr-2 pb-1">
+        {sections.map((section, i) => (
+          <TabularSectionBlock
+            key={section.sourceLabel ?? section.title ?? `section-${i}`}
+            section={section}
+          />
+        ))}
+      </div>
     </ScrollArea>
   )
 }
@@ -123,7 +165,10 @@ function VisualCanvas({
   )
 }
 
-export function ArtifactPanel({ payload }: ArtifactPanelProps) {
+export function ArtifactPanel({
+  payload,
+  onDocumentBodyChange,
+}: ArtifactPanelProps) {
   if (!payload) {
     return (
       <div className="bg-card border-border flex h-full min-h-0 flex-col items-center justify-center rounded-xl border p-8 text-center shadow-sm">
@@ -136,10 +181,23 @@ export function ArtifactPanel({ payload }: ArtifactPanelProps) {
     <div className="bg-card border-border flex h-full min-h-0 flex-col overflow-hidden rounded-xl border shadow-sm">
       <div className="flex min-h-0 flex-1 flex-col p-3 md:p-4">
         {isDocumentArtifact(payload) ? (
-          <DocumentCanvas body={payload.body} />
+          <MarkdownDocumentCanvas
+            markdown={payload.body}
+            onMarkdownChange={onDocumentBodyChange}
+          />
         ) : null}
         {isTabularArtifact(payload) ? (
           <TabularCanvas columns={payload.columns} rows={payload.rows} />
+        ) : null}
+        {isTabularMultiArtifact(payload) ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            {payload.title ? (
+              <p className="text-text-2 shrink-0 px-0.5 text-sm font-medium">
+                {payload.title}
+              </p>
+            ) : null}
+            <TabularMultiCanvas sections={payload.sections} />
+          </div>
         ) : null}
         {isVisualArtifact(payload) ? (
           <VisualCanvas

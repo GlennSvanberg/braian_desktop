@@ -70,6 +70,116 @@ function tabularForConversation(
   conversationId: string | null,
   chatTitle: string,
 ): WorkspaceArtifactPayload {
+  if (conversationId === 'conv-excel-merge') {
+    return {
+      kind: 'tabular-multi',
+      title: 'Sales exports · multi-file canvas',
+      sections: [
+        {
+          title: 'Q1 export',
+          sourceLabel: 'Q1_sales.xlsx',
+          columns: [
+            { id: 'sku', label: 'SKU', type: 'string' },
+            { id: 'product', label: 'Product', type: 'string' },
+            { id: 'revenue', label: 'Revenue', type: 'number' },
+            { id: 'units', label: 'Units', type: 'number' },
+          ],
+          rows: [
+            {
+              sku: 'A-100',
+              product: 'Widget Pro',
+              revenue: 12400,
+              units: 62,
+            },
+            {
+              sku: 'B-220',
+              product: 'Cable kit',
+              revenue: 3180,
+              units: 106,
+            },
+            {
+              sku: 'C-015',
+              product: 'Mount bracket',
+              revenue: 890,
+              units: 89,
+            },
+          ],
+        },
+        {
+          title: 'Q2 export',
+          sourceLabel: 'Q2_sales.xlsx',
+          columns: [
+            { id: 'sku', label: 'SKU', type: 'string' },
+            { id: 'product', label: 'Product', type: 'string' },
+            { id: 'revenue', label: 'Revenue', type: 'number' },
+            { id: 'units', label: 'Units', type: 'number' },
+          ],
+          rows: [
+            {
+              sku: 'A-100',
+              product: 'Widget Pro',
+              revenue: 13850,
+              units: 67,
+            },
+            {
+              sku: 'B-220',
+              product: 'Cable kit',
+              revenue: 4020,
+              units: 134,
+            },
+            {
+              sku: 'D-900',
+              product: 'Power supply',
+              revenue: 2100,
+              units: 42,
+            },
+          ],
+        },
+        {
+          title: 'Merged by assistant',
+          sourceLabel: 'merged_by_ai.xlsx',
+          columns: [
+            { id: 'sku', label: 'SKU', type: 'string' },
+            { id: 'product', label: 'Product', type: 'string' },
+            { id: 'q1_revenue', label: 'Q1 revenue', type: 'number' },
+            { id: 'q2_revenue', label: 'Q2 revenue', type: 'number' },
+            { id: 'total_revenue', label: 'Total', type: 'number' },
+          ],
+          rows: [
+            {
+              sku: 'A-100',
+              product: 'Widget Pro',
+              q1_revenue: 12400,
+              q2_revenue: 13850,
+              total_revenue: 26250,
+            },
+            {
+              sku: 'B-220',
+              product: 'Cable kit',
+              q1_revenue: 3180,
+              q2_revenue: 4020,
+              total_revenue: 7200,
+            },
+            {
+              sku: 'C-015',
+              product: 'Mount bracket',
+              q1_revenue: 890,
+              q2_revenue: null,
+              total_revenue: 890,
+            },
+            {
+              sku: 'D-900',
+              product: 'Power supply',
+              q1_revenue: null,
+              q2_revenue: 2100,
+              total_revenue: 2100,
+            },
+          ],
+        },
+      ],
+    }
+  }
+
   if (conversationId === 'conv-dashboards') {
     return {
       kind: 'tabular',
