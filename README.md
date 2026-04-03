@@ -1,208 +1,40 @@
 # Braian Desktop
 
-Local-first Tauri app: TanStack Start + React + Tailwind v4 + shadcn/ui + SQLite (Rust). Agent-oriented conventions and commands: **[AGENTS.md](AGENTS.md)**. Styling tokens: **[docs/STYLING.md](docs/STYLING.md)**.
+**Braian Desktop** is a **local-first**, **chat-first** AI workspace built as a **Tauri 2** desktop app. The UI is React 19 with TanStack Start / TanStack Router, Tailwind CSS v4, and shadcn/ui. A local **SQLite** database (`braian.db` in the app data directory) is initialized from the Rust side on startup.
 
-## Run
+The product direction is an artifact- and workspace-centric experience: chat drives a persistent **Workspace** panel (documents, tabular data, visuals) over local files and business-style workflows—not a generic web demo. See **[NOTES.md](NOTES.md)** for vision, **[docs/AI.md](docs/AI.md)** for the **TanStack AI** LLM layer (decisions, BYOK, tools), and **[AGENTS.md](AGENTS.md)** for agent-oriented repo conventions.
 
-```bash
-npm install
-npm run dev              # web only, http://localhost:3000
-npm run tauri:dev        # desktop window (starts dev server)
-npm run tauri:build      # release bundle
-```
+## Prerequisites
 
----
+- [Node.js](https://nodejs.org/) (LTS recommended)
+- [Rust](https://www.rust-lang.org/) and Tauri’s [system dependencies](https://v2.tauri.app/start/prerequisites/) for your OS
 
-Welcome to your new TanStack Start app!
+## Commands
 
-# Getting Started
-
-To run this application:
+Install dependencies once:
 
 ```bash
 npm install
-npm run dev
 ```
 
-# Building For Production
+| Command | What it does |
+|--------|----------------|
+| `npm run tauri:dev` | **Recommended for day-to-day work.** Runs the **real desktop app**: starts the Vite dev server and opens the Tauri window. Native **folder and filesystem access** (and other Tauri plugins) work here; they do **not** in the browser alone. |
+| `npm run dev` | **Web only** — Vite on [http://localhost:3000](http://localhost:3000). Useful for quick UI iteration; **no** Tauri shell, so treat native APIs as unavailable. |
+| `npm run build` | Production build of the frontend; static output is consumed by Tauri (`dist/client/` — see `src-tauri/tauri.conf.json` if paths change after upgrades). |
+| `npm run tauri:build` | Release **desktop** bundle (installer / binary per platform). |
+| `npm run preview` | Preview the built web assets locally. |
+| `npm run test` | Run [Vitest](https://vitest.dev/) tests. |
 
-To build this application for production:
+## Project layout
 
-```bash
-npm run build
-```
+- `src/routes/` — file-based routes
+- `src/components/` — app UI (`src/components/ui/` — shadcn primitives)
+- `src/lib/` — shared TypeScript utilities
+- `src/styles/app.css` — global stylesheet entry (design tokens; see **[docs/STYLING.md](docs/STYLING.md)**)
+- `src-tauri/` — Rust entry, Tauri commands, SQLite setup
 
-## Testing
+## Learn more
 
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
-
-```bash
-npm run test
-```
-
-## Styling
-
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles/app.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `npm install @tailwindcss/vite tailwindcss -D`
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+- [TanStack Start](https://tanstack.com/start) / [TanStack Router](https://tanstack.com/router) / [TanStack AI](https://tanstack.com/ai/latest) (LLM integration; see [docs/AI.md](docs/AI.md))
+- [Tauri v2](https://v2.tauri.app/)
