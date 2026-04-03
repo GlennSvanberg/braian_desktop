@@ -1,4 +1,19 @@
-Welcome to your new TanStack Start app! 
+# Braian Desktop
+
+Local-first Tauri app: TanStack Start + React + Tailwind v4 + shadcn/ui + SQLite (Rust). Agent-oriented conventions and commands: **[AGENTS.md](AGENTS.md)**. Styling tokens: **[docs/STYLING.md](docs/STYLING.md)**.
+
+## Run
+
+```bash
+npm install
+npm run dev              # web only, http://localhost:3000
+npm run tauri:dev        # desktop window (starts dev server)
+npm run tauri:build      # release bundle
+```
+
+---
+
+Welcome to your new TanStack Start app!
 
 # Getting Started
 
@@ -34,7 +49,7 @@ This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 If you prefer not to use Tailwind CSS:
 
 1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
+2. Replace the Tailwind import in `src/styles/app.css` with your own styles
 3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
 4. Uninstall the packages: `npm install @tailwindcss/vite tailwindcss -D`
 
