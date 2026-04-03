@@ -9,50 +9,135 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as ShellRouteRouteImport } from './routes/_shell/route'
+import { Route as ShellIndexRouteImport } from './routes/_shell/index'
+import { Route as ShellDashboardRouteImport } from './routes/_shell/dashboard'
+import { Route as ShellChatNewRouteImport } from './routes/_shell/chat.new'
+import { Route as ShellChatConversationIdRouteImport } from './routes/_shell/chat.$conversationId'
 
-const IndexRoute = IndexRouteImport.update({
+const ShellRouteRoute = ShellRouteRouteImport.update({
+  id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShellIndexRoute = ShellIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRouteRoute,
+} as any)
+const ShellDashboardRoute = ShellDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => ShellRouteRoute,
+} as any)
+const ShellChatNewRoute = ShellChatNewRouteImport.update({
+  id: '/chat/new',
+  path: '/chat/new',
+  getParentRoute: () => ShellRouteRoute,
+} as any)
+const ShellChatConversationIdRoute = ShellChatConversationIdRouteImport.update({
+  id: '/chat/$conversationId',
+  path: '/chat/$conversationId',
+  getParentRoute: () => ShellRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof ShellIndexRoute
+  '/dashboard': typeof ShellDashboardRoute
+  '/chat/$conversationId': typeof ShellChatConversationIdRoute
+  '/chat/new': typeof ShellChatNewRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/dashboard': typeof ShellDashboardRoute
+  '/': typeof ShellIndexRoute
+  '/chat/$conversationId': typeof ShellChatConversationIdRoute
+  '/chat/new': typeof ShellChatNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_shell': typeof ShellRouteRouteWithChildren
+  '/_shell/dashboard': typeof ShellDashboardRoute
+  '/_shell/': typeof ShellIndexRoute
+  '/_shell/chat/$conversationId': typeof ShellChatConversationIdRoute
+  '/_shell/chat/new': typeof ShellChatNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/dashboard' | '/chat/$conversationId' | '/chat/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/dashboard' | '/' | '/chat/$conversationId' | '/chat/new'
+  id:
+    | '__root__'
+    | '/_shell'
+    | '/_shell/dashboard'
+    | '/_shell/'
+    | '/_shell/chat/$conversationId'
+    | '/_shell/chat/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  ShellRouteRoute: typeof ShellRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_shell': {
+      id: '/_shell'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof ShellRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_shell/': {
+      id: '/_shell/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof ShellIndexRouteImport
+      parentRoute: typeof ShellRouteRoute
+    }
+    '/_shell/dashboard': {
+      id: '/_shell/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof ShellDashboardRouteImport
+      parentRoute: typeof ShellRouteRoute
+    }
+    '/_shell/chat/new': {
+      id: '/_shell/chat/new'
+      path: '/chat/new'
+      fullPath: '/chat/new'
+      preLoaderRoute: typeof ShellChatNewRouteImport
+      parentRoute: typeof ShellRouteRoute
+    }
+    '/_shell/chat/$conversationId': {
+      id: '/_shell/chat/$conversationId'
+      path: '/chat/$conversationId'
+      fullPath: '/chat/$conversationId'
+      preLoaderRoute: typeof ShellChatConversationIdRouteImport
+      parentRoute: typeof ShellRouteRoute
     }
   }
 }
 
+interface ShellRouteRouteChildren {
+  ShellDashboardRoute: typeof ShellDashboardRoute
+  ShellIndexRoute: typeof ShellIndexRoute
+  ShellChatConversationIdRoute: typeof ShellChatConversationIdRoute
+  ShellChatNewRoute: typeof ShellChatNewRoute
+}
+
+const ShellRouteRouteChildren: ShellRouteRouteChildren = {
+  ShellDashboardRoute: ShellDashboardRoute,
+  ShellIndexRoute: ShellIndexRoute,
+  ShellChatConversationIdRoute: ShellChatConversationIdRoute,
+  ShellChatNewRoute: ShellChatNewRoute,
+}
+
+const ShellRouteRouteWithChildren = ShellRouteRoute._addFileChildren(
+  ShellRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  ShellRouteRoute: ShellRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

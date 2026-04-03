@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
 /* Semantic palette: Braian prototype neutrals + semantic colors; green primary (not steel-blue). */
 html.light {
   color-scheme: light;
@@ -20,6 +22,14 @@ html.light {
   --app-info: #7a8fa3;
   --app-muted: #eceae4;
   --app-muted-fg: #6b6e66;
+  --sidebar: var(--app-bg-1);
+  --sidebar-foreground: var(--app-text-1);
+  --sidebar-primary: var(--app-accent-600);
+  --sidebar-primary-foreground: #f7faf8;
+  --sidebar-accent: var(--app-bg-2);
+  --sidebar-accent-foreground: var(--app-text-1);
+  --sidebar-border: var(--app-border);
+  --sidebar-ring: var(--app-accent-500);
 }
 
 html.dark {
@@ -41,6 +51,14 @@ html.dark {
   --app-info: #7a8fa3;
   --app-muted: #1b2229;
   --app-muted-fg: #8f8a80;
+  --sidebar: var(--app-bg-1);
+  --sidebar-foreground: var(--app-text-1);
+  --sidebar-primary: var(--app-accent-500);
+  --sidebar-primary-foreground: #f7faf8;
+  --sidebar-accent: var(--app-bg-2);
+  --sidebar-accent-foreground: var(--app-text-1);
+  --sidebar-border: var(--app-border);
+  --sidebar-ring: var(--app-accent-500);
 }
 
 /* Before theme script runs, prefer dark (prototype default). */
@@ -63,6 +81,14 @@ html:not(.light):not(.dark) {
   --app-info: #7a8fa3;
   --app-muted: #1b2229;
   --app-muted-fg: #8f8a80;
+  --sidebar: var(--app-bg-1);
+  --sidebar-foreground: var(--app-text-1);
+  --sidebar-primary: var(--app-accent-500);
+  --sidebar-primary-foreground: #f7faf8;
+  --sidebar-accent: var(--app-bg-2);
+  --sidebar-accent-foreground: var(--app-text-1);
+  --sidebar-border: var(--app-border);
+  --sidebar-ring: var(--app-accent-500);
 }
 
 @theme inline {
@@ -104,6 +130,14 @@ html:not(.light):not(.dark) {
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
 }
 
 @layer base {
