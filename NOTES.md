@@ -18,6 +18,16 @@ Agentic Execution: Braian uses MCP (Model Context Protocol) to execute "Skills"�
 
 Abstraction for Business: Technical terms (RAG, LLM, Embeddings) are hidden. The user sees "Skills," "Dashboards," and "Actions."
 
+Workspace canvas (starter surfaces): The right-hand panel is labeled **Workspace** in the UI (not "artifact"). Three first-class canvas types match what Braian is for — local data, long-form work, and visuals:
+
+1. **Document** — Long-form text beside chat (ChatGPT Canvas–style): specs, briefs, memos. Model/tool output uses `kind: "document"` with a `body` string (plain text today; Markdown later).
+2. **Data** — Tabular views for Excel/CSV-style rows. Model output uses `kind: "tabular"` with `columns[]` (`id`, `label`, optional `type`) and `rows[]` (objects keyed by column `id`). Optional `sourceLabel` for the linked file name.
+3. **Visual** — Image generation previews. Model output uses `kind: "visual"` with optional `prompt`, `imageSrc` (URL or `data:image/...;base64,...`), and `alt`. Until generation is wired, the UI shows a placeholder frame.
+
+TypeScript definitions for the discriminated union live in `src/lib/artifacts/types.ts`. The mock chat stream emits `{ type: "artifact", payload }` chunks (`src/lib/ai/types.ts`); a real adapter should do the same so the store and `ArtifactPanel` stay unchanged.
+
+Mock sidebar conversations set `canvasKind` on each row in `src/lib/mock-workspace-data.ts` so **each saved chat** opens a different canvas (document vs data vs visual) when the thread is still empty; sending a message refreshes that payload.
+
 3. Technical Stack
 Framework: Tauri (Rust backend for secure, deep file access; React frontend).
 

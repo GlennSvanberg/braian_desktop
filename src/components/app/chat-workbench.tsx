@@ -1,8 +1,8 @@
-import { CornerDownLeft, Sparkles } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { CornerDownLeft, Loader2, Sparkles } from 'lucide-react'
+import { useCallback, useEffect } from 'react'
 
 import { ArtifactPanel } from '@/components/app/artifact-panel'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { useWorkspace } from '@/components/app/workspace-context'
 import { Button } from '@/components/ui/button'
 import {
   ResizableHandle,
@@ -12,20 +12,14 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { chatSessionKey } from '@/lib/chat-sessions/keys'
+import {
+  seedCanvasPreviewIfEmpty,
+  useChatThread,
+  useChatThreadActions,
+} from '@/lib/chat-sessions/store'
 import { getConversationById } from '@/lib/mock-workspace-data'
 import { cn } from '@/lib/utils'
-
-type ChatRole = 'user' | 'assistant'
-
-type ChatMessage = {
-  id: string
-  role: ChatRole
-  content: string
-}
-
-function createId() {
-  return `m-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
 
 type ChatWorkbenchProps = {
   /** Mock conversation id from the sidebar, or `null` for a fresh “new chat” session. */
@@ -33,36 +27,27 @@ type ChatWorkbenchProps = {
 }
 
 export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
+  const { activeWorkspaceId } = useWorkspace()
+  const sessionKey = chatSessionKey(activeWorkspaceId, conversationId)
+  const thread = useChatThread(sessionKey)
+  const { sendChatTurn, setChatDraft } = useChatThreadActions()
+
   const saved = conversationId
     ? getConversationById(conversationId)
     : undefined
   const chatTitle = saved?.title ?? 'New chat'
   const isNewChat = conversationId === null
 
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [artifactOpen, setArtifactOpen] = useState(false)
-  const [draft, setDraft] = useState('')
   const isMobile = useIsMobile()
+  const { messages, artifactOpen, artifactPayload, draft, generating } = thread
+
+  useEffect(() => {
+    seedCanvasPreviewIfEmpty(sessionKey, conversationId)
+  }, [sessionKey, conversationId])
 
   const sendMessage = useCallback(() => {
-    const text = draft.trim()
-    if (!text) return
-
-    const userMsg: ChatMessage = {
-      id: createId(),
-      role: 'user',
-      content: text,
-    }
-    const assistantMsg: ChatMessage = {
-      id: createId(),
-      role: 'assistant',
-      content:
-        'Here’s a first pass. The artifact panel is open so you can review the structured draft alongside this thread.',
-    }
-    setDraft('')
-    setMessages((prev) => [...prev, userMsg, assistantMsg])
-    setArtifactOpen(true)
-  }, [draft])
+    sendChatTurn(sessionKey, draft)
+  }, [draft, sendChatTurn, sessionKey])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -71,9 +56,9 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
     }
   }
 
-  const artifactTitle = isNewChat
-    ? 'Untitled artifact'
-    : `${chatTitle} · draft`
+  const helperSubtitle = artifactOpen
+    ? 'Workspace canvas is open · resize the split or keep typing below.'
+    : 'Mock assistant streams replies and refreshes the canvas (document, data table, or visual) for this chat. Type long for a ~1 minute background run (switch chats while it works).'
 
   const chatColumn = (
     <div
@@ -91,20 +76,30 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
             <div className="bg-accent-500/15 text-accent-600 border-accent-500/25 flex size-9 shrink-0 items-center justify-center rounded-full border">
               <Sparkles className="size-4" />
             </div>
-            <div className="min-w-0 pt-0.5">
-              <p className="text-text-1 text-sm font-medium">{chatTitle}</p>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex items-center gap-2">
+                <p className="text-text-1 text-sm font-medium">{chatTitle}</p>
+                {generating ? (
+                  <span className="text-text-3 inline-flex items-center gap-1.5 text-xs">
+                    <Loader2
+                      className="size-3.5 shrink-0 animate-spin opacity-80"
+                      aria-hidden
+                    />
+                    <span className="sr-only">Assistant is replying</span>
+                    <span className="hidden sm:inline">Working…</span>
+                  </span>
+                ) : null}
+              </div>
               <p className="text-text-3 mt-1 text-xs leading-relaxed">
-                {artifactOpen
-                  ? 'Artifact is open · resize the split or keep typing below.'
-                  : 'Chat only for now—the assistant will open an artifact when your first message needs one.'}
+                {helperSubtitle}
               </p>
             </div>
           </div>
           {messages.length === 0 ? (
             <div className="border-border bg-muted/25 text-text-3 rounded-xl border border-dashed px-4 py-8 text-center text-sm leading-relaxed">
               {isNewChat
-                ? 'New conversation. Send a message to start; an artifact pane will appear when there’s something to show beside the thread.'
-                : 'This thread starts empty. Send a message to continue—the artifact panel opens once the reply includes a draft to inspect.'}
+                ? 'New conversation. Send a message to open the workspace canvas (document demo).'
+                : 'This thread starts empty. Send a message to refresh the canvas; long runs ~1 min in the background.'}
             </div>
           ) : (
             <div className="flex flex-col gap-5">
@@ -112,38 +107,26 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
                 <div
                   key={m.id}
                   className={cn(
-                    'flex gap-3',
-                    m.role === 'user' ? 'flex-row-reverse' : 'flex-row',
+                    'flex',
+                    m.role === 'user' ? 'justify-end' : 'justify-start',
                   )}
                 >
-                  <Avatar
-                    className={cn(
-                      'size-8 shrink-0',
-                      m.role === 'user'
-                        ? 'bg-primary/15'
-                        : 'bg-muted border border-border',
-                    )}
-                  >
-                    <AvatarFallback
-                      className={cn(
-                        'text-xs font-semibold',
-                        m.role === 'user'
-                          ? 'text-primary'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      {m.role === 'user' ? 'You' : 'AI'}
-                    </AvatarFallback>
-                  </Avatar>
                   <div
                     className={cn(
                       'max-w-[min(100%,42rem)] rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
                       m.role === 'user'
                         ? 'bg-primary text-primary-foreground border-primary/20 rounded-tr-md'
                         : 'bg-card text-text-2 border-border rounded-tl-md',
+                      m.role === 'assistant' &&
+                        m.status === 'streaming' &&
+                        !m.content &&
+                        'text-text-3 italic',
                     )}
                   >
-                    {m.content}
+                    {m.content ||
+                      (m.role === 'assistant' && m.status === 'streaming'
+                        ? '…'
+                        : '')}
                   </div>
                 </div>
               ))}
@@ -156,9 +139,10 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
           <Textarea
             placeholder="Message Braian…"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => setChatDraft(sessionKey, e.target.value)}
             onKeyDown={onKeyDown}
-            className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 text-sm shadow-none focus-visible:ring-0"
+            disabled={generating}
+            className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 text-sm shadow-none focus-visible:ring-0 disabled:opacity-60"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
             <p className="text-text-3 px-1.5 text-xs">
@@ -169,7 +153,7 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
               size="sm"
               className="gap-1.5"
               onClick={sendMessage}
-              disabled={!draft.trim()}
+              disabled={!draft.trim() || generating}
             >
               Send
               <CornerDownLeft className="size-3.5 opacity-80" />
@@ -212,7 +196,7 @@ export function ChatWorkbench({ conversationId }: ChatWorkbenchProps) {
                 !isMobile && 'md:rounded-r-xl',
               )}
             >
-              <ArtifactPanel title={artifactTitle} />
+              <ArtifactPanel payload={artifactPayload} />
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

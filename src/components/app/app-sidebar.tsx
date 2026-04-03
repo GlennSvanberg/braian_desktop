@@ -1,4 +1,10 @@
-import { LayoutDashboard, MessageSquare, PanelLeftIcon, Plus } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Loader2,
+  MessageSquare,
+  PanelLeftIcon,
+  Plus,
+} from 'lucide-react'
 import { Link, useRouterState } from '@tanstack/react-router'
 
 import {
@@ -16,10 +22,85 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { getConversationsForWorkspace } from '@/lib/mock-workspace-data'
+import { chatSessionKey } from '@/lib/chat-sessions/keys'
+import { useSessionGenerating } from '@/lib/chat-sessions/store'
+import {
+  getConversationsForWorkspace,
+  type MockConversation,
+} from '@/lib/mock-workspace-data'
 
 import { useWorkspace } from './workspace-context'
 import { WorkspaceSwitcher } from './workspace-switcher'
+
+function NewChatSidebarItem({ pathname }: { pathname: string }) {
+  const { activeWorkspaceId } = useWorkspace()
+  const sessionKey = chatSessionKey(activeWorkspaceId, null)
+  const generating = useSessionGenerating(sessionKey)
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={pathname === '/chat/new'}
+        tooltip="New chat"
+      >
+        <Link to="/chat/new" preload="intent">
+          <Plus className="size-4 shrink-0" aria-hidden />
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate">New chat</span>
+            {generating ? (
+              <Loader2
+                className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
+                aria-label="Generating reply"
+              />
+            ) : null}
+          </span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
+
+function ConversationSidebarItem({
+  workspaceId,
+  conversation,
+  pathname,
+}: {
+  workspaceId: string
+  conversation: MockConversation
+  pathname: string
+}) {
+  const sessionKey = chatSessionKey(workspaceId, conversation.id)
+  const generating = useSessionGenerating(sessionKey)
+  const active = pathname === `/chat/${conversation.id}`
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        tooltip={`${conversation.title} · ${conversation.updatedLabel}`}
+      >
+        <Link
+          to="/chat/$conversationId"
+          params={{ conversationId: conversation.id }}
+          preload="intent"
+        >
+          <MessageSquare className="size-4 shrink-0" aria-hidden />
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate">{conversation.title}</span>
+            {generating ? (
+              <Loader2
+                className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
+                aria-label="Generating reply"
+              />
+            ) : null}
+          </span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
 
 export function AppSidebar() {
   const { activeWorkspaceId, activeWorkspace } = useWorkspace()
@@ -74,45 +155,21 @@ export function AppSidebar() {
           <SidebarGroupContent className="min-h-0">
             <ScrollArea className="h-[min(320px,calc(100vh-320px))] pr-2 md:h-[min(420px,calc(100svh-280px))]">
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === '/chat/new'}
-                    tooltip="New chat"
-                  >
-                    <Link to="/chat/new" preload="intent">
-                      <Plus className="size-4" />
-                      <span>New chat</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <NewChatSidebarItem pathname={pathname} />
                 {conversations.length === 0 ? (
                   <p className="text-sidebar-foreground/60 px-2 py-3 text-xs leading-relaxed">
                     No saved threads in {activeWorkspace.name} yet. Start with
                     new chat or switch workspace.
                   </p>
                 ) : (
-                  conversations.map((c) => {
-                    const active = pathname === `/chat/${c.id}`
-                    return (
-                      <SidebarMenuItem key={c.id}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={active}
-                          tooltip={`${c.title} · ${c.updatedLabel}`}
-                        >
-                          <Link
-                            to="/chat/$conversationId"
-                            params={{ conversationId: c.id }}
-                            preload="intent"
-                          >
-                            <MessageSquare />
-                            <span className="truncate">{c.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    )
-                  })
+                  conversations.map((c) => (
+                    <ConversationSidebarItem
+                      key={c.id}
+                      workspaceId={activeWorkspaceId}
+                      conversation={c}
+                      pathname={pathname}
+                    />
+                  ))
                 )}
               </SidebarMenu>
             </ScrollArea>
