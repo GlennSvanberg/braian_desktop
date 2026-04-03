@@ -5,6 +5,7 @@ import {
   MessageSquare,
   PanelLeftIcon,
   Plus,
+  Settings,
 } from 'lucide-react'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 
@@ -117,7 +118,6 @@ function ConversationSidebarItem({
         <Link
           to="/chat/$conversationId"
           params={{ conversationId: conversation.id }}
-          preload="intent"
         >
           <MessageSquare className="size-4 shrink-0" aria-hidden />
           <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -145,7 +145,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="Braian home">
-              <Link to="/dashboard" preload="intent">
+              <Link to="/dashboard">
                 <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-sm font-bold shadow-sm">
                   B
                 </div>
@@ -173,9 +173,21 @@ export function AppSidebar() {
                   isActive={pathname.startsWith('/dashboard')}
                   tooltip="Dashboard"
                 >
-                  <Link to="/dashboard" preload="intent">
+                  <Link to="/dashboard">
                     <LayoutDashboard />
                     <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === '/settings'}
+                  tooltip="AI settings"
+                >
+                  <Link to="/settings">
+                    <Settings />
+                    <span>Settings</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

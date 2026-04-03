@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteRouteImport } from './routes/_shell/route'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
+import { Route as ShellSettingsRouteImport } from './routes/_shell/settings'
 import { Route as ShellDashboardRouteImport } from './routes/_shell/dashboard'
 import { Route as ShellChatNewRouteImport } from './routes/_shell/chat.new'
 import { Route as ShellChatConversationIdRouteImport } from './routes/_shell/chat.$conversationId'
@@ -22,6 +23,11 @@ const ShellRouteRoute = ShellRouteRouteImport.update({
 const ShellIndexRoute = ShellIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => ShellRouteRoute,
+} as any)
+const ShellSettingsRoute = ShellSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => ShellRouteRoute,
 } as any)
 const ShellDashboardRoute = ShellDashboardRouteImport.update({
@@ -43,11 +49,13 @@ const ShellChatConversationIdRoute = ShellChatConversationIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
   '/dashboard': typeof ShellDashboardRoute
+  '/settings': typeof ShellSettingsRoute
   '/chat/$conversationId': typeof ShellChatConversationIdRoute
   '/chat/new': typeof ShellChatNewRoute
 }
 export interface FileRoutesByTo {
   '/dashboard': typeof ShellDashboardRoute
+  '/settings': typeof ShellSettingsRoute
   '/': typeof ShellIndexRoute
   '/chat/$conversationId': typeof ShellChatConversationIdRoute
   '/chat/new': typeof ShellChatNewRoute
@@ -56,19 +64,26 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteRouteWithChildren
   '/_shell/dashboard': typeof ShellDashboardRoute
+  '/_shell/settings': typeof ShellSettingsRoute
   '/_shell/': typeof ShellIndexRoute
   '/_shell/chat/$conversationId': typeof ShellChatConversationIdRoute
   '/_shell/chat/new': typeof ShellChatNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/chat/$conversationId' | '/chat/new'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/settings'
+    | '/chat/$conversationId'
+    | '/chat/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/dashboard' | '/' | '/chat/$conversationId' | '/chat/new'
+  to: '/dashboard' | '/settings' | '/' | '/chat/$conversationId' | '/chat/new'
   id:
     | '__root__'
     | '/_shell'
     | '/_shell/dashboard'
+    | '/_shell/settings'
     | '/_shell/'
     | '/_shell/chat/$conversationId'
     | '/_shell/chat/new'
@@ -92,6 +107,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof ShellIndexRouteImport
+      parentRoute: typeof ShellRouteRoute
+    }
+    '/_shell/settings': {
+      id: '/_shell/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof ShellSettingsRouteImport
       parentRoute: typeof ShellRouteRoute
     }
     '/_shell/dashboard': {
@@ -120,6 +142,7 @@ declare module '@tanstack/react-router' {
 
 interface ShellRouteRouteChildren {
   ShellDashboardRoute: typeof ShellDashboardRoute
+  ShellSettingsRoute: typeof ShellSettingsRoute
   ShellIndexRoute: typeof ShellIndexRoute
   ShellChatConversationIdRoute: typeof ShellChatConversationIdRoute
   ShellChatNewRoute: typeof ShellChatNewRoute
@@ -127,6 +150,7 @@ interface ShellRouteRouteChildren {
 
 const ShellRouteRouteChildren: ShellRouteRouteChildren = {
   ShellDashboardRoute: ShellDashboardRoute,
+  ShellSettingsRoute: ShellSettingsRoute,
   ShellIndexRoute: ShellIndexRoute,
   ShellChatConversationIdRoute: ShellChatConversationIdRoute,
   ShellChatNewRoute: ShellChatNewRoute,

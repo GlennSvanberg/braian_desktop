@@ -36,6 +36,14 @@ The package set is still **alpha**; expect API adjustments as the library mature
 - Preserve existing **chunk / artifact shapes** from [`src/lib/ai/types.ts`](../src/lib/ai/types.ts) where possible so `ArtifactPanel` and stores stay stable.
 - Shell-shaped tools (`run_command` with workspace-scoped cwd) can sit **behind** Tauri `invoke` for safety; see discussions in [`AGENTS.md`](../AGENTS.md).
 
+## Tauri and outbound HTTP (CORS)
+
+Provider REST APIs do not allow browser `fetch` from `localhost` (CORS). The desktop app uses **`@tauri-apps/plugin-http`**: the WebView calls `fetch` from that plugin so requests run in Rust and reach OpenAI, Anthropic, Gemini, etc. Allowed hosts are listed in [`src-tauri/capabilities/default.json`](../src-tauri/capabilities/default.json) under the `http:default` scope. If you add an **OpenAI-compatible** base URL (xAI, self-hosted, etc.), add its origin to that allow list or requests will be denied.
+
+Chat streaming and adapters live in [`src/lib/ai/tanstack-chat-stream.ts`](../src/lib/ai/tanstack-chat-stream.ts). BYOK settings are persisted in SQLite via [`src-tauri/src/ai_settings.rs`](../src-tauri/src/ai_settings.rs) (`ai_settings_get` / `ai_settings_set`).
+
+The OpenAI and Anthropic JS SDKs still classify the Tauri WebView as a **browser** and refuse to run unless **`dangerouslyAllowBrowser: true`** is set on the client config. Braian sets that only in the desktop AI path (with Tauri HTTP `fetch`), not for arbitrary public web pages. See [OpenAI’s API key safety notes](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety).
+
 ## Agent skill (usage patterns)
 
 TanStack AI is young; for **coding-agent–oriented** guidance (APIs, tools, providers), install the community skill from [skills.sh](https://skills.sh/):

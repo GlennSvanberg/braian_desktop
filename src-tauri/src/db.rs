@@ -57,6 +57,19 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 2 {
+    conn.execute_batch(
+      "CREATE TABLE IF NOT EXISTS ai_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        provider TEXT NOT NULL DEFAULT 'openai',
+        api_key TEXT NOT NULL DEFAULT '',
+        model_id TEXT NOT NULL DEFAULT '',
+        base_url TEXT
+      );
+      UPDATE _schema_version SET version = 2 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 

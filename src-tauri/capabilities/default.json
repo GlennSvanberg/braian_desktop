@@ -7,7 +7,20 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
     "dialog:default",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.openai.com/**" },
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://generativelanguage.googleapis.com/**" },
+        { "url": "https://api.x.ai/**" },
+        { "url": "https://openrouter.ai/**" }
+      ]
+    }
   ]
 }

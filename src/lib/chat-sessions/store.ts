@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
 import { streamChatTurn } from '@/lib/ai'
+import { getPlaceholderArtifactPayload } from '@/lib/artifacts/placeholder-payloads'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
 
@@ -129,12 +130,15 @@ export function seedCanvasPreviewIfEmpty(
   }
 
   if (prev.artifactPayload !== null) return
+  const kind =
+    payloadOpts.canvasKind ??
+    (conv?.canvasKind as 'document' | 'tabular' | 'visual' | undefined) ??
+    'document'
+  const title =
+    payloadOpts.title ?? conv?.title ?? 'New chat'
   patchThread(sessionKey, {
     artifactOpen: true,
-    artifactPayload: getMockArtifactPayloadForChat(
-      conversationId,
-      payloadOpts,
-    ),
+    artifactPayload: getPlaceholderArtifactPayload(kind, title),
   })
 }
 
@@ -171,13 +175,23 @@ export function sendChatTurn(sessionKey: string, text: string) {
     messages: [...p.messages, userMsg, assistantMsg],
   }))
 
+  const priorMessages = prev.messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }))
+
   void (async () => {
     try {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
-      for await (const chunk of streamChatTurn(trimmed, ac.signal, {
-        workspaceId,
-        conversationId,
-      })) {
+      for await (const chunk of streamChatTurn(
+        trimmed,
+        ac.signal,
+        {
+          workspaceId,
+          conversationId,
+        },
+        priorMessages,
+      )) {
         if (chunk.type === 'text-delta') {
           patchThread(sessionKey, (p) => ({
             ...p,
@@ -208,6 +222,15 @@ export function sendChatTurn(sessionKey: string, text: string) {
       const abortedError =
         err instanceof Error && err.name === 'AbortError'
       if (!aborted && !abortedError) {
+        console.error('[braian] chat stream failed', err)
+        const detail =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : 'Something went wrong while generating a reply.'
+        const userLine =
+          detail.length > 600 ? `${detail.slice(0, 600)}…` : detail
         patchThread(sessionKey, (p) => ({
           ...p,
           messages: p.messages.map((m) =>
@@ -216,7 +239,7 @@ export function sendChatTurn(sessionKey: string, text: string) {
                   ...m,
                   content:
                     m.content ||
-                    'Something went wrong while generating a reply.',
+                    `Could not get a reply.\n\n${userLine}`,
                   status: 'complete' as const,
                 }
               : m,

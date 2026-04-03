@@ -5,6 +5,11 @@ export type ChatTurnContext = {
   conversationId: string | null
 }
 
+export type PriorChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export type ChatStreamChunk =
   | { type: 'text-delta'; text: string }
   | {
@@ -17,4 +22,5 @@ export type ChatStreamProvider = (
   userText: string,
   signal?: AbortSignal,
   context?: ChatTurnContext,
+  priorMessages?: PriorChatMessage[],
 ) => AsyncIterable<ChatStreamChunk>

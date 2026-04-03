@@ -18,6 +18,11 @@
     "@mdxeditor/editor": "^3.53.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/ai": "^0.10.0",
+    "@tanstack/ai-anthropic": "^0.7.2",
+    "@tanstack/ai-gemini": "^0.8.5",
+    "@tanstack/ai-openai": "^0.7.3",
+    "@tanstack/ai-react": "^0.7.8",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
@@ -26,6 +31,7 @@
     "@tanstack/router-plugin": "^1.132.0",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-http": "^2.5.7",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -35,7 +41,8 @@
     "react-dom": "^19.2.0",
     "react-resizable-panels": "^4.9.0",
     "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",

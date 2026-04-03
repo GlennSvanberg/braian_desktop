@@ -78,7 +78,7 @@ export function ChatWorkbench({
 
   const helperSubtitle = artifactOpen
     ? 'Workspace canvas is open · resize the split or keep typing below.'
-    : 'Mock assistant streams replies and refreshes the canvas (document, data table, or visual) for this chat. Type long for a ~1 minute background run (switch chats while it works).'
+    : 'Primary assistant replies stream here. Configure your API key under Settings. Dev mock: localStorage braian.mockAi = 1.'
 
   const chatColumn = (
     <div
@@ -118,8 +118,8 @@ export function ChatWorkbench({
           {messages.length === 0 ? (
             <div className="border-border bg-muted/25 text-text-3 rounded-xl border border-dashed px-4 py-8 text-center text-sm leading-relaxed">
               {isNewChat
-                ? 'New conversation. Send a message to open the workspace canvas (document demo).'
-                : 'This thread starts empty. Send a message to refresh the canvas; long runs ~1 min in the background.'}
+                ? 'New conversation. Send a message to start; the workspace panel opens beside chat when you have a canvas.'
+                : 'This thread starts empty. Send a message to chat with the assistant.'}
             </div>
           ) : (
             <div className="flex flex-col gap-5">
