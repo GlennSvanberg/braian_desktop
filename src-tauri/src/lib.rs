@@ -1,4 +1,5 @@
 mod ai_settings;
+mod braian_store;
 mod db;
 mod workspace;
 
@@ -31,9 +32,11 @@ pub fn run() {
       workspace::workspace_add_from_path,
       workspace::workspace_remove,
       workspace::workspace_rename,
-      workspace::conversation_list,
-      workspace::conversation_create,
-      workspace::conversation_get,
+      braian_store::conversation_list,
+      braian_store::conversation_create,
+      braian_store::conversation_open,
+      braian_store::conversation_save,
+      braian_store::canvas_document_write,
       ai_settings::ai_settings_get,
       ai_settings::ai_settings_set,
     ])

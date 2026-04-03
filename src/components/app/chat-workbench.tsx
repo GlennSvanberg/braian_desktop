@@ -1,5 +1,5 @@
 import { CornerDownLeft, Loader2, Sparkles } from 'lucide-react'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
 import { ArtifactPanel } from '@/components/app/artifact-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
@@ -13,34 +13,49 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
+import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import {
+  replaceThread,
   seedCanvasPreviewIfEmpty,
   useChatThread,
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
 import { getConversationById } from '@/lib/mock-workspace-data'
-import type { ConversationDto } from '@/lib/workspace-api'
+import {
+  buildConversationSavePayload,
+  conversationSave,
+  type ConversationDto,
+} from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
 
 function normalizeCanvasKind(
   s: string | undefined,
 ): 'document' | 'tabular' | 'visual' {
-  if (s === 'tabular' || s === 'visual') return s
+  if (s === 'tabular' || s === 'tabular-multi') return 'tabular'
+  if (s === 'visual') return 'visual'
   return 'document'
 }
 
 type ChatWorkbenchProps = {
   /** Conversation id from the sidebar, or `null` for a fresh “new chat” session. */
   conversationId: string | null
-  /** When set (saved chat from DB), drives title and canvas kind for previews. */
+  /** When set (saved chat from `.braian`), drives title and canvas kind for previews. */
   conversationMeta?: ConversationDto | null
+  /** Hydrate store from disk (from route `conversation_open`). */
+  initialThread?: ChatThreadState | null
 }
 
 export function ChatWorkbench({
   conversationId,
   conversationMeta,
+  initialThread = null,
 }: ChatWorkbenchProps) {
-  const { activeWorkspaceId } = useWorkspace()
+  const { activeWorkspaceId, refreshConversations, isTauriRuntime } =
+    useWorkspace()
+  const lastSerializedRef = useRef<string | null>(null)
+  const initialThreadRef = useRef(initialThread)
+  initialThreadRef.current = initialThread
+  const hydratedSessionKeyRef = useRef<string | null>(null)
   const sessionKey = chatSessionKey(activeWorkspaceId, conversationId)
   const thread = useChatThread(sessionKey)
   const { sendChatTurn, setChatDraft, patchDocumentArtifactBody } =
@@ -56,6 +71,25 @@ export function ChatWorkbench({
   const isMobile = useIsMobile()
   const { messages, artifactOpen, artifactPayload, draft, generating } = thread
 
+  useLayoutEffect(() => {
+    if (conversationId == null || !conversationMeta) return
+    const init = initialThreadRef.current
+    if (!init) return
+    if (hydratedSessionKeyRef.current === sessionKey) return
+    hydratedSessionKeyRef.current = sessionKey
+    replaceThread(sessionKey, init)
+    if (isTauriRuntime) {
+      lastSerializedRef.current = JSON.stringify(
+        buildConversationSavePayload(
+          { ...init, generating: false },
+          conversationMeta,
+        ),
+      )
+    } else {
+      lastSerializedRef.current = null
+    }
+  }, [conversationId, conversationMeta, isTauriRuntime, sessionKey])
+
   useEffect(() => {
     seedCanvasPreviewIfEmpty(sessionKey, conversationId, {
       title: conversationMeta?.title,
@@ -64,6 +98,36 @@ export function ChatWorkbench({
         : undefined,
     })
   }, [sessionKey, conversationId, conversationMeta])
+
+  useEffect(() => {
+    if (
+      conversationId == null ||
+      !conversationMeta ||
+      !isTauriRuntime ||
+      generating
+    ) {
+      return
+    }
+    const t = window.setTimeout(() => {
+      const payload = buildConversationSavePayload(thread, conversationMeta)
+      const s = JSON.stringify(payload)
+      if (s === lastSerializedRef.current) return
+      void conversationSave(payload)
+        .then(() => {
+          lastSerializedRef.current = s
+          return refreshConversations()
+        })
+        .catch((e) => console.error('[braian] conversation save failed', e))
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [
+    conversationId,
+    conversationMeta,
+    generating,
+    isTauriRuntime,
+    refreshConversations,
+    thread,
+  ])
 
   const sendMessage = useCallback(() => {
     sendChatTurn(sessionKey, draft)

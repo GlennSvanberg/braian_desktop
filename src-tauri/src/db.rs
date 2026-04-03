@@ -70,6 +70,13 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 3 {
+    conn.execute_batch(
+      "DROP TABLE IF EXISTS conversations;
+      UPDATE _schema_version SET version = 3 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 

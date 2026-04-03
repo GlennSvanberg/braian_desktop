@@ -3,23 +3,23 @@ import { createFileRoute, notFound, useNavigate } from '@tanstack/react-router'
 
 import { ChatWorkbench } from '@/components/app/chat-workbench'
 import { useWorkspace } from '@/components/app/workspace-context'
-import { conversationGet } from '@/lib/workspace-api'
+import { conversationOpen } from '@/lib/workspace-api'
 
 export const Route = createFileRoute('/_shell/chat/$conversationId')({
   component: ChatPage,
   beforeLoad: async ({ params }) => {
-    const conversation = await conversationGet(params.conversationId)
-    if (!conversation) {
+    const opened = await conversationOpen(params.conversationId)
+    if (!opened) {
       throw notFound()
     }
-    return { conversation }
+    return { conversation: opened.conversation, initialThread: opened.thread }
   },
 })
 
 function ChatPage() {
   const navigate = useNavigate()
   const { activeWorkspaceId, loading: workspaceLoading } = useWorkspace()
-  const { conversation } = Route.useRouteContext({
+  const { conversation, initialThread } = Route.useRouteContext({
     from: '/_shell/chat/$conversationId',
   })
 
@@ -39,6 +39,7 @@ function ChatPage() {
     <ChatWorkbench
       conversationId={conversation.id}
       conversationMeta={conversation}
+      initialThread={initialThread}
     />
   )
 }

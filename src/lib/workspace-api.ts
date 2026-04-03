@@ -6,6 +6,8 @@ import {
   getConversationById,
   getConversationsForWorkspace,
 } from '@/lib/mock-workspace-data'
+import type { ChatThreadState } from '@/lib/chat-sessions/types'
+import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import { isTauri } from '@/lib/tauri-env'
 
 export type WorkspaceDto = {
@@ -115,19 +117,143 @@ export async function conversationCreate(
   return invoke<ConversationDto>('conversation_create', { workspaceId })
 }
 
-export async function conversationGet(
+export type ConversationSavePayload = {
+  id: string
+  workspaceId: string
+  title: string
+  canvasKind: string
+  artifactOpen: boolean
+  draft: string
+  messages: Array<{
+    id: string
+    role: string
+    content: string
+    status?: string
+  }>
+  artifactPayload: WorkspaceArtifactPayload | null
+}
+
+export type ConversationOpenResult = {
+  conversation: ConversationDto
+  thread: ChatThreadState
+}
+
+type ConversationOpenInvoke = {
+  conversation: ConversationDto
+  thread: {
+    messages: Array<{
+      id: string
+      role: string
+      content: string
+      status?: string
+    }>
+    artifactOpen: boolean
+    artifactPayload: unknown
+    draft: string
+    generating: boolean
+  }
+}
+
+function mapInvokeThreadToState(
+  thread: ConversationOpenInvoke['thread'],
+): ChatThreadState {
+  return {
+    messages: thread.messages.map((m) => {
+      const status =
+        m.status === 'streaming' || m.status === 'complete'
+          ? m.status
+          : undefined
+      return {
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        ...(status ? { status } : {}),
+      }
+    }),
+    artifactOpen: thread.artifactOpen,
+    artifactPayload: (thread.artifactPayload ?? null) as WorkspaceArtifactPayload | null,
+    draft: thread.draft,
+    generating: thread.generating,
+  }
+}
+
+/** Load conversation meta + thread from `.braian` (desktop) or mock data (browser). */
+export async function conversationOpen(
   id: string,
-): Promise<ConversationDto | null> {
+): Promise<ConversationOpenResult | null> {
   if (!isTauri()) {
     const c = getConversationById(id)
     if (!c) return null
-    return {
+    const conversation: ConversationDto = {
       id: c.id,
       workspaceId: c.workspaceId,
       title: c.title,
       updatedAtMs: Date.now(),
       canvasKind: c.canvasKind,
     }
+    if (c.demoMessages?.length) {
+      const { getMockArtifactPayloadForChat } = await import('@/lib/artifacts')
+      const thread: ChatThreadState = {
+        messages: c.demoMessages.map((m, i) => ({
+          id: `seed-${c.id}-${i}`,
+          role: m.role,
+          content: m.content,
+          status: 'complete' as const,
+        })),
+        artifactOpen: true,
+        artifactPayload: getMockArtifactPayloadForChat(c.id, {
+          title: c.title,
+          canvasKind: c.canvasKind,
+        }),
+        draft: '',
+        generating: false,
+      }
+      return { conversation, thread }
+    }
+    const thread: ChatThreadState = {
+      messages: [],
+      artifactOpen: false,
+      artifactPayload: null,
+      draft: '',
+      generating: false,
+    }
+    return { conversation, thread }
   }
-  return invoke<ConversationDto | null>('conversation_get', { id })
+  const raw = await invoke<ConversationOpenInvoke | null>('conversation_open', {
+    id,
+  })
+  if (!raw) return null
+  return {
+    conversation: raw.conversation,
+    thread: mapInvokeThreadToState(raw.thread),
+  }
+}
+
+export async function conversationSave(input: ConversationSavePayload): Promise<void> {
+  if (!isTauri()) return
+  await invoke('conversation_save', { input })
+}
+
+/** Snapshot for persisting; normalizes streaming messages to complete for disk. */
+export function buildConversationSavePayload(
+  thread: ChatThreadState,
+  conversation: Pick<ConversationDto, 'id' | 'workspaceId' | 'title' | 'canvasKind'>,
+): ConversationSavePayload {
+  const canvasKind = thread.artifactPayload?.kind ?? conversation.canvasKind
+  return {
+    id: conversation.id,
+    workspaceId: conversation.workspaceId,
+    title: conversation.title,
+    canvasKind,
+    artifactOpen: thread.artifactOpen,
+    draft: thread.draft,
+    messages: thread.messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      status:
+        m.status === 'streaming' ? 'complete' : m.status,
+    })),
+    artifactPayload: thread.artifactPayload,
+  }
 }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
@@ -14,16 +14,6 @@ pub struct WorkspaceRecord {
   pub name: String,
   pub root_path: String,
   pub created_at_ms: i64,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ConversationRecord {
-  pub id: String,
-  pub workspace_id: String,
-  pub title: String,
-  pub updated_at_ms: i64,
-  pub canvas_kind: String,
 }
 
 fn now_ms() -> i64 {
@@ -260,89 +250,3 @@ pub fn workspace_rename(app: AppHandle, id: String, name: String) -> Result<(), 
   Ok(())
 }
 
-#[tauri::command]
-pub fn conversation_list(
-  app: AppHandle,
-  workspace_id: String,
-) -> Result<Vec<ConversationRecord>, String> {
-  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
-  let mut stmt = conn
-    .prepare(
-      "SELECT id, workspace_id, title, updated_at_ms, canvas_kind FROM conversations
-       WHERE workspace_id = ?1 ORDER BY updated_at_ms DESC",
-    )
-    .map_err(|e| e.to_string())?;
-  let rows = stmt
-    .query_map(params![workspace_id], |row| {
-      Ok(ConversationRecord {
-        id: row.get(0)?,
-        workspace_id: row.get(1)?,
-        title: row.get(2)?,
-        updated_at_ms: row.get(3)?,
-        canvas_kind: row.get(4)?,
-      })
-    })
-    .map_err(|e| e.to_string())?;
-  let mut out = Vec::new();
-  for r in rows {
-    out.push(r.map_err(|e| e.to_string())?);
-  }
-  Ok(out)
-}
-
-#[tauri::command]
-pub fn conversation_create(
-  app: AppHandle,
-  workspace_id: String,
-) -> Result<ConversationRecord, String> {
-  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
-  let exists: i64 = conn
-    .query_row(
-      "SELECT COUNT(*) FROM workspaces WHERE id = ?1",
-      params![&workspace_id],
-      |r| r.get(0),
-    )
-    .map_err(|e| e.to_string())?;
-  if exists == 0 {
-    return Err("Workspace not found.".to_string());
-  }
-  let id = Uuid::new_v4().to_string();
-  let now = now_ms();
-  let ws = workspace_id.clone();
-  conn
-    .execute(
-      "INSERT INTO conversations (id, workspace_id, title, updated_at_ms, canvas_kind)
-       VALUES (?1, ?2, ?3, ?4, 'document')",
-      params![&id, &ws, "New chat", now],
-    )
-    .map_err(|e| e.to_string())?;
-  Ok(ConversationRecord {
-    id,
-    workspace_id: ws,
-    title: "New chat".to_string(),
-    updated_at_ms: now,
-    canvas_kind: "document".to_string(),
-  })
-}
-
-#[tauri::command]
-pub fn conversation_get(app: AppHandle, id: String) -> Result<Option<ConversationRecord>, String> {
-  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
-  let row = conn
-    .query_row(
-      "SELECT id, workspace_id, title, updated_at_ms, canvas_kind FROM conversations WHERE id = ?1",
-      params![id],
-      |row| {
-        Ok(ConversationRecord {
-          id: row.get(0)?,
-          workspace_id: row.get(1)?,
-          title: row.get(2)?,
-          updated_at_ms: row.get(3)?,
-          canvas_kind: row.get(4)?,
-        })
-      },
-    )
-    .optional()
-    .map_err(|e| e.to_string())?;
-  Ok(row)
-}

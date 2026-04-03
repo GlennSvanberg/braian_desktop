@@ -72,6 +72,15 @@ export function getThreadSnapshot(key: string): ChatThreadState {
   return threads[key] ?? DEFAULT_CHAT_THREAD
 }
 
+/** Replace the entire thread for a session (e.g. hydrate from disk). */
+export function replaceThread(sessionKey: string, state: ChatThreadState) {
+  threads = {
+    ...threads,
+    [sessionKey]: { ...state, generating: false },
+  }
+  emitThreads()
+}
+
 export function getGeneratingSnapshot(key: string): boolean {
   return !!generatingSnapshot[key]
 }
