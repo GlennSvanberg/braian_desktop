@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* Semantic palette: Braian prototype neutrals + semantic colors; green primary (not steel-blue). */
+html.light {
+  color-scheme: light;
+  --app-bg-0: #f4f3ef;
+  --app-bg-1: #eceae4;
+  --app-bg-2: #e3e0d8;
+  --app-border: #d4d0c6;
+  --app-text-1: #1a1c18;
+  --app-text-2: #3d3f3a;
+  --app-text-3: #6b6e66;
+  --app-accent-200: #b8e5cc;
+  --app-accent-500: #3e8e6c;
+  --app-accent-600: #347a5d;
+  --app-accent-700: #2a634a;
+  --app-success: #3e8e6c;
+  --app-warning: #b08b4a;
+  --app-danger: #b85a5a;
+  --app-info: #7a8fa3;
+  --app-muted: #eceae4;
+  --app-muted-fg: #6b6e66;
+}
+
+html.dark {
+  color-scheme: dark;
+  --app-bg-0: #0f1114;
+  --app-bg-1: #151a1f;
+  --app-bg-2: #1b2229;
+  --app-border: #222a32;
+  --app-text-1: #f2f2ee;
+  --app-text-2: #cbc7be;
+  --app-text-3: #8f8a80;
+  --app-accent-200: #c8e8d4;
+  --app-accent-500: #3e8e6c;
+  --app-accent-600: #347a5d;
+  --app-accent-700: #2a634a;
+  --app-success: #3e8e6c;
+  --app-warning: #b08b4a;
+  --app-danger: #b85a5a;
+  --app-info: #7a8fa3;
+  --app-muted: #1b2229;
+  --app-muted-fg: #8f8a80;
+}
+
+/* Before theme script runs, prefer dark (prototype default). */
+html:not(.light):not(.dark) {
+  color-scheme: dark;
+  --app-bg-0: #0f1114;
+  --app-bg-1: #151a1f;
+  --app-bg-2: #1b2229;
+  --app-border: #222a32;
+  --app-text-1: #f2f2ee;
+  --app-text-2: #cbc7be;
+  --app-text-3: #8f8a80;
+  --app-accent-200: #c8e8d4;
+  --app-accent-500: #3e8e6c;
+  --app-accent-600: #347a5d;
+  --app-accent-700: #2a634a;
+  --app-success: #3e8e6c;
+  --app-warning: #b08b4a;
+  --app-danger: #b85a5a;
+  --app-info: #7a8fa3;
+  --app-muted: #1b2229;
+  --app-muted-fg: #8f8a80;
+}
+
+@theme inline {
+  --color-background: var(--app-bg-0);
+  --color-foreground: var(--app-text-2);
+  --color-card: var(--app-bg-1);
+  --color-card-foreground: var(--app-text-1);
+  --color-popover: var(--app-bg-1);
+  --color-popover-foreground: var(--app-text-1);
+  --color-primary: var(--app-accent-500);
+  /* High contrast on green accent in both themes */
+  --color-primary-foreground: #f7faf8;
+  --color-secondary: var(--app-bg-2);
+  --color-secondary-foreground: var(--app-text-1);
+  --color-muted: var(--app-muted);
+  --color-muted-foreground: var(--app-muted-fg);
+  --color-accent: var(--app-bg-2);
+  --color-accent-foreground: var(--app-text-1);
+  --color-destructive: var(--app-danger);
+  --color-destructive-foreground: #f2f2ee;
+  --color-border: var(--app-border);
+  --color-input: var(--app-border);
+  --color-ring: var(--app-accent-500);
+  --color-bg-0: var(--app-bg-0);
+  --color-bg-1: var(--app-bg-1);
+  --color-bg-2: var(--app-bg-2);
+  --color-text-1: var(--app-text-1);
+  --color-text-2: var(--app-text-2);
+  --color-text-3: var(--app-text-3);
+  --color-accent-200: var(--app-accent-200);
+  --color-accent-500: var(--app-accent-500);
+  --color-accent-600: var(--app-accent-600);
+  --color-accent-700: var(--app-accent-700);
+  --color-success: var(--app-success);
+  --color-warning: var(--app-warning);
+  --color-danger: var(--app-danger);
+  --color-info: var(--app-info);
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+  }
+}
