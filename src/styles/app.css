@@ -332,3 +332,133 @@ html:not(.light):not(.dark) {
 .chat-tool-call pre {
   scrollbar-width: thin;
 }
+
+/* In-app help: bundled Markdown (react-markdown); design tokens only. */
+.in-app-doc-markdown {
+  color: var(--app-text-2);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.in-app-doc-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.in-app-doc-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.in-app-doc-markdown h2,
+.in-app-doc-markdown h3,
+.in-app-doc-markdown h4 {
+  color: var(--app-text-1);
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  scroll-margin-top: 1rem;
+}
+
+.in-app-doc-markdown h2 {
+  font-size: 1.25rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.in-app-doc-markdown h3 {
+  font-size: 1.1rem;
+}
+
+.in-app-doc-markdown h4 {
+  font-size: 1rem;
+}
+
+.in-app-doc-markdown p {
+  margin-top: 0.65rem;
+  margin-bottom: 0.65rem;
+}
+
+.in-app-doc-markdown ul,
+.in-app-doc-markdown ol {
+  margin: 0.65rem 0;
+  padding-left: 1.35rem;
+}
+
+.in-app-doc-markdown li {
+  margin: 0.3rem 0;
+}
+
+.in-app-doc-markdown li > p {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.in-app-doc-markdown a {
+  color: var(--app-accent-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.in-app-doc-markdown a:hover {
+  color: var(--app-accent-700);
+}
+
+.in-app-doc-markdown blockquote {
+  margin: 1rem 0;
+  padding: 0.5rem 0 0.5rem 1rem;
+  border-left: 3px solid var(--app-accent-500);
+  color: var(--app-text-3);
+}
+
+.in-app-doc-markdown code {
+  font-size: 0.875em;
+  padding: 0.12em 0.4em;
+  border-radius: 0.25rem;
+  background: var(--app-muted);
+  color: var(--app-text-1);
+}
+
+.in-app-doc-markdown pre {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-2);
+  overflow-x: auto;
+}
+
+.in-app-doc-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.8125rem;
+}
+
+.in-app-doc-markdown table {
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+
+.in-app-doc-markdown th,
+.in-app-doc-markdown td {
+  border: 1px solid var(--app-border);
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+
+.in-app-doc-markdown th {
+  background: var(--app-muted);
+  color: var(--app-text-1);
+  font-weight: 600;
+}
+
+.in-app-doc-markdown hr {
+  margin: 1.5rem 0;
+  border: none;
+  border-top: 1px solid var(--app-border);
+}
+
+.in-app-doc-markdown strong {
+  color: var(--app-text-1);
+  font-weight: 600;
+}

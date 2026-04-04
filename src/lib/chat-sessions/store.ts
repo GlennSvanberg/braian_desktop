@@ -1,12 +1,19 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
 import { streamChatTurn } from '@/lib/ai'
+import {
+  buildTanStackChatTurnArgs,
+  tanStackTurnArgsToSnapshot,
+} from '@/lib/ai/chat-turn-args'
 import { discoveryResultIncludesCodeTools } from '@/lib/ai/coding-tools'
 import type { ChatStreamChunk } from '@/lib/ai/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
 import { isTauri } from '@/lib/tauri-env'
+import type { AgentMode } from '@/lib/workspace-api'
+
+import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
 
 import { parseChatSessionKey } from './keys'
 import {
@@ -17,6 +24,30 @@ import {
   type ChatThreadState,
   type ContextFileEntry,
 } from './types'
+
+/** Include tool traces so follow-up turns stay grounded in prior workspace reads/runs. */
+function assistantContentForLlmHistory(m: AssistantChatMessage): string {
+  const parts = m.parts
+  if (!parts?.length) return m.content
+  const blocks: string[] = []
+  for (const p of parts) {
+    if (p.type === 'text' && p.text.trim()) {
+      blocks.push(p.text)
+    } else if (p.type === 'tool') {
+      const bits = [`[Tool ${p.toolName}]`]
+      if (p.argsText?.trim()) bits.push(`Input: ${p.argsText}`)
+      if (p.result?.trim()) bits.push(`Output: ${p.result}`)
+      blocks.push(bits.join('\n'))
+    }
+  }
+  const merged = blocks.join('\n\n').trim()
+  return merged || m.content
+}
+
+export function chatMessageContentForLlmHistory(m: ChatMessage): string {
+  if (m.role === 'user') return m.content
+  return assistantContentForLlmHistory(m)
+}
 
 function createId() {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -299,7 +330,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
 
   const priorMessages = prev.messages.map((m) => ({
     role: m.role,
-    content: m.content,
+    content: chatMessageContentForLlmHistory(m),
   }))
 
   void (async () => {
@@ -323,7 +354,9 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         | Awaited<ReturnType<typeof loadContextFilesForModel>>
         | undefined
       if (prev.contextFiles.length > 0) {
-        if (!isTauri()) {
+        if (isDetachedWorkspaceSessionId(workspaceId)) {
+          contextFiles = undefined
+        } else if (!isTauri()) {
           contextFiles = prev.contextFiles.map((f) => ({
             relativePath: f.relativePath,
             ...(f.displayName != null && f.displayName !== ''
@@ -345,23 +378,39 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         }
       }
 
+      const chatTurnContext = {
+        workspaceId,
+        conversationId,
+        agentMode,
+        documentCanvasSnapshot,
+        onAgentModeChange: (mode: AgentMode) => {
+          if (mode === 'code') {
+            setChatAgentMode(sessionKey, 'code')
+          }
+        },
+        ...(contextFiles != null && contextFiles.length > 0
+          ? { contextFiles }
+          : {}),
+      }
+
+      try {
+        const args = await buildTanStackChatTurnArgs({
+          userText: trimmed,
+          context: chatTurnContext,
+          priorMessages,
+          skipSettingsValidation: true,
+        })
+        patchThread(sessionKey, {
+          lastModelRequestSnapshot: tanStackTurnArgsToSnapshot(args, trimmed),
+        })
+      } catch (e) {
+        console.error('[braian] model request snapshot', e)
+      }
+
       for await (const chunk of streamChatTurn(
         trimmed,
         ac.signal,
-        {
-          workspaceId,
-          conversationId,
-          agentMode,
-          documentCanvasSnapshot,
-          onAgentModeChange: (mode) => {
-            if (mode === 'code') {
-              setChatAgentMode(sessionKey, 'code')
-            }
-          },
-          ...(contextFiles != null && contextFiles.length > 0
-            ? { contextFiles }
-            : {}),
-        },
+        chatTurnContext,
         priorMessages,
       )) {
         if (chunk.type === 'text-delta') {
@@ -475,7 +524,12 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         queueMicrotask(() => startChatTurnInternal(sessionKey, next))
       } else {
         const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
-        if (streamCompletedOk && conversationId && isTauri()) {
+        if (
+          streamCompletedOk &&
+          conversationId &&
+          isTauri() &&
+          !isDetachedWorkspaceSessionId(workspaceId)
+        ) {
           void import('@/lib/memory/scheduler').then((m) =>
             m.scheduleMemoryReviewAfterIdle(workspaceId, conversationId),
           )

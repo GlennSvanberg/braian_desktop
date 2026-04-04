@@ -14,6 +14,8 @@ export function normalizeWorkspaceRelativePath(s: string): string {
 export function looksLikeRelativeWorkspacePath(s: string): boolean {
   const t = normalizeWorkspaceRelativePath(s)
   if (t.length === 0 || t.length > 512) return false
+  // Prose like "open that `.xlsx` file" — extension only, not a workspace path
+  if (/^\.\w{1,24}$/i.test(t)) return false
   if (/\s/.test(t)) return false
   if (t.includes('..')) return false
   if (t.startsWith('/') || /^[A-Za-z]:[\\/]/.test(t)) return false

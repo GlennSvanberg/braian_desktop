@@ -35,6 +35,7 @@ pub fn run() {
       workspace::workspace_add_from_path,
       workspace::workspace_remove,
       workspace::workspace_rename,
+      workspace::workspace_touch,
       workspace_files::workspace_read_text_file,
       workspace_files::workspace_write_text_file,
       workspace_files::workspace_import_file,

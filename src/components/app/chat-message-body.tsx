@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react'
 import {
   Children,
   isValidElement,
@@ -236,6 +237,13 @@ function ToolCallExpandablePre({
 
 function ToolCallCard({ part }: { part: AssistantToolPart }) {
   const streaming = part.status === 'streaming'
+  const [expanded, setExpanded] = useState(false)
+
+  const hasDetails =
+    Boolean(part.argsText) ||
+    Boolean(part.result) ||
+    streaming
+
   return (
     <div
       className={cn(
@@ -243,10 +251,32 @@ function ToolCallCard({ part }: { part: AssistantToolPart }) {
         streaming && 'border-accent-500/35',
       )}
     >
-      <div className="border-border/70 flex items-start justify-between gap-2 border-b pb-2">
-        <span className="text-accent-500 font-mono text-xs font-semibold tracking-tight">
-          {part.toolName}
-        </span>
+      <div className="flex items-center justify-between gap-2">
+        {hasDetails ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            className={cn(
+              'group flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-0.5 text-left',
+              'text-accent-500 font-mono text-xs font-semibold tracking-tight',
+              'hover:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
+            )}
+            onClick={() => setExpanded((e) => !e)}
+          >
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'text-text-3 size-3.5 shrink-0 transition-transform',
+                expanded && 'rotate-180',
+              )}
+            />
+            <span className="min-w-0 truncate">{part.toolName}</span>
+          </button>
+        ) : (
+          <span className="text-accent-500 min-w-0 flex-1 truncate font-mono text-xs font-semibold tracking-tight">
+            {part.toolName}
+          </span>
+        )}
         <span
           className={cn(
             'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold',
@@ -258,18 +288,26 @@ function ToolCallCard({ part }: { part: AssistantToolPart }) {
           {streaming ? 'Running…' : 'Done'}
         </span>
       </div>
-      {part.argsText ? (
-        <div className="mt-2">
-          <ToolCallSectionLabel>Arguments</ToolCallSectionLabel>
-          <ToolCallExpandablePre text={part.argsText} variant="args" />
-        </div>
-      ) : streaming ? (
-        <p className="text-text-3 mt-2 text-xs italic">Receiving arguments…</p>
-      ) : null}
-      {part.result ? (
-        <div className="mt-2 border-border/60 border-t pt-2">
-          <ToolCallSectionLabel>Result</ToolCallSectionLabel>
-          <ToolCallExpandablePre text={part.result} variant="result" />
+      {expanded ? (
+        <div className="border-border/70 mt-2 border-t pt-2">
+          {part.argsText ? (
+            <div>
+              <ToolCallSectionLabel>Arguments</ToolCallSectionLabel>
+              <ToolCallExpandablePre text={part.argsText} variant="args" />
+            </div>
+          ) : streaming ? (
+            <p className="text-text-3 text-xs italic">Receiving arguments…</p>
+          ) : null}
+          {part.result ? (
+            <div
+              className={cn(
+                part.argsText || streaming ? 'mt-2 border-border/60 border-t pt-2' : '',
+              )}
+            >
+              <ToolCallSectionLabel>Result</ToolCallSectionLabel>
+              <ToolCallExpandablePre text={part.result} variant="result" />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

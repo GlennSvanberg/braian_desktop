@@ -95,6 +95,8 @@ export async function* streamMockChatTurn(
   }
 
   const isCodeMode = context?.agentMode === 'code'
+  const hasPersistedConversation =
+    context?.conversationId != null && context.conversationId !== ''
   const payload = getMockArtifactPayloadForChat(
     context?.conversationId ?? null,
   )
@@ -104,10 +106,12 @@ export async function* streamMockChatTurn(
       : ''
   const replyText = isCodeMode
     ? `${pickRandomReply()}${fileHint} Mock mode: coding tools (read/write/run) are not simulated — use the real desktop app without braian.mockAi for workspace commands.`
-    : `${pickRandomReply()}${fileHint} ${canvasHint(payload.kind)}`
+    : hasPersistedConversation
+      ? `${pickRandomReply()}${fileHint} ${canvasHint(payload.kind)}`
+      : `${pickRandomReply()}${fileHint} Mock mode: the document canvas tool is only available for a saved conversation (persisted id). On desktop, use New chat from the sidebar so a conversation is created before you type; on /chat/new in the browser there is no canvas tool until you follow that flow.`
 
   signal?.throwIfAborted()
-  if (!isCodeMode) {
+  if (!isCodeMode && hasPersistedConversation) {
     const mockToolId = `mock-tool-${Date.now()}`
     yield {
       type: 'tool-start',
@@ -142,7 +146,7 @@ export async function* streamMockChatTurn(
   }
 
   signal?.throwIfAborted()
-  if (!isCodeMode) {
+  if (!isCodeMode && hasPersistedConversation) {
     yield { type: 'artifact', payload }
   }
 

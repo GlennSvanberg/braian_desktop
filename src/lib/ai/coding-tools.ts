@@ -10,6 +10,8 @@ import {
   type WorkspaceReadTextFileResult,
 } from '@/lib/workspace-api'
 
+import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+
 import type { ChatTurnContext } from './types'
 
 /** Names of workspace file/command tools (lazy in document mode, eager in code mode). */
@@ -113,7 +115,10 @@ export function buildCodingTools(
   context: ChatTurnContext | undefined,
   options?: BuildCodingToolsOptions,
 ) {
-  if (!context?.workspaceId) {
+  if (
+    !context?.workspaceId ||
+    isDetachedWorkspaceSessionId(context.workspaceId)
+  ) {
     return []
   }
 

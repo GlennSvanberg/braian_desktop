@@ -6,21 +6,12 @@ export type {
 } from './types'
 export { streamMockChatTurn } from './mock-chat-stream'
 import { streamMockChatTurn } from './mock-chat-stream'
+import { isMockAiMode } from './mock-mode'
 import { streamTanStackChatTurn } from './tanstack-chat-stream'
 
 import type { ChatStreamChunk, ChatTurnContext, PriorChatMessage } from './types'
 
-function useMockAi(): boolean {
-  try {
-    return (
-      import.meta.env.DEV &&
-      typeof globalThis.localStorage !== 'undefined' &&
-      globalThis.localStorage.getItem('braian.mockAi') === '1'
-    )
-  } catch {
-    return false
-  }
-}
+export { isMockAiMode } from './mock-mode'
 
 export async function* streamChatTurn(
   userText: string,
@@ -28,7 +19,7 @@ export async function* streamChatTurn(
   context?: ChatTurnContext,
   priorMessages?: PriorChatMessage[],
 ): AsyncGenerator<ChatStreamChunk> {
-  if (useMockAi()) {
+  if (isMockAiMode()) {
     yield* streamMockChatTurn(userText, signal, context)
     return
   }

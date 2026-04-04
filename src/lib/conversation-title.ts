@@ -1,6 +1,9 @@
 /** Matches default title in `conversation_create` (Rust). */
 export const DEFAULT_CHAT_TITLE = 'New chat'
 
+/** Shown for an unsaved agent not yet assigned to a workspace. */
+export const DEFAULT_AGENT_TITLE = 'New agent'
+
 const DEFAULT_MAX_LEN = 72
 
 function stripControlChars(s: string): string {

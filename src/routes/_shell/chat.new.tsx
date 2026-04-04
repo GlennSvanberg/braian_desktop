@@ -7,5 +7,5 @@ export const Route = createFileRoute('/_shell/chat/new')({
 })
 
 function NewChatPage() {
-  return <ChatWorkbench conversationId={null} />
+  return <ChatWorkbench conversationId={null} useDetachedSession />
 }

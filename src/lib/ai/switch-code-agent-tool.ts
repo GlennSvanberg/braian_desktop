@@ -3,6 +3,8 @@ import { z } from 'zod'
 
 import { WORKSPACE_CODE_TOOL_NAMES } from '@/lib/ai/coding-tools'
 
+import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+
 import type { ChatTurnContext } from './types'
 
 const switchInputSchema = z.object({
@@ -19,7 +21,10 @@ const discoveryNamesJson = JSON.stringify([...WORKSPACE_CODE_TOOL_NAMES])
  * how to unlock lazy workspace tools via TanStack AI’s discovery tool.
  */
 export function buildSwitchToCodeAgentTool(context: ChatTurnContext | undefined) {
-  if (!context?.workspaceId) {
+  if (
+    !context?.workspaceId ||
+    isDetachedWorkspaceSessionId(context.workspaceId)
+  ) {
     return null
   }
 

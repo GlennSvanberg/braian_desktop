@@ -1,3 +1,4 @@
+import type { SerializableModelRequestSnapshot } from '@/lib/ai/chat-turn-args'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { AgentMode } from '@/lib/workspace-api'
 
@@ -55,6 +56,8 @@ export type ChatThreadState = {
   contextFiles: ContextFileEntry[]
   /** Persisted with the conversation when saved. */
   agentMode: AgentMode
+  /** Payload assembled for the most recently started model turn (debug / context manager). */
+  lastModelRequestSnapshot: SerializableModelRequestSnapshot | null
 }
 
 export const DEFAULT_CHAT_THREAD: ChatThreadState = {
@@ -66,4 +69,5 @@ export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   pendingUserMessages: [],
   contextFiles: [],
   agentMode: 'document',
+  lastModelRequestSnapshot: null,
 }

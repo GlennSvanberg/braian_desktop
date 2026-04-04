@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { createFileRoute, notFound, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 
 import { ChatWorkbench } from '@/components/app/chat-workbench'
 import { useWorkspace } from '@/components/app/workspace-context'
@@ -17,20 +17,20 @@ export const Route = createFileRoute('/_shell/chat/$conversationId')({
 })
 
 function ChatPage() {
-  const navigate = useNavigate()
-  const { activeWorkspaceId, loading: workspaceLoading } = useWorkspace()
+  const { activeWorkspaceId, loading: workspaceLoading, setActiveWorkspaceId } =
+    useWorkspace()
   const { conversation, initialThread } = Route.useRouteContext()
 
   useEffect(() => {
-    if (workspaceLoading || !activeWorkspaceId) return
+    if (workspaceLoading) return
     if (conversation.workspaceId !== activeWorkspaceId) {
-      navigate({ to: '/dashboard' })
+      setActiveWorkspaceId(conversation.workspaceId)
     }
   }, [
     workspaceLoading,
     conversation.workspaceId,
     activeWorkspaceId,
-    navigate,
+    setActiveWorkspaceId,
   ])
 
   return (

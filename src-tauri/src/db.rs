@@ -77,6 +77,14 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 4 {
+    conn.execute_batch(
+      "ALTER TABLE workspaces ADD COLUMN last_used_at_ms INTEGER NOT NULL DEFAULT 0;
+      UPDATE workspaces SET last_used_at_ms = created_at_ms WHERE last_used_at_ms = 0;
+      UPDATE _schema_version SET version = 4 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 

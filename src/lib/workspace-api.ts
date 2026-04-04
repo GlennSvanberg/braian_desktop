@@ -17,6 +17,7 @@ export type WorkspaceDto = {
   name: string
   rootPath: string
   createdAtMs: number
+  lastUsedAtMs: number
 }
 
 export type ConversationDto = {
@@ -29,11 +30,12 @@ export type ConversationDto = {
 
 export async function workspaceList(): Promise<WorkspaceDto[]> {
   if (!isTauri()) {
-    return MOCK_WORKSPACES.map((w) => ({
+    return MOCK_WORKSPACES.map((w, i) => ({
       id: w.id,
       name: w.name,
       rootPath: '',
       createdAtMs: 0,
+      lastUsedAtMs: (MOCK_WORKSPACES.length - i) * 1000,
     }))
   }
   return invoke<WorkspaceDto[]>('workspace_list')
@@ -79,6 +81,11 @@ export async function workspaceRemove(id: string): Promise<void> {
 export async function workspaceRename(id: string, name: string): Promise<void> {
   if (!isTauri()) return
   await invoke('workspace_rename', { id, name })
+}
+
+export async function workspaceTouch(id: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('workspace_touch', { id })
 }
 
 export async function pickFolder(options?: {
@@ -233,6 +240,7 @@ function mapInvokeThreadToState(
     pendingUserMessages: [],
     contextFiles: thread.contextFiles ?? [],
     agentMode: normalizeAgentMode(thread.agentMode),
+    lastModelRequestSnapshot: null,
   }
 }
 
@@ -278,6 +286,7 @@ export async function conversationOpen(
         pendingUserMessages: [],
         contextFiles: [],
         agentMode: 'document',
+        lastModelRequestSnapshot: null,
       }
       return { conversation, thread }
     }
@@ -290,6 +299,7 @@ export async function conversationOpen(
       pendingUserMessages: [],
       contextFiles: [],
       agentMode: 'document',
+      lastModelRequestSnapshot: null,
     }
     return { conversation, thread }
   }

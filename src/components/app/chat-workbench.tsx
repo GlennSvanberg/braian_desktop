@@ -5,9 +5,7 @@ import {
   CornerDownLeft,
   Loader2,
   Paperclip,
-  Sparkles,
   Square,
-  Terminal,
   X,
 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -19,7 +17,12 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 
+import {
+  ChatContextManagerDialog,
+  ChatContextManagerTriggerButton,
+} from '@/components/app/chat-context-manager-dialog'
 import {
   assistantPlainTextForCopy,
   ChatAssistantMessageBody,
@@ -30,6 +33,13 @@ import { WorkspaceFilesPanel } from '@/components/app/workspace-files-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   ResizableHandle,
   ResizablePanel,
@@ -43,8 +53,12 @@ import {
   filterWorkspaceFilesForMention,
   getMentionQuery,
 } from '@/lib/chat-mention-files'
+import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
-import type { ChatThreadState } from '@/lib/chat-sessions/types'
+import {
+  DEFAULT_CHAT_THREAD,
+  type ChatThreadState,
+} from '@/lib/chat-sessions/types'
 import {
   getThreadSnapshot,
   replaceThread,
@@ -53,6 +67,7 @@ import {
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
 import {
+  DEFAULT_AGENT_TITLE,
   DEFAULT_CHAT_TITLE,
   deriveConversationTitle,
 } from '@/lib/conversation-title'
@@ -63,6 +78,7 @@ import {
 } from '@/lib/workspace-path-utils'
 import {
   buildConversationSavePayload,
+  conversationCreate,
   conversationSave,
   workspaceImportFile,
   workspaceListAllFiles,
@@ -86,24 +102,43 @@ type ChatWorkbenchProps = {
   conversationMeta?: ConversationDto | null
   /** Hydrate store from disk (from route `conversation_open`). */
   initialThread?: ChatThreadState | null
+  /**
+   * When true with `conversationId === null` (e.g. `/chat/new`), the thread is not tied to the
+   * active workspace until the user uses “Move to workspace”.
+   */
+  useDetachedSession?: boolean
 }
 
 export function ChatWorkbench({
   conversationId,
   conversationMeta,
   initialThread = null,
+  useDetachedSession = false,
 }: ChatWorkbenchProps) {
+  const isDetachedSession =
+    useDetachedSession === true && conversationId === null
+  const navigate = useNavigate()
+  const router = useRouter()
   const {
     activeWorkspaceId,
     activeWorkspace,
     refreshConversations,
+    refreshConversationLists,
+    workspaces,
+    setActiveWorkspaceId,
     isTauriRuntime,
   } = useWorkspace()
   const lastSerializedRef = useRef<string | null>(null)
   const initialThreadRef = useRef(initialThread)
   initialThreadRef.current = initialThread
   const hydratedSessionKeyRef = useRef<string | null>(null)
-  const sessionKey = chatSessionKey(activeWorkspaceId, conversationId)
+  const sessionKey = useMemo(
+    () =>
+      isDetachedSession
+        ? chatSessionKey(DETACHED_WORKSPACE_SESSION_ID, null)
+        : chatSessionKey(activeWorkspaceId, conversationId),
+    [isDetachedSession, activeWorkspaceId, conversationId],
+  )
   const thread = useChatThread(sessionKey)
   const {
     sendChatTurn,
@@ -124,6 +159,10 @@ export function ChatWorkbench({
   const [mentionHighlight, setMentionHighlight] = useState(0)
   const [mentionMenuSuppressed, setMentionMenuSuppressed] = useState(false)
   const [fileDragHighlight, setFileDragHighlight] = useState(false)
+  const [contextManagerOpen, setContextManagerOpen] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [moveTargetWs, setMoveTargetWs] = useState('')
+  const [moveBusy, setMoveBusy] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const composerDropZoneRef = useRef<HTMLDivElement>(null)
   const dragHasFilesRef = useRef(false)
@@ -132,10 +171,43 @@ export function ChatWorkbench({
     ? getConversationById(conversationId)
     : undefined
   const [conversationTitle, setConversationTitle] = useState(() =>
-    conversationMeta?.title ?? saved?.title ?? DEFAULT_CHAT_TITLE,
+    conversationMeta?.title ??
+      saved?.title ??
+      (isDetachedSession ? DEFAULT_AGENT_TITLE : DEFAULT_CHAT_TITLE),
   )
   const autoTitleAppliedRef = useRef<string | null>(null)
   const isNewChat = conversationId === null
+
+  useEffect(() => {
+    if (!isDetachedSession) return
+    if (autoTitleAppliedRef.current === 'detached-title') return
+    if (
+      conversationTitle !== DEFAULT_AGENT_TITLE &&
+      conversationTitle !== DEFAULT_CHAT_TITLE
+    ) {
+      return
+    }
+    const firstUser = thread.messages.find(
+      (m) => m.role === 'user' && m.content.trim().length > 0,
+    )
+    if (!firstUser) return
+    setConversationTitle(deriveConversationTitle(firstUser.content))
+    autoTitleAppliedRef.current = 'detached-title'
+  }, [isDetachedSession, conversationTitle, thread.messages])
+
+  useEffect(() => {
+    if (!moveOpen || workspaces.length === 0) return
+    setMoveTargetWs((prev) => {
+      if (prev && workspaces.some((w) => w.id === prev)) return prev
+      if (
+        activeWorkspaceId &&
+        workspaces.some((w) => w.id === activeWorkspaceId)
+      ) {
+        return activeWorkspaceId
+      }
+      return workspaces[0]?.id ?? ''
+    })
+  }, [moveOpen, workspaces, activeWorkspaceId])
 
   const metaForSave = useMemo(
     () =>
@@ -197,6 +269,7 @@ export function ChatWorkbench({
   const showMentionList =
     mention != null &&
     !mentionMenuSuppressed &&
+    !isDetachedSession &&
     isTauriRuntime &&
     !!activeWorkspace?.rootPath
 
@@ -217,7 +290,13 @@ export function ChatWorkbench({
   const attachAbsolutePaths = useCallback(
     async (paths: string[]): Promise<string[]> => {
       const mentionTags: string[] = []
-      if (!isTauriRuntime || !activeWorkspace?.rootPath) return mentionTags
+      if (
+        isDetachedSession ||
+        !isTauriRuntime ||
+        !activeWorkspace?.rootPath
+      ) {
+        return mentionTags
+      }
       for (const abs of paths) {
         try {
           if (isPathUnderRoot(abs, activeWorkspace.rootPath)) {
@@ -247,13 +326,20 @@ export function ChatWorkbench({
       activeWorkspace?.rootPath,
       activeWorkspaceId,
       addContextFileEntry,
+      isDetachedSession,
       isTauriRuntime,
       sessionKey,
     ],
   )
 
   const onAttachFiles = useCallback(async () => {
-    if (!isTauriRuntime || !activeWorkspace?.rootPath) return
+    if (
+      isDetachedSession ||
+      !isTauriRuntime ||
+      !activeWorkspace?.rootPath
+    ) {
+      return
+    }
     const picked = await open({
       multiple: true,
       directory: false,
@@ -263,7 +349,12 @@ export function ChatWorkbench({
     if (picked == null) return
     const paths = Array.isArray(picked) ? picked : [picked]
     await attachAbsolutePaths(paths)
-  }, [activeWorkspace?.rootPath, attachAbsolutePaths, isTauriRuntime])
+  }, [
+    activeWorkspace?.rootPath,
+    attachAbsolutePaths,
+    isDetachedSession,
+    isTauriRuntime,
+  ])
 
   const onNativeFileDrop = useCallback(
     async (paths: string[]) => {
@@ -286,7 +377,7 @@ export function ChatWorkbench({
   }, [mention?.start])
 
   useEffect(() => {
-    if (!isTauriRuntime || !activeWorkspaceId) {
+    if (!isTauriRuntime || !activeWorkspaceId || isDetachedSession) {
       setWorkspaceFileIndex([])
       return
     }
@@ -299,7 +390,7 @@ export function ChatWorkbench({
     return () => {
       cancelled = true
     }
-  }, [isTauriRuntime, activeWorkspaceId])
+  }, [isTauriRuntime, activeWorkspaceId, isDetachedSession])
 
   useEffect(() => {
     if (!isTauriRuntime) return
@@ -506,6 +597,62 @@ export function ChatWorkbench({
     }
   }, [])
 
+  const confirmMoveToWorkspace = useCallback(async () => {
+    if (!isDetachedSession || !moveTargetWs || moveBusy || generating) return
+    setMoveBusy(true)
+    try {
+      const threadNow = getThreadSnapshot(sessionKey)
+      const created = await conversationCreate(moveTargetWs)
+      const trimmedTitle = conversationTitle.trim()
+      const title =
+        trimmedTitle &&
+        trimmedTitle !== DEFAULT_AGENT_TITLE &&
+        trimmedTitle !== DEFAULT_CHAT_TITLE
+          ? trimmedTitle
+          : (() => {
+              const firstUser = threadNow.messages.find(
+                (m) => m.role === 'user' && m.content.trim().length > 0,
+              )
+              return firstUser
+                ? deriveConversationTitle(firstUser.content)
+                : created.title
+            })()
+      const meta = {
+        id: created.id,
+        workspaceId: moveTargetWs,
+        title,
+        canvasKind: created.canvasKind,
+      }
+      const payload = buildConversationSavePayload(threadNow, meta)
+      await conversationSave(payload)
+      await refreshConversationLists()
+      replaceThread(sessionKey, { ...DEFAULT_CHAT_THREAD })
+      setActiveWorkspaceId(moveTargetWs)
+      setMoveOpen(false)
+      navigate({
+        to: '/chat/$conversationId',
+        params: { conversationId: created.id },
+      })
+      await router.invalidate()
+    } catch (e) {
+      console.error(e)
+      window.alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMoveBusy(false)
+    }
+  }, [
+    isDetachedSession,
+    moveTargetWs,
+    moveBusy,
+    generating,
+    sessionKey,
+    conversationTitle,
+    refreshConversationLists,
+    setActiveWorkspaceId,
+    navigate,
+    router,
+  ])
+
   const onUpdateMemoryNow = useCallback(() => {
     if (!conversationId || !activeWorkspaceId || memoryUpdateBusy) return
     setMemoryUpdateBusy(true)
@@ -532,18 +679,7 @@ export function ChatWorkbench({
       })
   }, [activeWorkspaceId, conversationId, memoryUpdateBusy])
 
-  const helperSubtitle =
-    agentMode === 'code'
-      ? isTauriRuntime
-        ? 'Workspace scripts and file tools are active — programs and writes stay under this workspace (same trust as a local CLI).'
-        : 'File and command tools need the desktop app.'
-      : artifactOpen
-        ? 'Workspace canvas is open · resize the split or keep typing below.'
-        : 'Primary assistant replies stream here. Configure your API key under Settings. Dev mock: localStorage braian.mockAi = 1.'
-  const filesPrivacyNote =
-    contextFiles.length > 0
-      ? 'Attached file contents are sent to your configured LLM provider when you send a message.'
-      : null
+  const desktopToolsUnavailable = agentMode === 'code' && !isTauriRuntime
 
   const queuedCount = pendingUserMessages.length
 
@@ -559,13 +695,10 @@ export function ChatWorkbench({
     >
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-6 px-4 py-5 md:px-5">
-          <div className="flex items-start gap-3">
-            <div className="bg-accent-500/15 text-accent-600 border-accent-500/25 flex size-9 shrink-0 items-center justify-center rounded-full border">
-              <Sparkles className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-text-1 text-sm font-medium">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <p className="text-text-1 truncate text-sm font-medium md:text-base">
                   {conversationTitle}
                 </p>
                 {generating ? (
@@ -577,6 +710,23 @@ export function ChatWorkbench({
                     <span className="sr-only">Assistant is replying</span>
                     <span className="hidden sm:inline">Working…</span>
                   </span>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <ChatContextManagerTriggerButton
+                  onClick={() => setContextManagerOpen(true)}
+                />
+                {isDetachedSession && isTauriRuntime && workspaces.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-text-2 border-border h-7 gap-1.5 px-2 text-xs"
+                    disabled={generating || moveBusy}
+                    onClick={() => setMoveOpen(true)}
+                  >
+                    Move to workspace
+                  </Button>
                 ) : null}
                 {generating ? (
                   <Button
@@ -590,9 +740,7 @@ export function ChatWorkbench({
                     Stop
                   </Button>
                 ) : null}
-                {!generating &&
-                conversationId &&
-                isTauriRuntime ? (
+                {!generating && conversationId && isTauriRuntime ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -613,48 +761,38 @@ export function ChatWorkbench({
                   </Button>
                 ) : null}
               </div>
-              {memoryUpdateHint ? (
-                <p className="text-text-3 mt-1 text-xs">{memoryUpdateHint}</p>
-              ) : null}
-              <p className="text-text-3 mt-1 text-xs leading-relaxed">
-                {helperSubtitle}
-              </p>
-              <p className="text-text-3 mt-2 inline-flex flex-wrap items-center gap-1.5 text-xs leading-relaxed">
-                {agentMode === 'code' ? (
-                  <>
-                    <Terminal
-                      className="text-text-3 size-3.5 shrink-0 opacity-80"
-                      aria-hidden
-                    />
-                    <span>
-                      <span className="text-text-2 font-medium">
-                        Workspace tools:
-                      </span>{' '}
-                      canvas plus scripts and files (assistant enabled this
-                      automatically when needed).
-                    </span>
-                  </>
-                ) : (
-                  <span>
-                    <span className="text-text-2 font-medium">Workspace:</span>{' '}
-                    canvas-first; scripts and file tools turn on automatically
-                    when the task requires them.
-                  </span>
-                )}
-              </p>
-              {contextFiles.length > 0 ? (
-                <p className="text-text-3 mt-1 text-xs leading-relaxed">
-                  {contextFiles.length} file
-                  {contextFiles.length === 1 ? '' : 's'} in chat context
-                  {filesPrivacyNote ? ` · ${filesPrivacyNote}` : ''}
-                </p>
-              ) : null}
             </div>
+            {memoryUpdateHint ? (
+              <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
+            ) : null}
+            {isDetachedSession ? (
+              <p className="text-text-3 text-xs leading-relaxed">
+                {isTauriRuntime
+                  ? 'This agent is not in a workspace yet. Use Move to workspace when you want file tools, @ mentions, and a saved thread under a project folder.'
+                  : 'Browser preview: open the desktop app to move this agent into a workspace when you are ready.'}
+              </p>
+            ) : null}
+            {desktopToolsUnavailable ? (
+              <p className="text-text-3 text-xs">
+                Workspace scripts and file tools need the desktop app.
+              </p>
+            ) : null}
+            {contextFiles.length > 0 ? (
+              <p
+                className="text-text-3 text-xs"
+                title="Attached file contents are sent to your configured AI provider when you send a message."
+              >
+                {contextFiles.length} file
+                {contextFiles.length === 1 ? '' : 's'} in context
+              </p>
+            ) : null}
           </div>
           {messages.length === 0 ? (
             <div className="border-border bg-muted/25 text-text-3 rounded-xl border border-dashed px-4 py-8 text-center text-sm leading-relaxed">
               {isNewChat
-                ? 'New conversation. Send a message to start; the workspace panel opens beside chat when you have a canvas.'
+                ? isDetachedSession
+                  ? 'New agent (no workspace yet). Send a message to start. When you are ready, use Move to workspace so this thread is saved with a project and file tools are available.'
+                  : 'New conversation. Send a message to start; the workspace panel opens beside chat when you have a canvas.'
                 : 'This thread starts empty. Send a message to chat with the assistant.'}
             </div>
           ) : (
@@ -760,7 +898,7 @@ export function ChatWorkbench({
           if (paths.length > 0) void onNativeFileDrop(paths)
         }}
       >
-        {isTauriRuntime && activeWorkspace?.rootPath ? (
+        {isTauriRuntime && activeWorkspace?.rootPath && !isDetachedSession ? (
           <WorkspaceFilesPanel
             className="mb-2"
             workspaceId={activeWorkspaceId}
@@ -848,7 +986,11 @@ export function ChatWorkbench({
           ) : null}
           <Textarea
             ref={textareaRef}
-            placeholder="Message Braian… (drop files here, or @ to attach)"
+            placeholder={
+              isDetachedSession
+                ? 'Message Braian… (move to a workspace to attach files and use the project folder)'
+                : 'Message Braian… (drop files here, or @ to attach)'
+            }
             value={draft}
             onChange={(e) => {
               setChatDraft(sessionKey, e.target.value)
@@ -863,7 +1005,9 @@ export function ChatWorkbench({
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
             <div className="text-text-3 flex min-w-0 flex-wrap items-center gap-2 px-1.5 text-xs leading-relaxed">
               <p>Enter to send · Shift+Enter for newline</p>
-              {isTauriRuntime && activeWorkspace?.rootPath ? (
+              {isTauriRuntime &&
+              activeWorkspace?.rootPath &&
+              !isDetachedSession ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -899,6 +1043,67 @@ export function ChatWorkbench({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-0 md:gap-2 md:p-2">
+      <ChatContextManagerDialog
+        open={contextManagerOpen}
+        onOpenChange={setContextManagerOpen}
+        workspaceId={
+          isDetachedSession ? DETACHED_WORKSPACE_SESSION_ID : activeWorkspaceId
+        }
+        conversationId={conversationId}
+        thread={thread}
+        isTauriRuntime={isTauriRuntime}
+      />
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent showCloseButton={!moveBusy}>
+          <DialogHeader>
+            <DialogTitle>Move agent to workspace</DialogTitle>
+          </DialogHeader>
+          <p className="text-text-3 text-sm leading-relaxed">
+            Saves this thread under the workspace you pick. After moving, file
+            tools, @ mentions, and the document canvas apply to that folder.
+          </p>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-text-2 text-xs font-medium">Workspace</span>
+            <select
+              className="border-border bg-background text-text-1 focus-visible:ring-ring h-9 w-full rounded-md border px-2 text-sm shadow-sm focus-visible:ring-2 focus-visible:outline-none"
+              value={moveTargetWs}
+              disabled={moveBusy}
+              onChange={(e) => setMoveTargetWs(e.target.value)}
+            >
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={moveBusy}
+              onClick={() => setMoveOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="gap-2"
+              disabled={moveBusy || !moveTargetWs || generating}
+              onClick={() => void confirmMoveToWorkspace()}
+            >
+              {moveBusy ? (
+                <>
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                  Moving…
+                </>
+              ) : (
+                'Move here'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {!artifactOpen ? (
         <div className="flex min-h-0 flex-1 flex-col">{chatColumn}</div>
       ) : (

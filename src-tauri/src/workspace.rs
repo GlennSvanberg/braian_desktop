@@ -14,6 +14,7 @@ pub struct WorkspaceRecord {
   pub name: String,
   pub root_path: String,
   pub created_at_ms: i64,
+  pub last_used_at_ms: i64,
 }
 
 fn now_ms() -> i64 {
@@ -51,7 +52,7 @@ pub fn ensure_default_workspace(app: &AppHandle) -> Result<(), String> {
   let now = now_ms();
   conn
     .execute(
-      "INSERT INTO workspaces (id, name, root_path, created_at_ms) VALUES (?1, ?2, ?3, ?4)",
+      "INSERT INTO workspaces (id, name, root_path, created_at_ms, last_used_at_ms) VALUES (?1, ?2, ?3, ?4, ?4)",
       params![id, "Default", path_str, now],
     )
     .map_err(|e| e.to_string())?;
@@ -105,7 +106,7 @@ pub fn workspace_list(app: AppHandle) -> Result<Vec<WorkspaceRecord>, String> {
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   let mut stmt = conn
     .prepare(
-      "SELECT id, name, root_path, created_at_ms FROM workspaces ORDER BY name COLLATE NOCASE",
+      "SELECT id, name, root_path, created_at_ms, last_used_at_ms FROM workspaces ORDER BY last_used_at_ms DESC, name COLLATE NOCASE",
     )
     .map_err(|e| e.to_string())?;
   let rows = stmt
@@ -115,6 +116,7 @@ pub fn workspace_list(app: AppHandle) -> Result<Vec<WorkspaceRecord>, String> {
         name: row.get(1)?,
         root_path: row.get(2)?,
         created_at_ms: row.get(3)?,
+        last_used_at_ms: row.get(4)?,
       })
     })
     .map_err(|e| e.to_string())?;
@@ -162,7 +164,7 @@ pub fn workspace_create(
   let now = now_ms();
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   if let Err(e) = conn.execute(
-    "INSERT INTO workspaces (id, name, root_path, created_at_ms) VALUES (?1, ?2, ?3, ?4)",
+    "INSERT INTO workspaces (id, name, root_path, created_at_ms, last_used_at_ms) VALUES (?1, ?2, ?3, ?4, ?4)",
     params![id, trimmed, path_str.clone(), now],
   ) {
     let _ = std::fs::remove_dir(&dir);
@@ -177,6 +179,7 @@ pub fn workspace_create(
     name: trimmed.to_string(),
     root_path: path_str,
     created_at_ms: now,
+    last_used_at_ms: now,
   })
 }
 
@@ -201,7 +204,7 @@ pub fn workspace_add_from_path(
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   conn
     .execute(
-      "INSERT INTO workspaces (id, name, root_path, created_at_ms) VALUES (?1, ?2, ?3, ?4)",
+      "INSERT INTO workspaces (id, name, root_path, created_at_ms, last_used_at_ms) VALUES (?1, ?2, ?3, ?4, ?4)",
       params![id, name, path_str.clone(), now],
     )
     .map_err(|e| {
@@ -216,6 +219,7 @@ pub fn workspace_add_from_path(
     name,
     root_path: path_str,
     created_at_ms: now,
+    last_used_at_ms: now,
   })
 }
 
@@ -224,6 +228,22 @@ pub fn workspace_remove(app: AppHandle, id: String) -> Result<(), String> {
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   let n = conn
     .execute("DELETE FROM workspaces WHERE id = ?1", params![id])
+    .map_err(|e| e.to_string())?;
+  if n == 0 {
+    return Err("Workspace not found.".to_string());
+  }
+  Ok(())
+}
+
+#[tauri::command]
+pub fn workspace_touch(app: AppHandle, id: String) -> Result<(), String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let now = now_ms();
+  let n = conn
+    .execute(
+      "UPDATE workspaces SET last_used_at_ms = ?1 WHERE id = ?2",
+      params![now, id],
+    )
     .map_err(|e| e.to_string())?;
   if n == 0 {
     return Err("Workspace not found.".to_string());
