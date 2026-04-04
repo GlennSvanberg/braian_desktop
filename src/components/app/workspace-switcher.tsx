@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
-  ChevronsUpDown,
+  ChevronDown,
   Copy,
+  Folder,
   FolderOpen,
   FolderPlus,
-  GalleryVerticalEnd,
   Loader2,
   Pencil,
   Plus,
@@ -182,81 +182,54 @@ export function WorkspaceSwitcher() {
     }
   }
 
-  const triggerSubtitle = !activeWorkspace
-    ? 'No workspace'
-    : isTauriRuntime && activeWorkspace.rootPath
-      ? 'On this computer'
-      : 'Preview'
-
   return (
     <>
-      <SidebarMenu>
+      <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined}>
         <SidebarMenuItem>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
-                size="lg"
                 disabled={busy}
+                tooltip="Manage workspaces"
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               >
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  {busy ? (
-                    <Loader2 className="size-4 shrink-0 animate-spin" />
-                  ) : (
-                    <GalleryVerticalEnd className="size-4 shrink-0" />
-                  )}
-                </div>
-                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">
-                    {activeWorkspace?.name ?? 'No workspace'}
-                  </span>
-                  <span className="text-sidebar-foreground/65 truncate text-xs">
-                    {triggerSubtitle}
-                  </span>
-                </div>
-                <ChevronsUpDown className="ml-auto shrink-0 opacity-50" />
+                {busy ? (
+                  <Loader2
+                    className="text-sidebar-foreground/70 size-4 shrink-0 animate-spin"
+                    aria-hidden
+                  />
+                ) : (
+                  <Folder className="size-4 shrink-0 opacity-80" aria-hidden />
+                )}
+                <span className="group-data-[collapsible=icon]:hidden truncate">
+                  Manage workspaces
+                </span>
+                <ChevronDown
+                  className="text-sidebar-foreground/50 ml-auto size-4 shrink-0 group-data-[collapsible=icon]:hidden"
+                  aria-hidden
+                />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent
-              className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-lg"
+              className="min-w-56 rounded-lg"
               align="start"
               side={isMobile ? 'bottom' : 'right'}
               sideOffset={4}
             >
               <DropdownMenuLabel className="text-text-3 text-xs font-normal">
-                Switch workspace
+                Workspace actions
               </DropdownMenuLabel>
-              {workspaces.length === 0 ? (
-                <p className="text-text-3 px-2 py-2 text-xs">
-                  {isTauriRuntime
-                    ? 'Create or add a folder to get started.'
-                    : 'Open the desktop app for folder workspaces.'}
+              {isTauriRuntime && workspaces.length === 0 ? (
+                <p className="text-text-3 px-2 pb-1 text-xs leading-snug">
+                  No folders yet—create or add one to get started.
                 </p>
-              ) : (
-                workspaces.map((ws) => (
-                  <DropdownMenuItem
-                    key={ws.id}
-                    onClick={() => {
-                      setActiveWorkspaceId(ws.id)
-                      navigate({ to: '/dashboard' })
-                    }}
-                    className="cursor-pointer gap-2 p-2"
-                  >
-                    <div className="flex size-6 items-center justify-center rounded-md border border-border bg-muted">
-                      <GalleryVerticalEnd className="size-3.5 shrink-0 opacity-70" />
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate font-medium">{ws.name}</span>
-                      <span className="text-text-3 truncate text-xs">
-                        {isTauriRuntime && ws.rootPath
-                          ? 'On this computer'
-                          : 'Browser preview'}
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                ))
-              )}
-              <DropdownMenuSeparator />
+              ) : null}
+              {!isTauriRuntime ? (
+                <p className="text-text-3 px-2 pb-2 text-xs leading-snug">
+                  Open the desktop app to add folder workspaces on this
+                  computer.
+                </p>
+              ) : null}
               {isTauriRuntime ? (
                 <>
                   <DropdownMenuItem
@@ -309,11 +282,7 @@ export function WorkspaceSwitcher() {
                     <span>Remove from app</span>
                   </DropdownMenuItem>
                 </>
-              ) : (
-                <DropdownMenuItem disabled className="text-text-3 gap-2 p-2">
-                  <span>Folder actions need the desktop app</span>
-                </DropdownMenuItem>
-              )}
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarMenuItem>

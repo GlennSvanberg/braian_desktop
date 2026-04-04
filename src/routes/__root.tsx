@@ -4,6 +4,8 @@ import {
   Scripts,
   createRootRoute,
 } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 
 import { Button } from '@/components/ui/button'
 
@@ -51,7 +53,6 @@ export const Route = createRootRoute({
       {
         rel: 'icon',
         href: '/favicon.ico',
-        sizes: '48x48',
       },
       {
         rel: 'icon',
@@ -72,6 +73,11 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    // Hide splashscreen once the app is mounted
+    invoke('close_splashscreen').catch(console.error)
+  }, [])
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

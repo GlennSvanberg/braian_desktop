@@ -31,6 +31,10 @@ pub struct ConversationRecord {
   pub title: String,
   pub updated_at_ms: i64,
   pub canvas_kind: String,
+  #[serde(default)]
+  pub pinned: bool,
+  #[serde(default)]
+  pub unread: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +67,10 @@ struct ConversationFileV1 {
   /// When true, the model receives workspace dashboard builder tools and instructions.
   #[serde(default = "default_app_harness_enabled")]
   app_harness_enabled: bool,
+  #[serde(default)]
+  pinned: bool,
+  #[serde(default)]
+  unread: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +133,10 @@ pub struct ConversationSaveInput {
   pub agent_mode: String,
   #[serde(default = "default_app_harness_enabled")]
   pub app_harness_enabled: bool,
+  #[serde(default)]
+  pub pinned: bool,
+  #[serde(default)]
+  pub unread: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,6 +179,13 @@ fn dashboard_pages_dir(workspace_root: &Path) -> PathBuf {
   dashboard_dir(workspace_root).join("pages")
 }
 
+fn skills_dir(workspace_root: &Path) -> PathBuf {
+  braian_dir(workspace_root).join("skills")
+}
+
+const DEFAULT_CREATE_SKILL_MD: &str = include_str!("../skills-default/create-skill.md");
+const DEFAULT_APP_BUILDER_SKILL_MD: &str = include_str!("../skills-default/app-builder.md");
+
 fn conversation_path(workspace_root: &Path, id: &str) -> PathBuf {
   conversations_dir(workspace_root).join(format!("{id}.json"))
 }
@@ -203,6 +222,16 @@ fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   fs::create_dir_all(artifacts_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(canvas_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(dashboard_pages_dir(workspace_root)).map_err(|e| e.to_string())?;
+  fs::create_dir_all(skills_dir(workspace_root)).map_err(|e| e.to_string())?;
+  let create_skill_path = skills_dir(workspace_root).join("create-skill.md");
+  if !create_skill_path.exists() {
+    fs::write(&create_skill_path, DEFAULT_CREATE_SKILL_MD).map_err(|e| e.to_string())?;
+  }
+  let app_builder_skill_path = skills_dir(workspace_root).join("app-builder.md");
+  if !app_builder_skill_path.exists() {
+    fs::write(&app_builder_skill_path, DEFAULT_APP_BUILDER_SKILL_MD)
+      .map_err(|e| e.to_string())?;
+  }
   let schema_path = b.join("schema.json");
   if !schema_path.exists() {
     fs::create_dir_all(&b).map_err(|e| e.to_string())?;
@@ -256,6 +285,8 @@ fn file_to_record(f: &ConversationFileV1, canvas_kind_override: Option<String>) 
     title: f.title.clone(),
     updated_at_ms: f.updated_at_ms,
     canvas_kind,
+    pinned: f.pinned,
+    unread: f.unread,
   }
 }
 
@@ -425,7 +456,11 @@ pub fn conversation_list(
       .unwrap_or(f.canvas_kind.clone());
     records.push(file_to_record(&f, Some(ck)));
   }
-  records.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+  records.sort_by(|a, b| match (a.pinned, b.pinned) {
+    (true, false) => std::cmp::Ordering::Less,
+    (false, true) => std::cmp::Ordering::Greater,
+    _ => b.updated_at_ms.cmp(&a.updated_at_ms),
+  });
   Ok(records)
 }
 
@@ -462,6 +497,8 @@ pub fn conversation_create(
     context_files: vec![],
     agent_mode: default_agent_mode(),
     app_harness_enabled: false,
+    pinned: false,
+    unread: false,
   };
   let path = conversation_path(&root, &id);
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
@@ -472,6 +509,8 @@ pub fn conversation_create(
     title: "New chat".to_string(),
     updated_at_ms: now,
     canvas_kind: "document".to_string(),
+    pinned: false,
+    unread: false,
   })
 }
 
@@ -551,6 +590,8 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
     context_files: input.context_files.clone(),
     agent_mode: input.agent_mode.clone(),
     app_harness_enabled: input.app_harness_enabled,
+    pinned: input.pinned,
+    unread: input.unread,
   };
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
   fs::write(&path, json).map_err(|e| e.to_string())?;
@@ -616,6 +657,68 @@ pub fn conversation_set_title(
   ensure_braian_layout(&root)?;
   file.title = trimmed.to_string();
   file.updated_at_ms = now_ms();
+  let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+  fs::write(&path, json).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationSetPinnedInput {
+  pub id: String,
+  pub workspace_id: String,
+  pub pinned: bool,
+}
+
+#[tauri::command]
+pub fn conversation_set_pinned(
+  app: AppHandle,
+  input: ConversationSetPinnedInput,
+) -> Result<(), String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &input.workspace_id)?;
+  let path = conversation_path(&root, &input.id);
+  if !path.is_file() {
+    return Err("Conversation not found.".to_string());
+  }
+  let mut file = load_conversation_file(&path)?;
+  if file.workspace_id != input.workspace_id || file.id != input.id {
+    return Err("Conversation workspace mismatch.".to_string());
+  }
+  ensure_braian_layout(&root)?;
+  file.pinned = input.pinned;
+  file.updated_at_ms = now_ms();
+  let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+  fs::write(&path, json).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationSetUnreadInput {
+  pub id: String,
+  pub workspace_id: String,
+  pub unread: bool,
+}
+
+#[tauri::command]
+pub fn conversation_set_unread(
+  app: AppHandle,
+  input: ConversationSetUnreadInput,
+) -> Result<(), String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &input.workspace_id)?;
+  let path = conversation_path(&root, &input.id);
+  if !path.is_file() {
+    return Err("Conversation not found.".to_string());
+  }
+  let mut file = load_conversation_file(&path)?;
+  if file.workspace_id != input.workspace_id || file.id != input.id {
+    return Err("Conversation workspace mismatch.".to_string());
+  }
+  ensure_braian_layout(&root)?;
+  file.unread = input.unread;
+  // Do not bump updated_at_ms — avoid reordering the sidebar when marking read.
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
   fs::write(&path, json).map_err(|e| e.to_string())?;
   Ok(())

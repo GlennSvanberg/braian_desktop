@@ -13,11 +13,25 @@ import {
   userProfileGet,
 } from '@/lib/user-profile-api'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
+import { EMBEDDED_CREATE_SKILL_MARKDOWN } from '@/lib/skills/embedded-create-skill'
+import {
+  formatSkillCatalogSystemText,
+  loadAppBuilderSkillMarkdown,
+  loadCreateSkillBodyMarkdown,
+  loadSkillCatalog,
+} from '@/lib/skills/load-skill-catalog'
 
+import {
+  APP_BUILDER_INSTRUCTIONS_FALLBACK,
+  BRAIAN_ROUTING_TREE,
+  CODE_MODE_ROUTING_ADDENDUM,
+  DOC_MODE_ROUTING_ADDENDUM,
+} from './braian-routing-prompt'
 import { buildCanvasTools } from './canvas-tools'
 import { buildCodingTools } from './coding-tools'
 import { buildDashboardTools } from './dashboard-tools'
 import { isMockAiMode } from './mock-mode'
+import { buildSkillTools } from './skill-tools'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import { buildUserProfileTools } from './user-profile-tools'
@@ -25,60 +39,14 @@ import type { ChatTurnContext, PriorChatMessage } from './types'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
 
-export const TRIAGE_SYSTEM = `You are Braian, the user's primary assistant in Braian Desktop — a local-first workspace for business users with chat and a workspace panel for documents, data, and visuals.
+/** Composed document-mode system text (routing + doc addendum). */
+export const TRIAGE_SYSTEM = `${BRAIAN_ROUTING_TREE}\n\n${DOC_MODE_ROUTING_ADDENDUM}`
 
-When the user wants to draft or co-write long-form text (stories, specs, documents) in the workspace canvas, call the tool open_document_canvas with the **complete** markdown for the file after your edits.
+/** Composed code-mode system text (routing + code addendum). */
+export const CODE_AGENT_SYSTEM = `${BRAIAN_ROUTING_TREE}\n\n${CODE_MODE_ROUTING_ADDENDUM}`
 
-If a "Document canvas snapshot" system message is present, it is the **authoritative latest text** (including the user's manual edits). Start from that snapshot, apply only what they asked for, and pass the **full merged** markdown to open_document_canvas—never discard their writing unless they explicitly asked to remove it.
-
-If a "Attached workspace files" system message is present, those excerpts are the **authoritative file contents for this turn** (paths are relative to the workspace root). Large files may be truncated.
-
-**Workspace capabilities:** When the chat is saved you have the document canvas tool. For tasks that need Python, terminal commands, real \`.xlsx\` / files on disk, or reading arbitrary workspace paths, **you** enable code tools: call \`switch_to_code_agent\`, then immediately call \`__lazy__tool__discovery__\` with the toolNames returned by that tool. After that, use read/write/list/run tools — do **not** ask the user to change modes in the UI. Until you complete those steps, do not claim you ran scripts or wrote binary files. You may still draft markdown in the canvas when that alone satisfies the request.
-
-**Workspace dashboard (in-app):** If the user wants the **Braian** sidebar Dashboard, KPIs/tiles, in-app pages (\`/dashboard/page/...\`), to "add to my dashboard", a "hello world" **inside Braian**, or mini-apps/widgets **in this app**, call \`switch_to_app_builder\`, then immediately \`__lazy__tool__discovery__\` with the toolNames that tool returns. Then use \`read_workspace_dashboard\`, \`apply_workspace_dashboard\` (\`manifestJson\` string), and \`upsert_workspace_page\` (\`pageJson\` string). Do **not** tell them to use the chat **App** mode control, and do **not** paste standalone \`.html\` files for Braian's dashboard — pass stringified JSON matching the manifest/page shapes described in app-builder mode.
-
-If open_document_canvas is not available (unsaved chat), say they need a saved conversation first, then they can ask again.
-
-You may use tools offered in this turn when appropriate. Do not claim to have read arbitrary files or run shell commands unless those tools exist here or the user attached file content in the system messages above.`
-
-export const APP_BUILDER_SYSTEM = `**Workspace dashboard (App mode):** You may edit the user's **internal** Braian UI for this workspace only (not a public website).
-
-**Paths (relative to workspace root):**
-- Main board: \`.braian/dashboard/board.json\`
-- Full-screen pages: \`.braian/dashboard/pages/<pageId>.json\` — opened inside Braian at \`/dashboard/page/<pageId>\`.
-
-**Manifest (\`board.json\`):** \`schemaVersion\` must be \`1\`. Top-level optional \`title\`. Required \`regions\`:
-- \`insights\`: array of KPI tiles: \`{ "id", "kind": "kpi", "label", "value", "hint?" }\` (max 8).
-- \`links\`: shortcuts — \`page_link\` \`{ "id", "kind": "page_link", "pageId", "label", "description?" }\` or \`external_link\` \`{ "id", "kind": "external_link", "label", "href" }\` (full URL, max 16).
-- \`main\`: larger tiles — \`markdown\` \`{ "id", "kind": "markdown", "body" }\` (GFM, prose only — no scripts), \`kpi\`, or \`page_link\` (max 24).
-
-**Page file:** \`schemaVersion\`: \`1\`, \`pageId\`, \`title\`, optional \`description\`, \`tiles\` (same tile shapes as \`main\`, max 32). \`pageId\` must match the filename (e.g. \`reports\` → \`reports.json\`).
-
-**Styling:** The shell renders tiles with Braian/shadcn components. Do **not** invent new tile \`kind\` values — only those above. Do not use raw hex colors in JSON; rely on short labels and markdown text. For external URLs use \`external_link\`.
-
-**Workflow:** Call \`read_workspace_dashboard\` before overwriting. \`apply_workspace_dashboard\` takes \`manifestJson\`: one string of **valid JSON** for the full manifest (stringify the object). \`upsert_workspace_page\` takes \`pageJson\`: one string of valid JSON for a single page. Prefer stable \`pageId\` slugs (lowercase, hyphens).`
-
-export const CODE_AGENT_SYSTEM = `You are a coding-style agent in Braian Desktop (local-first workspace). You can read and write UTF-8 files and run programs **only inside the user's active workspace** via the provided tools.
-
-Workflow (like a CLI coding assistant): understand the task → read or list files as needed → write or update scripts (prefer **Python** for data work: CSV, Excel via pandas/openpyxl, downloads with urllib/requests) → run commands to install deps (e.g. pip/uv) and execute scripts → report stdout/stderr and outcomes honestly.
-
-If the user @-attached a **CSV or UTF-8 text** file, the system message includes an excerpt and path — you may use \`read_workspace_file\` on that path. **Binary Excel (\`.xlsx\`) is not injected** into the prompt; use the **path** from the attachment line and run **Python/pandas** via \`run_workspace_command\` to read or convert it. Produce requested outputs (e.g. \`.xlsx\`) on disk with tools, not just prose.
-
-Rules:
-- Paths in tools are always **relative to the workspace root** (use forward slashes).
-- On **Windows**, prefer \`py\` with args like \`["-3", "scripts/foo.py"]\` or \`python\`; use \`powershell.exe\` or \`pwsh\` with \`-File\` or \`-Command\` as separate argv entries if Python is unavailable.
-- \`run_workspace_command\` does **not** use a shell: pass \`program\` + \`args\` only (no pipes unless you run a shell explicitly as program).
-- Do not claim a file was written or a command ran without a successful tool result.
-- Keep chat messages concise; put long output in tool results, then summarize.
-- If attached file excerpts appear below, treat them as authoritative for this turn alongside what you read from disk.
-
-**Structured data (CSV, Excel, spreadsheets):** Use **Python with pandas** (and openpyxl or xlsxwriter as needed) via \`run_workspace_command\` to **inspect** files (shape, dtypes, head/sample rows, missing values) and to **produce real outputs** on disk (e.g. \`.xlsx\`). Do **not** satisfy “convert to Excel” or “inspect this file” with prose-only pasted CSV or generic instructions when tools can run code.
-
-**Document canvas previews:** When the \`open_document_canvas\` tool is available (saved conversation), after you have inspected and/or written outputs, call it with **full markdown** for the workspace panel: a short **inspection summary** (tables or bullet points derived from your pandas/script output) and a **deliverables** section (relative paths under the workspace, row/column notes). For huge tables, show a **sample** in the canvas and point to the on-disk file for the full data. If a “Document canvas snapshot” system message is present, merge your report into that markdown (preserve the user’s manual edits unless they asked to remove them). If \`open_document_canvas\` is not in this turn (unsaved chat), say that saving the chat enables side-panel previews.
-
-**Braian dashboard / in-app pages:** If the user wants tiles, KPIs, or pages **inside Braian** (not a generic browser \`index.html\`), call \`switch_to_app_builder\` then \`__lazy__tool__discovery__\` with the returned toolNames, then the dashboard tools — same workflow as in document mode; do not ask them to switch to App mode in the UI.
-
-Safety: the user runs this on their own machine; you still must stay within workspace-scoped tools and not assume access outside them.`
+/** Fallback dashboard instructions if `.braian/skills/app-builder.md` is unavailable. */
+export const APP_BUILDER_SYSTEM = APP_BUILDER_INSTRUCTIONS_FALLBACK
 
 export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Desktop. Your job is to get to know the user in a friendly, efficient way and to keep their **global profile** up to date.
 
@@ -120,9 +88,15 @@ export type SerializableModelRequestSnapshot = {
   tools: ChatToolDisplayInfo[]
 }
 
-const SOURCE_PRIMARY_DOC = 'src/lib/ai/chat-turn-args.ts (TRIAGE_SYSTEM)'
-const SOURCE_PRIMARY_CODE = 'src/lib/ai/chat-turn-args.ts (CODE_AGENT_SYSTEM)'
-const SOURCE_APP_BUILDER = 'src/lib/ai/chat-turn-args.ts (APP_BUILDER_SYSTEM)'
+const SOURCE_ROUTING_DOC =
+  'src/lib/ai/braian-routing-prompt.ts + chat-turn-args (document mode)'
+const SOURCE_ROUTING_CODE =
+  'src/lib/ai/braian-routing-prompt.ts + chat-turn-args (code mode)'
+const SOURCE_SKILLS_CREATE =
+  'src/lib/skills/load-skill-catalog.ts → create-skill.md (+ embedded fallback)'
+const SOURCE_SKILLS_CATALOG = 'src/lib/skills/load-skill-catalog.ts'
+const SOURCE_APP_BUILDER =
+  'src/lib/skills/load-skill-catalog.ts → app-builder.md (+ APP_BUILDER_INSTRUCTIONS_FALLBACK)'
 const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
@@ -144,6 +118,9 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   apply_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
   upsert_workspace_page: 'src/lib/ai/dashboard-tools.ts',
   update_user_profile: 'src/lib/ai/user-profile-tools.ts',
+  list_workspace_skills: 'src/lib/ai/skill-tools.ts',
+  read_workspace_skill: 'src/lib/ai/skill-tools.ts',
+  write_workspace_skill: 'src/lib/ai/skill-tools.ts',
 }
 
 /** User profile lines plus automatic local time (injected on every default agent turn). */
@@ -361,9 +338,11 @@ export async function buildTanStackChatTurnArgs(
     !isCodeMode ? buildSwitchToCodeAgentTool(ctx) : null
   const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
   const dashboardTools = buildDashboardTools(ctx)
+  const skillTools = buildSkillTools(ctx)
   const tools: Tool[] = [
     ...canvasTools,
     ...codingTools,
+    ...skillTools,
     ...(switchToCodeTool ? [switchToCodeTool] : []),
     ...(switchToAppTool ? [switchToAppTool] : []),
     ...dashboardTools,
@@ -386,17 +365,50 @@ export async function buildTanStackChatTurnArgs(
 
   if (isCodeMode) {
     systemSections.push({
-      id: 'primary-code',
-      label: 'Code agent',
-      source: SOURCE_PRIMARY_CODE,
+      id: 'routing-code',
+      label: 'Routing (code agent)',
+      source: SOURCE_ROUTING_CODE,
       text: CODE_AGENT_SYSTEM,
     })
   } else {
     systemSections.push({
-      id: 'primary-doc',
-      label: 'Document / triage agent',
-      source: SOURCE_PRIMARY_DOC,
+      id: 'routing-doc',
+      label: 'Routing (document / triage)',
+      source: SOURCE_ROUTING_DOC,
       text: TRIAGE_SYSTEM,
+    })
+  }
+
+  const workspaceScoped =
+    ctx?.workspaceId != null &&
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
+
+  if (workspaceScoped && ctx.workspaceId != null) {
+    const createBody = await loadCreateSkillBodyMarkdown(
+      ctx.workspaceId,
+      EMBEDDED_CREATE_SKILL_MARKDOWN,
+    )
+    systemSections.push({
+      id: 'skills-create',
+      label: 'Skill — create-skill (always)',
+      source: SOURCE_SKILLS_CREATE,
+      text: [
+        '## create-skill',
+        '',
+        'Always follow these instructions when creating or editing skills under `.braian/skills/`:',
+        '',
+        createBody,
+      ].join('\n'),
+    })
+
+    const { entries, catalogIncomplete } = await loadSkillCatalog(
+      ctx.workspaceId,
+    )
+    systemSections.push({
+      id: 'skills-catalog',
+      label: 'Skills catalog',
+      source: SOURCE_SKILLS_CATALOG,
+      text: formatSkillCatalogSystemText(entries, catalogIncomplete),
     })
   }
 
@@ -439,11 +451,15 @@ export async function buildTanStackChatTurnArgs(
     ctx.workspaceId != null &&
     !isNonWorkspaceScopedSessionId(ctx.workspaceId)
   ) {
+    const appBuilderText = await loadAppBuilderSkillMarkdown(
+      ctx.workspaceId,
+      APP_BUILDER_INSTRUCTIONS_FALLBACK,
+    )
     systemSections.push({
       id: 'app-builder',
       label: 'Workspace dashboard builder',
       source: SOURCE_APP_BUILDER,
-      text: APP_BUILDER_SYSTEM,
+      text: appBuilderText,
     })
   }
 

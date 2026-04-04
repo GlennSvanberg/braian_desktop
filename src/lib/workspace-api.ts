@@ -6,7 +6,9 @@ import {
   getConversationById,
   getConversationsForWorkspace,
   mockConversationDelete,
+  mockConversationSetPinned,
   mockConversationSetTitle,
+  mockConversationSetUnread,
 } from '@/lib/mock-workspace-data'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
@@ -26,6 +28,8 @@ export type ConversationDto = {
   title: string
   updatedAtMs: number
   canvasKind: string
+  pinned: boolean
+  unread: boolean
 }
 
 export async function workspaceList(): Promise<WorkspaceDto[]> {
@@ -106,13 +110,19 @@ export async function conversationList(
 ): Promise<ConversationDto[]> {
   if (!isTauri()) {
     const now = Date.now()
-    return getConversationsForWorkspace(workspaceId).map((c, i) => ({
+    const rows = getConversationsForWorkspace(workspaceId).map((c, i) => ({
       id: c.id,
       workspaceId: c.workspaceId,
       title: c.title,
       updatedAtMs: now - i * 60_000,
       canvasKind: c.canvasKind,
+      pinned: c.pinned ?? false,
+      unread: c.unread ?? false,
     }))
+    return rows.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return b.updatedAtMs - a.updatedAtMs
+    })
   }
   return invoke<ConversationDto[]>('conversation_list', { workspaceId })
 }
@@ -140,6 +150,42 @@ export async function conversationSetTitle(input: {
       id: input.id,
       workspaceId: input.workspaceId,
       title: input.title,
+    },
+  })
+}
+
+export async function conversationSetPinned(input: {
+  id: string
+  workspaceId: string
+  pinned: boolean
+}): Promise<void> {
+  if (!isTauri()) {
+    mockConversationSetPinned(input.id, input.pinned)
+    return
+  }
+  await invoke('conversation_set_pinned', {
+    input: {
+      id: input.id,
+      workspaceId: input.workspaceId,
+      pinned: input.pinned,
+    },
+  })
+}
+
+export async function conversationSetUnread(input: {
+  id: string
+  workspaceId: string
+  unread: boolean
+}): Promise<void> {
+  if (!isTauri()) {
+    mockConversationSetUnread(input.id, input.unread)
+    return
+  }
+  await invoke('conversation_set_unread', {
+    input: {
+      id: input.id,
+      workspaceId: input.workspaceId,
+      unread: input.unread,
     },
   })
 }
@@ -185,6 +231,8 @@ export type ConversationSavePayload = {
   contextFiles: ContextFileEntryDto[]
   agentMode: AgentMode
   appHarnessEnabled: boolean
+  pinned: boolean
+  unread: boolean
 }
 
 export type ConversationOpenResult = {
@@ -264,6 +312,8 @@ export async function conversationOpen(
       title: c.title,
       updatedAtMs: Date.now(),
       canvasKind: c.canvasKind,
+      pinned: c.pinned ?? false,
+      unread: c.unread ?? false,
     }
     if (c.demoMessages?.length) {
       const { getMockArtifactPayloadForChat } = await import('@/lib/artifacts')
@@ -330,7 +380,10 @@ export async function conversationSave(input: ConversationSavePayload): Promise<
 /** Snapshot for persisting; normalizes streaming messages to complete for disk. */
 export function buildConversationSavePayload(
   thread: ChatThreadState,
-  conversation: Pick<ConversationDto, 'id' | 'workspaceId' | 'title' | 'canvasKind'>,
+  conversation: Pick<
+    ConversationDto,
+    'id' | 'workspaceId' | 'title' | 'canvasKind' | 'pinned' | 'unread'
+  >,
 ): ConversationSavePayload {
   const canvasKind = thread.artifactPayload?.kind ?? conversation.canvasKind
   return {
@@ -338,6 +391,8 @@ export function buildConversationSavePayload(
     workspaceId: conversation.workspaceId,
     title: conversation.title,
     canvasKind,
+    pinned: conversation.pinned ?? false,
+    unread: conversation.unread ?? false,
     artifactOpen: thread.artifactOpen,
     draft: thread.draft,
     messages: thread.messages.map((m) => ({

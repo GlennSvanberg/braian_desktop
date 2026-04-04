@@ -73,10 +73,7 @@ export function AppHeader() {
 
   return (
     <header
-      className={cn(
-        'flex shrink-0 items-center gap-3 border-b border-border bg-background/85 px-2 backdrop-blur-md supports-backdrop-filter:bg-background/70 md:px-3',
-        tauriChrome ? 'min-h-16 py-2' : 'h-14',
-      )}
+      className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-2 backdrop-blur-md supports-backdrop-filter:bg-background/70 md:px-3"
       data-tauri-drag-region={tauriChrome ? true : undefined}
     >
       <SidebarTrigger className="-ml-0.5" {...noDrag} />
@@ -87,10 +84,7 @@ export function AppHeader() {
         {...noDrag}
       />
       <div
-        className={cn(
-          'flex min-w-0 flex-1 flex-col justify-center gap-0.5',
-          tauriChrome ? 'min-h-11 px-1 py-0.5 md:px-2' : 'py-1',
-        )}
+        className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-1"
         onDoubleClick={
           tauriChrome
             ? () => {

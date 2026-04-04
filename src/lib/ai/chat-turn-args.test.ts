@@ -8,6 +8,7 @@ vi.mock('@/lib/ai-settings-api', () => ({
 
 vi.mock('@/lib/workspace-api', () => ({
   workspaceReadTextFile: vi.fn().mockRejectedValue(new Error('no file')),
+  workspaceListDir: vi.fn().mockResolvedValue([]),
 }))
 
 import {
@@ -92,7 +93,12 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_code_agent'),
     ).toBe(true)
-    expect(r.systemSections[0]?.id).toBe('primary-doc')
+    expect(r.systemSections[0]?.id).toBe('routing-doc')
+    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(true)
+    expect(r.systemSections.some((s) => s.id === 'skills-catalog')).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'list_workspace_skills'),
+    ).toBe(true)
   })
 
   it('code mode uses eager coding tools and no switch tool', async () => {
@@ -111,7 +117,8 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_code_agent'),
     ).toBe(false)
-    expect(r.systemSections[0]?.id).toBe('primary-code')
+    expect(r.systemSections[0]?.id).toBe('routing-code')
+    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(true)
   })
 
   it('appends user message to prior messages', async () => {
@@ -192,6 +199,9 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(uc).toBeDefined()
     expect(uc?.text).toMatch(/ISO:/)
     expect(uc?.text).toMatch(/User profile/)
+    const routingIdx = r.systemSections.findIndex((s) => s.id === 'routing-doc')
+    const userIdx = r.systemSections.findIndex((s) => s.id === 'user-context')
+    expect(routingIdx).toBeLessThan(userIdx)
   })
 
   it('profile turnKind uses coach prompt and only update_user_profile', async () => {
@@ -234,6 +244,10 @@ describe('buildTanStackChatTurnArgs', () => {
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
+    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'list_workspace_skills'),
+    ).toBe(false)
   })
 
   it('omits dashboard tools for user profile workspace id even if harness on', async () => {
@@ -254,5 +268,6 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.systemSections.some((s) => s.id === 'app-builder'),
     ).toBe(false)
+    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
   })
 })

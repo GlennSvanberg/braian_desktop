@@ -623,6 +623,36 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       }))
 
       const after = getThread(sessionKey)
+      const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
+
+      if (
+        conversationId &&
+        !isDetachedWorkspaceSessionId(workspaceId) &&
+        !isUserProfileSessionId(workspaceId)
+      ) {
+        const last = after.messages.at(-1)
+        if (last?.role === 'assistant') {
+          const path =
+            typeof window !== 'undefined' ? window.location.pathname : ''
+          if (path !== `/chat/${conversationId}`) {
+            void Promise.all([
+              import('@/lib/workspace-api'),
+              import('@/lib/conversation-list-refresh'),
+            ]).then(([{ conversationSetUnread }, refreshMod]) =>
+              conversationSetUnread({
+                id: conversationId,
+                workspaceId,
+                unread: true,
+              })
+                .then(() => refreshMod.requestConversationListRefresh())
+                .catch((e) =>
+                  console.error('[braian] conversationSetUnread', e),
+                ),
+            )
+          }
+        }
+      }
+
       if (after.pendingUserMessages.length > 0) {
         const [next, ...rest] = after.pendingUserMessages
         patchThread(sessionKey, (p) => ({
@@ -631,7 +661,6 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         }))
         queueMicrotask(() => startChatTurnInternal(sessionKey, next))
       } else {
-        const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
         if (
           streamCompletedOk &&
           conversationId &&

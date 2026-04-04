@@ -5,6 +5,19 @@ mod workspace;
 mod workspace_agent;
 mod workspace_files;
 
+use tauri::Manager;
+
+#[tauri::command]
+async fn close_splashscreen(window: tauri::Window) {
+  if let Some(splashscreen) = window.get_webview_window("splashscreen") {
+    let _ = splashscreen.close();
+  }
+  if let Some(main) = window.get_webview_window("main") {
+    let _ = main.show();
+    let _ = main.set_focus();
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -29,6 +42,7 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      close_splashscreen,
       workspace::workspace_list,
       workspace::workspace_get_default_root,
       workspace::workspace_create,
@@ -47,6 +61,8 @@ pub fn run() {
       braian_store::conversation_open,
       braian_store::conversation_save,
       braian_store::conversation_set_title,
+      braian_store::conversation_set_pinned,
+      braian_store::conversation_set_unread,
       braian_store::conversation_delete,
       braian_store::canvas_document_write,
       ai_settings::ai_settings_get,

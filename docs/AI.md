@@ -1,6 +1,6 @@
 # AI layer — decisions and reasoning
 
-This document records **why** Braian Desktop uses **TanStack AI** for the LLM integration layer, and how that choice fits the rest of the stack. Product vision (artifacts, workspace, MCP) stays in [`NOTES.md`](../NOTES.md).
+This document records **why** Braian Desktop uses **TanStack AI** for the LLM integration layer, and how that choice fits the rest of the stack. Product vision (artifacts, workspace, MCP) stays in `[NOTES.md](../NOTES.md)`.
 
 ## Decision
 
@@ -10,12 +10,14 @@ The package set is still **alpha**; expect API adjustments as the library mature
 
 ## Alternatives considered
 
-| Option | Why not the default (for us) |
-|--------|------------------------------|
-| **Vercel AI SDK** (`ai` + `@ai-sdk/*`) | Mature and widely used; excellent default for many apps. We prefer **one TanStack-shaped surface** (Start / Router / Query / AI) and direct alignment with the same project values (open SDK, multi-provider, no middleman). |
-| **LangChain.js / LangGraph** | Strong for heavy RAG and complex graphs. Likely **more abstraction than needed** for the first Braian loops (chat + tools + Tauri commands). Revisit if orchestration becomes graph-heavy. |
-| **OpenRouter-only** | Single HTTP surface, but keys and features are **OpenRouter-shaped**, not always equivalent to native provider APIs. BYOK may mean “direct OpenAI / Anthropic / Google keys” for some users. |
-| **Custom HTTP per provider** | Maximum control, but duplicates streaming, tool protocols, and retries across vendors—**high maintenance** for little unique benefit. |
+
+| Option                                 | Why not the default (for us)                                                                                                                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Vercel AI SDK** (`ai` + `@ai-sdk/`*) | Mature and widely used; excellent default for many apps. We prefer **one TanStack-shaped surface** (Start / Router / Query / AI) and direct alignment with the same project values (open SDK, multi-provider, no middleman). |
+| **LangChain.js / LangGraph**           | Strong for heavy RAG and complex graphs. Likely **more abstraction than needed** for the first Braian loops (chat + tools + Tauri commands). Revisit if orchestration becomes graph-heavy.                                   |
+| **OpenRouter-only**                    | Single HTTP surface, but keys and features are **OpenRouter-shaped**, not always equivalent to native provider APIs. BYOK may mean “direct OpenAI / Anthropic / Google keys” for some users.                                 |
+| **Custom HTTP per provider**           | Maximum control, but duplicates streaming, tool protocols, and retries across vendors—**high maintenance** for little unique benefit.                                                                                        |
+
 
 ## Why TanStack AI fits Braian
 
@@ -33,16 +35,16 @@ The package set is still **alpha**; expect API adjustments as the library mature
 ## Implementation hints (for agents editing the repo)
 
 - Prefer a **thin internal facade** (e.g. `streamChat`, provider factory from stored settings) so UI and artifact adapters do not import provider SDKs directly everywhere.
-- Preserve existing **chunk / artifact shapes** from [`src/lib/ai/types.ts`](../src/lib/ai/types.ts) where possible so `ArtifactPanel` and stores stay stable.
-- Shell-shaped tools (`run_command` with workspace-scoped cwd) can sit **behind** Tauri `invoke` for safety; see discussions in [`AGENTS.md`](../AGENTS.md).
+- Preserve existing **chunk / artifact shapes** from `[src/lib/ai/types.ts](../src/lib/ai/types.ts)` where possible so `ArtifactPanel` and stores stay stable.
+- Shell-shaped tools (`run_command` with workspace-scoped cwd) can sit **behind** Tauri `invoke` for safety; see discussions in `[AGENTS.md](../AGENTS.md)`.
 
 ## Tauri and outbound HTTP (CORS)
 
-Provider REST APIs do not allow browser `fetch` from `localhost` (CORS). The desktop app uses **`@tauri-apps/plugin-http`**: the WebView calls `fetch` from that plugin so requests run in Rust and reach OpenAI, Anthropic, Gemini, etc. Allowed hosts are listed in [`src-tauri/capabilities/default.json`](../src-tauri/capabilities/default.json) under the `http:default` scope. If you add an **OpenAI-compatible** base URL (xAI, self-hosted, etc.), add its origin to that allow list or requests will be denied.
+Provider REST APIs do not allow browser `fetch` from `localhost` (CORS). The desktop app uses `**@tauri-apps/plugin-http`**: the WebView calls `fetch` from that plugin so requests run in Rust and reach OpenAI, Anthropic, Gemini, etc. Allowed hosts are listed in `[src-tauri/capabilities/default.json](../src-tauri/capabilities/default.json)` under the `http:default` scope. If you add an **OpenAI-compatible** base URL (xAI, self-hosted, etc.), add its origin to that allow list or requests will be denied.
 
-Chat streaming and adapters live in [`src/lib/ai/tanstack-chat-stream.ts`](../src/lib/ai/tanstack-chat-stream.ts). BYOK settings are persisted in SQLite via [`src-tauri/src/ai_settings.rs`](../src-tauri/src/ai_settings.rs) (`ai_settings_get` / `ai_settings_set`).
+Chat streaming and adapters live in `[src/lib/ai/tanstack-chat-stream.ts](../src/lib/ai/tanstack-chat-stream.ts)`. BYOK settings are persisted in SQLite via `[src-tauri/src/ai_settings.rs](../src-tauri/src/ai_settings.rs)` (`ai_settings_get` / `ai_settings_set`).
 
-The OpenAI and Anthropic JS SDKs still classify the Tauri WebView as a **browser** and refuse to run unless **`dangerouslyAllowBrowser: true`** is set on the client config. Braian sets that only in the desktop AI path (with Tauri HTTP `fetch`), not for arbitrary public web pages. See [OpenAI’s API key safety notes](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety).
+The OpenAI and Anthropic JS SDKs still classify the Tauri WebView as a **browser** and refuse to run unless `**dangerouslyAllowBrowser: true`** is set on the client config. Braian sets that only in the desktop AI path (with Tauri HTTP `fetch`), not for arbitrary public web pages. See [OpenAI’s API key safety notes](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety).
 
 ## Agent skill (usage patterns)
 
@@ -60,5 +62,6 @@ Other hits from the same search are mostly **TanStack Start** or **TanStack Tabl
 ## References
 
 - TanStack AI: [https://tanstack.com/ai/latest](https://tanstack.com/ai/latest)
-- Repo agent conventions: [`AGENTS.md`](../AGENTS.md)
-- Product and artifact notes: [`NOTES.md`](../NOTES.md)
+- Repo agent conventions: `[AGENTS.md](../AGENTS.md)`
+- Product and artifact notes: `[NOTES.md](../NOTES.md)`
+

@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
   ChevronDown,
   FileText,
   LayoutDashboard,
   Loader2,
-  MessageSquare,
   MoreHorizontal,
   PanelLeftIcon,
+  Pin,
   Plus,
   Settings,
   Trash2,
@@ -65,8 +65,13 @@ import { listWorkspaceDashboardPageIds } from '@/lib/workspace-dashboard'
 import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
+import { cn } from '@/lib/utils'
 import type { WorkspaceDto } from '@/lib/workspace-api'
-import { conversationDelete, conversationSetTitle } from '@/lib/workspace-api'
+import {
+  conversationDelete,
+  conversationSetPinned,
+  conversationSetTitle,
+} from '@/lib/workspace-api'
 
 import type { WorkspaceConversation } from './workspace-context'
 import { useWorkspace } from './workspace-context'
@@ -118,13 +123,71 @@ function ConversationSidebarItem({
   onDelete: (c: WorkspaceConversation) => void
   deletePending: boolean
 }) {
-  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspace()
+  const {
+    activeWorkspaceId,
+    setActiveWorkspaceId,
+    optimisticSetConversationPinned,
+    refreshConversationsForWorkspace,
+  } = useWorkspace()
+  const router = useRouter()
   const sessionKey = chatSessionKey(workspaceId, conversation.id)
   const generating = useSessionGenerating(sessionKey)
   const active = pathname === `/chat/${conversation.id}`
 
+  const onTogglePin = () => {
+    const pinned = !conversation.pinned
+    optimisticSetConversationPinned({
+      workspaceId,
+      conversationId: conversation.id,
+      pinned,
+    })
+    void (async () => {
+      try {
+        await conversationSetPinned({
+          id: conversation.id,
+          workspaceId,
+          pinned,
+        })
+        await refreshConversationsForWorkspace(workspaceId)
+        if (pathname === `/chat/${conversation.id}`) {
+          await router.invalidate()
+        }
+      } catch (e) {
+        optimisticSetConversationPinned({
+          workspaceId,
+          conversationId: conversation.id,
+          pinned: !pinned,
+        })
+        console.error(e)
+        const msg = e instanceof Error ? e.message : String(e)
+        window.alert(msg)
+      }
+    })()
+  }
+
   return (
     <SidebarMenuItem>
+      <SidebarMenuAction
+        showOnHover={!conversation.pinned}
+        className="left-2 right-auto z-10"
+        aria-label={
+          conversation.pinned ? 'Unpin from top' : 'Pin to top'
+        }
+        title={conversation.pinned ? 'Unpin from top' : 'Pin to top'}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onTogglePin()
+        }}
+      >
+        <Pin
+          className={cn(
+            'size-4',
+            conversation.pinned && 'opacity-90',
+          )}
+          aria-hidden
+        />
+      </SidebarMenuAction>
       <SidebarMenuButton
         asChild
         isActive={active}
@@ -140,13 +203,27 @@ function ConversationSidebarItem({
             }
           }}
         >
-          <MessageSquare className="size-4 shrink-0" aria-hidden />
+          {conversation.pinned ? (
+            <span className="size-4 shrink-0" aria-hidden />
+          ) : (
+            <span
+              className="flex size-4 shrink-0 items-center justify-center"
+              aria-hidden
+            >
+              <span className="bg-sidebar-foreground/35 size-1.5 rounded-full" />
+            </span>
+          )}
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate">{conversation.title}</span>
             {generating ? (
               <Loader2
                 className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
                 aria-label="Generating reply"
+              />
+            ) : conversation.unread ? (
+              <span
+                className="bg-success size-2 shrink-0 rounded-full"
+                aria-label="Unread messages"
               />
             ) : null}
           </span>
@@ -184,9 +261,12 @@ function ConversationSidebarItem({
             <MoreHorizontal className="size-4" aria-hidden />
           </SidebarMenuAction>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem onSelect={() => onRename(conversation)}>
             Rename…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onTogglePin}>
+            {conversation.pinned ? 'Unpin from top' : 'Pin to top'}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -225,10 +305,16 @@ function WorkspaceConversationGroup({
 }) {
   const [newPending, setNewPending] = useState(false)
   const chatsExpanded = expandedChats
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return b.updatedAtMs - a.updatedAtMs
+    })
+  }, [conversations])
   const shown = chatsExpanded
-    ? conversations
-    : conversations.slice(0, VISIBLE_CHATS_DEFAULT)
-  const hasMoreChats = conversations.length > VISIBLE_CHATS_DEFAULT
+    ? sortedConversations
+    : sortedConversations.slice(0, VISIBLE_CHATS_DEFAULT)
+  const hasMoreChats = sortedConversations.length > VISIBLE_CHATS_DEFAULT
 
   const onNewInWorkspace = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -258,7 +344,11 @@ function WorkspaceConversationGroup({
   }
 
   return (
-    <SidebarMenuItem className="group/workspace-row list-none p-0">
+    <li
+      data-slot="sidebar-menu-item"
+      data-sidebar="menu-item"
+      className="group/workspace-row relative list-none p-0"
+    >
       <Collapsible
         defaultOpen={workspace.id === activeWorkspaceId}
         className="group/collapsible w-full min-w-0"
@@ -320,7 +410,7 @@ function WorkspaceConversationGroup({
         </div>
         <CollapsibleContent>
           <SidebarMenu className="border-sidebar-border mx-1 ml-2.5 mt-0.5 border-l pl-2">
-            {conversations.length === 0 ? (
+            {sortedConversations.length === 0 ? (
               <p className="text-sidebar-foreground/55 px-2 py-1.5 text-[11px] leading-snug">
                 No saved threads yet.
               </p>
@@ -354,7 +444,7 @@ function WorkspaceConversationGroup({
           </SidebarMenu>
         </CollapsibleContent>
       </Collapsible>
-    </SidebarMenuItem>
+    </li>
   )
 }
 
@@ -468,32 +558,36 @@ export function AppSidebar() {
   }
 
   return (
-    <Sidebar collapsible="icon" variant="inset">
-      <SidebarHeader className="gap-3">
-        <SidebarMenu>
+    <Sidebar collapsible="offcanvas" variant="inset">
+      <SidebarHeader
+        className={cn('gap-3', isTauriRuntime ? 'pt-4' : '')}
+        data-tauri-drag-region={isTauriRuntime ? true : undefined}
+      >
+        <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined}>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="Braian home">
+            <SidebarMenuButton
+              size="lg"
+              asChild
+              tooltip="Braian home"
+              className="group-data-[collapsible=icon]:!size-11 group-data-[collapsible=icon]:!min-h-11 group-data-[collapsible=icon]:!min-w-11 group-data-[collapsible=icon]:!p-1.5"
+            >
               <Link to="/dashboard">
                 <img
                   src="/braian-logo.png"
                   alt=""
-                  width={32}
-                  height={32}
+                  width={48}
+                  height={48}
                   draggable={false}
-                  className="size-8 shrink-0 rounded-lg object-contain shadow-sm"
+                  className="size-12 shrink-0 object-contain group-data-[collapsible=icon]:size-11"
                   aria-hidden
                 />
-                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Braian</span>
-                  <span className="text-sidebar-foreground/65 truncate text-xs">
-                    Local workspace
-                  </span>
-                </div>
+                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold leading-tight">
+                  Braian
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
@@ -563,8 +657,8 @@ export function AppSidebar() {
                 <NewAgentSidebarItem pathname={pathname} />
                 {workspaces.length === 0 ? (
                   <p className="text-sidebar-foreground/60 px-2 py-3 text-xs leading-relaxed">
-                    Add a workspace above to list chats and use your project
-                    folder.
+                    Use <span className="font-medium">Manage workspaces</span>{' '}
+                    below to add a folder and list chats here.
                   </p>
                 ) : (
                   <>
@@ -613,6 +707,8 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="gap-2">
+        <WorkspaceSwitcher />
+        <SidebarSeparator className="mx-0" />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton

@@ -18,6 +18,10 @@ export type MockConversation = {
   title: string
   updatedLabel: string
   canvasKind: MockCanvasKind
+  /** Sidebar: keep thread at top of workspace list. */
+  pinned?: boolean
+  /** Sidebar: new activity while not viewing this chat. */
+  unread?: boolean
   /** Pre-filled thread + canvas when opening an empty session (product demos). */
   demoMessages?: MockDemoMessage[]
 }
@@ -132,4 +136,16 @@ export function mockConversationSetTitle(id: string, title: string): void {
 export function mockConversationDelete(id: string): void {
   const i = MOCK_CONVERSATIONS.findIndex((x) => x.id === id)
   if (i >= 0) MOCK_CONVERSATIONS.splice(i, 1)
+}
+
+/** Browser dev: pin/unpin (mirrors desktop `conversation_set_pinned`). */
+export function mockConversationSetPinned(id: string, pinned: boolean): void {
+  const c = MOCK_CONVERSATIONS.find((x) => x.id === id)
+  if (c) c.pinned = pinned
+}
+
+/** Browser dev: set unread flag (mirrors desktop `conversation_set_unread`). */
+export function mockConversationSetUnread(id: string, unread: boolean): void {
+  const c = MOCK_CONVERSATIONS.find((x) => x.id === id)
+  if (c) c.unread = unread
 }

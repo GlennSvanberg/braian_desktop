@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 
 import { ChatWorkbench } from '@/components/app/chat-workbench'
 import { useWorkspace } from '@/components/app/workspace-context'
-import { conversationOpen } from '@/lib/workspace-api'
+import { conversationOpen, conversationSetUnread } from '@/lib/workspace-api'
 
 export const Route = createFileRoute('/_shell/chat/$conversationId')({
   component: ChatPage,
@@ -17,8 +17,13 @@ export const Route = createFileRoute('/_shell/chat/$conversationId')({
 })
 
 function ChatPage() {
-  const { activeWorkspaceId, loading: workspaceLoading, setActiveWorkspaceId } =
-    useWorkspace()
+  const router = useRouter()
+  const {
+    activeWorkspaceId,
+    loading: workspaceLoading,
+    setActiveWorkspaceId,
+    refreshConversations,
+  } = useWorkspace()
   const { conversation, initialThread } = Route.useRouteContext()
 
   useEffect(() => {
@@ -31,6 +36,29 @@ function ChatPage() {
     conversation.workspaceId,
     activeWorkspaceId,
     setActiveWorkspaceId,
+  ])
+
+  useEffect(() => {
+    if (!conversation.unread) return
+    void (async () => {
+      try {
+        await conversationSetUnread({
+          id: conversation.id,
+          workspaceId: conversation.workspaceId,
+          unread: false,
+        })
+        await refreshConversations()
+        await router.invalidate()
+      } catch (e) {
+        console.error(e)
+      }
+    })()
+  }, [
+    conversation.id,
+    conversation.unread,
+    conversation.workspaceId,
+    refreshConversations,
+    router,
   ])
 
   return (

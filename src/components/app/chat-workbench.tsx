@@ -676,6 +676,8 @@ export function ChatWorkbench({
           workspaceId: targetWorkspaceId,
           title,
           canvasKind: created.canvasKind,
+          pinned: created.pinned,
+          unread: created.unread,
         }
         const payload = buildConversationSavePayload(threadNow, meta)
         await conversationSave(payload)

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Braian Desktop</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0d0d0d; /* Dark background to match dark theme */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #ffffff;
+      }
+      .logo-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      .logo {
+        width: 80px;
+        height: 80px;
+        border-radius: 16px;
+      }
+      .title {
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      @keyframes pulse {
+        0%, 100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+      
+      /* Light mode fallback if needed, though dark is safer for flashing */
+      @media (prefers-color-scheme: light) {
+        body {
+          background-color: #ffffff;
+          color: #000000;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo-container">
+      <img src="/braian-logo.png" alt="Braian Logo" class="logo" />
+      <div class="title">Braian</div>
+    </div>
+  </body>
+</html>

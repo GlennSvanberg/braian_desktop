@@ -17,6 +17,10 @@ import {
   type SerializableModelRequestSnapshot,
 } from '@/lib/ai/chat-turn-args'
 import {
+  MODEL_CONTEXT_SECTION_ORDER_HELP,
+  modelContextSectionGroup,
+} from '@/lib/ai/model-context-section-meta'
+import {
   isDetachedWorkspaceSessionId,
   isUserProfileSessionId,
 } from '@/lib/chat-sessions/detached'
@@ -142,18 +146,35 @@ function SnapshotPanel({
         </div>
       ) : null}
 
+      <SectionTitle>{MODEL_CONTEXT_SECTION_ORDER_HELP.title}</SectionTitle>
+      <ol className="text-text-2 mb-2 list-decimal space-y-1.5 rounded-lg border border-accent-500/20 bg-accent-500/[0.04] p-3 pl-8 text-xs leading-relaxed dark:bg-accent-500/[0.06]">
+        {MODEL_CONTEXT_SECTION_ORDER_HELP.items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ol>
+
       <SectionTitle>System prompts</SectionTitle>
       <div className="flex flex-col gap-3">
-        {snap.systemSections.map((s) => (
-          <div
-            key={s.id}
-            className="rounded-md border border-accent-500/25 border-l-[3px] border-l-accent-500 bg-accent-500/[0.04] p-3 dark:bg-accent-500/[0.06]"
-          >
-            <p className="text-sm font-medium text-accent-700 dark:text-accent-500">{s.label}</p>
-            <p className="text-text-3 mt-0.5 font-mono text-[11px]">{s.source}</p>
-            <MonospaceBlock text={s.text} />
-          </div>
-        ))}
+        {snap.systemSections.map((s) => {
+          const group = modelContextSectionGroup(s.id)
+          return (
+            <div
+              key={s.id}
+              className="rounded-md border border-accent-500/25 border-l-[3px] border-l-accent-500 bg-accent-500/[0.04] p-3 dark:bg-accent-500/[0.06]"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-accent-700 dark:text-accent-500">
+                  {s.label}
+                </p>
+                <span className="rounded bg-accent-500/20 px-1.5 py-px text-[10px] font-medium tracking-wide text-accent-700 uppercase dark:text-accent-500">
+                  {group}
+                </span>
+              </div>
+              <p className="text-text-3 mt-0.5 font-mono text-[11px]">{s.source}</p>
+              <MonospaceBlock text={s.text} />
+            </div>
+          )
+        })}
       </div>
 
       <SectionTitle>Messages</SectionTitle>

@@ -8,6 +8,10 @@ import {
   type ReactNode,
 } from 'react'
 
+import {
+  registerConversationListRefresh,
+  unregisterConversationListRefresh,
+} from '@/lib/conversation-list-refresh'
 import { isTauri } from '@/lib/tauri-env'
 import {
   type ConversationDto,
@@ -34,6 +38,14 @@ type WorkspaceContextValue = {
   conversationsByWorkspace: Record<string, WorkspaceConversation[]>
   refreshConversations: () => Promise<void>
   refreshConversationLists: () => Promise<void>
+  /** Refetch one workspace’s threads (faster than refreshConversations). */
+  refreshConversationsForWorkspace: (workspaceId: string) => Promise<void>
+  /** Instant sidebar update; pair with API + refresh or rollback on error. */
+  optimisticSetConversationPinned: (input: {
+    workspaceId: string
+    conversationId: string
+    pinned: boolean
+  }) => void
   createConversation: () => Promise<string>
   createConversationInWorkspace: (workspaceId: string) => Promise<string>
   defaultWorkspacesRoot: string | null
@@ -133,6 +145,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     await refreshConversationLists()
   }, [refreshConversationLists])
 
+  const optimisticSetConversationPinned = useCallback(
+    (input: {
+      workspaceId: string
+      conversationId: string
+      pinned: boolean
+    }) => {
+      setConversationsByWorkspace((prev) => {
+        const list = prev[input.workspaceId]
+        if (!list) return prev
+        const next = list.map((c) =>
+          c.id === input.conversationId ? { ...c, pinned: input.pinned } : c,
+        )
+        next.sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+          return b.updatedAtMs - a.updatedAtMs
+        })
+        return { ...prev, [input.workspaceId]: next }
+      })
+    },
+    [],
+  )
+
+  useEffect(() => {
+    registerConversationListRefresh(refreshConversations)
+    return () => {
+      unregisterConversationListRefresh()
+    }
+  }, [refreshConversations])
+
   const setActiveWorkspaceId = useCallback(
     (id: string) => {
       setActiveWorkspaceIdState(id)
@@ -195,6 +236,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       conversationsByWorkspace,
       refreshConversations,
       refreshConversationLists,
+      refreshConversationsForWorkspace,
+      optimisticSetConversationPinned,
       createConversation,
       createConversationInWorkspace,
       defaultWorkspacesRoot,
@@ -211,6 +254,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       conversationsByWorkspace,
       refreshConversations,
       refreshConversationLists,
+      refreshConversationsForWorkspace,
+      optimisticSetConversationPinned,
       createConversation,
       createConversationInWorkspace,
       defaultWorkspacesRoot,
