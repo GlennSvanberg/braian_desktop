@@ -3,6 +3,7 @@ import toolsMd from '../../../docs/app/tools.md?raw'
 import memoryMd from '../../../docs/app/memory.md?raw'
 import capabilitiesMd from '../../../docs/app/capabilities.md?raw'
 import dashboardMd from '../../../docs/app/dashboard.md?raw'
+import modelContextMd from '../../../docs/app/model-context.md?raw'
 
 export type InAppDocSlug =
   | 'overview'
@@ -10,6 +11,7 @@ export type InAppDocSlug =
   | 'memory'
   | 'capabilities'
   | 'dashboard'
+  | 'model-context'
 
 export type InAppDocMeta = {
   slug: InAppDocSlug
@@ -25,17 +27,25 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     body: overviewMd,
   },
   {
+    slug: 'model-context',
+    title: 'Model context',
+    description:
+      'System section order, skills, user profile injection, and the context manager.',
+    body: modelContextMd,
+  },
+  {
+    slug: 'tools',
+    title: 'Tools',
+    description:
+      'Canvas, workspace files, commands, skills, dashboard, and code-agent tools.',
+    body: toolsMd,
+  },
+  {
     slug: 'dashboard',
     title: 'Dashboard & in-app pages',
     description:
       'Workspace board.json, pages, tile types, and Document / Code / App chat modes.',
     body: dashboardMd,
-  },
-  {
-    slug: 'tools',
-    title: 'Tools',
-    description: 'Canvas, workspace files, commands, and code-agent tools.',
-    body: toolsMd,
   },
   {
     slug: 'memory',

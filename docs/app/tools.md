@@ -1,5 +1,7 @@
 The model only has the abilities the app gives it through **tools**. If it has not called a tool, it has not read a file, run a command, or updated the canvas—regardless of what it says.
 
+How instructions and tool lists are combined each turn—including **routing**, **skills**, and **user profile**—is described in [Model context](/docs/model-context).
+
 ## Document canvas (`open_document_canvas`)
 
 When your chat is **saved**, the assistant can write the **document canvas** (side panel markdown) to disk and refresh the UI. It should send the **full** document content each time, merging your latest edits with what you asked for.
@@ -29,6 +31,18 @@ In a **saved** workspace chat (desktop app), the header includes **Document** | 
 
 You can switch modes yourself, or stay on **Document** and ask the assistant to enable dashboard or code capabilities through its tools when needed.
 
+## Workspace skills (`.braian/skills`)
+
+In a **real workspace** on the **desktop app**, the assistant also gets tools to work with **Markdown skills**—reusable instructions stored under **`.braian/skills/*.md`** (YAML frontmatter with `name` and `description`, then the body). The **Model context** preview always includes a **create-skill** block and a **catalog** of skill metadata; the model loads full bodies with **`read_workspace_skill`** when needed.
+
+| Tool | What it does |
+|------|----------------|
+| `list_workspace_skills` | Returns JSON listing skills (path, name, description)—same idea as the catalog in system context. |
+| `read_workspace_skill` | Reads one `.md` file under `.braian/skills/` (no subfolders; path must stay under that directory). |
+| `write_workspace_skill` | Creates or replaces a skill file; content must be valid skill Markdown (frontmatter + body). |
+
+These tools are **not** available in the **You** profile coach, detached “new chat” without a folder, or in the browser-only dev preview.
+
 ## Workspace dashboard tools
 
 When dashboard tools are active for a turn, the assistant can:
@@ -43,6 +57,7 @@ The assistant should read before overwriting and merge carefully so tiles are no
 
 ## Related
 
+- [Model context](/docs/model-context)
 - [Overview](/docs/overview)
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Memory](/docs/memory)

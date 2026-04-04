@@ -23,20 +23,7 @@
         "decorations": false,
         "shadow": true,
         "center": true,
-        "visible": false
-      },
-      {
-        "label": "splashscreen",
-        "title": "Braian Desktop",
-        "url": "/splashscreen.html",
-        "width": 400,
-        "height": 300,
-        "resizable": false,
-        "fullscreen": false,
-        "decorations": false,
-        "shadow": true,
-        "center": true,
-        "alwaysOnTop": true
+        "backgroundColor": "#0f1114"
       }
     ],
     "security": {

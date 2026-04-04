@@ -8,6 +8,8 @@ The file path is **`.braian/MEMORY.md`** (under the active workspace root). You 
 
 When you chat with a saved conversation in a workspace, the app can **inject** the contents of `MEMORY.md` (up to a size limit) into the model context so replies stay aligned with what you have stored there.
 
+In the full **workspace** prompt stack, memory appears **after** routing, skills, and **user profile** context, and **before** optional attachments and canvas snapshot for that message. See [Model context](/docs/model-context).
+
 ## Updating memory
 
 1. **Manual:** From an open chat, use **Update memory** when you want the app to refresh `MEMORY.md` from recent conversation (subject to app rules and limits).
@@ -18,6 +20,7 @@ Memory updates are produced by the model merging new information with the existi
 ## Related
 
 - [Overview](/docs/overview)
+- [Model context](/docs/model-context)
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Capabilities](/docs/capabilities)

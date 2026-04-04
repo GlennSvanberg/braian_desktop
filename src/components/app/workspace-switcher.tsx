@@ -44,6 +44,7 @@ import {
   workspaceRemove,
   workspaceRename,
 } from '@/lib/workspace-api'
+import { formatPathForDisplay } from '@/lib/workspace-path-utils'
 
 import { useWorkspace } from './workspace-context'
 
@@ -175,10 +176,11 @@ export function WorkspaceSwitcher() {
   const onCopyPath = async () => {
     const p = activeWorkspace?.rootPath
     if (!p) return
+    const display = formatPathForDisplay(p)
     try {
-      await navigator.clipboard.writeText(p)
+      await navigator.clipboard.writeText(display)
     } catch {
-      window.prompt('Copy this path:', p)
+      window.prompt('Copy this path:', display)
     }
   }
 
@@ -216,8 +218,55 @@ export function WorkspaceSwitcher() {
               side={isMobile ? 'bottom' : 'right'}
               sideOffset={4}
             >
-              <DropdownMenuLabel className="text-text-3 text-xs font-normal">
-                Workspace actions
+              <div className="border-border max-w-[min(100vw-2rem,20rem)] border-b px-2 py-2">
+                <p className="text-text-3 mb-1.5 text-[11px] font-medium tracking-wide uppercase">
+                  Current workspace
+                </p>
+                {activeWorkspace ? (
+                  <>
+                    <p className="text-foreground truncate text-sm font-semibold">
+                      {activeWorkspace.name}
+                    </p>
+                    {isTauriRuntime && activeWorkspace.rootPath ? (
+                      <div className="mt-2 flex items-start gap-1">
+                        <p
+                          className="text-text-3 max-h-24 min-w-0 flex-1 overflow-y-auto break-all font-mono text-[11px] leading-snug"
+                          title={formatPathForDisplay(activeWorkspace.rootPath)}
+                        >
+                          {formatPathForDisplay(activeWorkspace.rootPath)}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-text-3 size-7 shrink-0"
+                          disabled={busy}
+                          aria-label="Copy folder path"
+                          title="Copy path"
+                          onPointerDown={(e) => e.preventDefault()}
+                          onClick={() => void onCopyPath()}
+                        >
+                          <Copy className="size-3.5" aria-hidden />
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-text-3 mt-1.5 text-xs leading-snug">
+                        {isTauriRuntime
+                          ? 'No folder is linked to this workspace.'
+                          : 'Folder path is shown in the desktop app.'}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-text-3 text-xs leading-snug">
+                    None selected. Choose a workspace under{' '}
+                    <span className="font-medium">Workspaces</span> in the
+                    sidebar.
+                  </p>
+                )}
+              </div>
+              <DropdownMenuLabel className="text-text-3 px-2 pt-2 text-xs font-normal">
+                Actions
               </DropdownMenuLabel>
               {isTauriRuntime && workspaces.length === 0 ? (
                 <p className="text-text-3 px-2 pb-1 text-xs leading-snug">
@@ -382,7 +431,7 @@ export function WorkspaceSwitcher() {
               <div className="flex flex-col gap-2">
                 <p className="text-text-2 text-xs font-medium">Folder</p>
                 <p className="text-text-3 bg-muted/40 max-h-32 overflow-y-auto rounded-md border border-border px-2 py-2 font-mono text-[11px] leading-snug break-all">
-                  {activeWorkspace.rootPath}
+                  {formatPathForDisplay(activeWorkspace.rootPath)}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button

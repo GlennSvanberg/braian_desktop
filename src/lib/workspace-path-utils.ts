@@ -3,6 +3,21 @@ export function normalizeFsPath(p: string): string {
   return p.replace(/\\/g, '/')
 }
 
+/**
+ * Strip the Win32 verbatim extended path prefix for display and human-facing copy.
+ * e.g. `\\?\C:\git\foo` → `C:\git\foo`, `\\?\UNC\server\share` → `\\server\share`
+ */
+export function formatPathForDisplay(p: string): string {
+  if (!p) return p
+  if (!p.startsWith('\\\\?\\')) return p
+  const norm = p.replace(/\//g, '\\')
+  const rest = norm.slice(4)
+  if (rest.toUpperCase().startsWith('UNC\\')) {
+    return `\\\\${rest.slice(4)}`
+  }
+  return rest
+}
+
 export function isPathUnderRoot(filePath: string, rootPath: string): boolean {
   const f = normalizeFsPath(filePath).toLowerCase()
   const r = normalizeFsPath(rootPath).replace(/\/+$/, '').toLowerCase()

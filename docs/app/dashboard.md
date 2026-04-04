@@ -26,7 +26,7 @@ In a **saved** chat attached to a workspace (desktop app), the header has a thre
 |------|----------------|
 | **Document** | Default assistant: document canvas, attachments, and “lazy” workspace tools. Dashboard builder tools stay hidden until the assistant explicitly enables them. |
 | **Code** | **Code-style** assistant: read/write/list/run in the workspace are available immediately for that chat (see [Tools](/docs/tools)). |
-| **App** | Same document-style assistant as **Document**, but **dashboard and page tools** are enabled for every message in that chat, and the model gets extra instructions for editing `board.json` and page JSON. |
+| **App** | Same document-style assistant as **Document**, but **dashboard and page tools** are enabled for every message in that chat, and the model gets extra instructions for editing `board.json` and page JSON. Those instructions are loaded from **`.braian/skills/app-builder.md`** when present (seeded by default in new layouts), with an in-app text fallback if the file is missing. See [Model context](/docs/model-context). |
 
 Switch modes anytime; the choice is stored with the conversation.
 
@@ -63,5 +63,6 @@ Open a page in the app at **`/dashboard/page/<pageId>`**. Page links on the dash
 ## Related
 
 - [Overview](/docs/overview)
+- [Model context](/docs/model-context)
 - [Tools](/docs/tools)
 - [Capabilities](/docs/capabilities)

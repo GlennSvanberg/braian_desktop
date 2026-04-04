@@ -1,6 +1,7 @@
 ## What you control
 
 - **Bring your own key (BYOK):** You add API keys and choose **provider** and **model** in **Settings**. The app sends requests from the desktop shell so keys stay on your side; there is no Braian-hosted model API in this app.
+- **User profile:** **Sidebar → You** stores a small **global profile** (name, languages, notes, etc.) on this device. It is injected into **workspace** chats as part of **user context** so replies can match how you want to be addressed; the **You** chat exists only to edit that profile. See [Model context](/docs/model-context).
 - **Workspace scope:** File access and commands are limited to the **active workspace** folder. The assistant cannot browse arbitrary paths on your PC outside that root.
 - **Attachments:** When you attach or reference workspace files, the app may include excerpts in context; large files can be truncated.
 - **In-app dashboard:** Tiles and pages are **data files** in the workspace (`.braian/dashboard/`). They are not a public site and do not run arbitrary HTML or scripts as a full browser would. See [Dashboard & in-app pages](/docs/dashboard).
@@ -20,6 +21,7 @@
 ## Related
 
 - [Overview](/docs/overview)
+- [Model context](/docs/model-context)
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Memory](/docs/memory)
