@@ -14,7 +14,7 @@ function DocsIndexPage() {
   return (
     <InAppDocsShell
       title="How Braian works"
-      description="Concepts and behavior of this app—workspaces, tools, memory, and what you can expect from the assistant."
+      description="Concepts and behavior of this app—workspaces, dashboard, tools, memory, and what you can expect from the assistant."
     >
       <p className="text-text-2 mb-8 text-sm leading-relaxed md:text-base">
         Pick a topic below or use the sidebar. These pages are shipped from the

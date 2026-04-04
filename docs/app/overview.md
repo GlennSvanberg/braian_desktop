@@ -8,6 +8,7 @@ A **workspace** is a folder you choose as the active project root. The assistant
 
 - **Chat** is where you talk to the assistant.
 - The **document canvas** (side panel) holds long-form markdown the assistant can update as a working document—specs, drafts, reports—while chat stays conversational.
+- The **Dashboard** (sidebar) shows a per-workspace board of tiles and optional full-screen **in-app pages**—all defined as JSON under `.braian/dashboard/` in that workspace. See [Dashboard & in-app pages](/docs/dashboard).
 
 Some assistant actions only work after the conversation is **saved** (a real thread, not only “new chat”). If something is unavailable, start or open a saved chat and try again.
 
@@ -18,6 +19,7 @@ Some assistant actions only work after the conversation is **saved** (a real thr
 
 ## Next topics
 
+- [Dashboard & in-app pages](/docs/dashboard)
 - [Tools the assistant can use](/docs/tools)
 - [Workspace memory](/docs/memory)
 - [Capabilities and limits](/docs/capabilities)

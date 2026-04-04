@@ -21,7 +21,7 @@ export type ChatTurnContext = {
   conversationId: string | null
   /** Document canvas vs coding agent (files + commands under workspace). */
   agentMode?: AgentMode
-  /** Workspace dashboard builder tools + instructions (Make app in UI). */
+  /** Workspace dashboard builder tools + instructions (App segment in chat toolbar). */
   appHarnessEnabled?: boolean
   /** Called when the model enables code capabilities (e.g. `switch_to_code_agent` tool). */
   onAgentModeChange?: (mode: AgentMode) => void

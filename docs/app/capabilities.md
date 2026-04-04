@@ -3,6 +3,7 @@
 - **Bring your own key (BYOK):** You add API keys and choose **provider** and **model** in **Settings**. The app sends requests from the desktop shell so keys stay on your side; there is no Braian-hosted model API in this app.
 - **Workspace scope:** File access and commands are limited to the **active workspace** folder. The assistant cannot browse arbitrary paths on your PC outside that root.
 - **Attachments:** When you attach or reference workspace files, the app may include excerpts in context; large files can be truncated.
+- **In-app dashboard:** Tiles and pages are **data files** in the workspace (`.braian/dashboard/`). They are not a public site and do not run arbitrary HTML or scripts as a full browser would. See [Dashboard & in-app pages](/docs/dashboard).
 
 ## What the assistant can and cannot do
 
@@ -19,5 +20,6 @@
 ## Related
 
 - [Overview](/docs/overview)
+- [Dashboard & in-app pages](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Memory](/docs/memory)

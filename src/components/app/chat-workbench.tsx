@@ -699,6 +699,65 @@ export function ChatWorkbench({
 
   const queuedCount = pendingUserMessages.length
 
+  /** Single visible mode: code wins over document; app = document + dashboard harness. */
+  const activeAgentSegment: 'document' | 'code' | 'app' =
+    agentMode === 'code'
+      ? 'code'
+      : appHarnessEnabled
+        ? 'app'
+        : 'document'
+
+  const onSelectAgentSegment = useCallback(
+    (next: 'document' | 'code' | 'app') => {
+      if (next === 'code') {
+        setChatAgentMode(sessionKey, 'code')
+        return
+      }
+      setChatAgentMode(sessionKey, 'document')
+      setChatAppHarnessEnabled(sessionKey, next === 'app')
+    },
+    [sessionKey, setChatAgentMode, setChatAppHarnessEnabled],
+  )
+
+  const agentModeGroup = (
+    <div
+      className="border-border bg-muted/25 flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border"
+      role="group"
+      aria-label="Agent mode"
+    >
+      {(
+        [
+          { id: 'document' as const, label: 'Document' },
+          { id: 'code' as const, label: 'Code' },
+          { id: 'app' as const, label: 'App' },
+        ] as const
+      ).map((seg, i) => (
+        <button
+          key={seg.id}
+          type="button"
+          className={cn(
+            'text-text-2 hover:bg-muted/70 focus-visible:ring-ring px-2.5 text-xs font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none',
+            i > 0 && 'border-border border-l',
+            activeAgentSegment === seg.id
+              ? 'bg-primary text-primary-foreground hover:bg-primary'
+              : 'bg-transparent',
+          )}
+          aria-pressed={activeAgentSegment === seg.id}
+          title={
+            seg.id === 'document'
+              ? 'Document assistant: canvas, lazy file tools'
+              : seg.id === 'code'
+                ? 'Code assistant: eager read/write/run in workspace'
+                : 'App builder: dashboard & in-app pages tools'
+          }
+          onClick={() => onSelectAgentSegment(seg.id)}
+        >
+          {seg.label}
+        </button>
+      ))}
+    </div>
+  )
+
   const chatColumn = (
     <div
       className={cn(
@@ -744,20 +803,9 @@ export function ChatWorkbench({
                     Move to workspace
                   </Button>
                 ) : null}
-                {conversationId && isTauriRuntime && !isDetachedSession ? (
-                  <Button
-                    type="button"
-                    variant={appHarnessEnabled ? 'default' : 'outline'}
-                    size="sm"
-                    className="border-border h-7 gap-1.5 px-2 text-xs"
-                    title="Enables workspace dashboard tools and builder instructions for this chat."
-                    onClick={() =>
-                      setChatAppHarnessEnabled(sessionKey, !appHarnessEnabled)
-                    }
-                  >
-                    Make app
-                  </Button>
-                ) : null}
+                {conversationId && isTauriRuntime && !isDetachedSession
+                  ? agentModeGroup
+                  : null}
                 {generating ? (
                   <Button
                     type="button"

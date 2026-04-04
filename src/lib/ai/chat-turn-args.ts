@@ -30,13 +30,13 @@ If a "Attached workspace files" system message is present, those excerpts are th
 
 **Workspace capabilities:** When the chat is saved you have the document canvas tool. For tasks that need Python, terminal commands, real \`.xlsx\` / files on disk, or reading arbitrary workspace paths, **you** enable code tools: call \`switch_to_code_agent\`, then immediately call \`__lazy__tool__discovery__\` with the toolNames returned by that tool. After that, use read/write/list/run tools — do **not** ask the user to change modes in the UI. Until you complete those steps, do not claim you ran scripts or wrote binary files. You may still draft markdown in the canvas when that alone satisfies the request.
 
-**Workspace dashboard (in-app):** If the user wants the **Braian** sidebar Dashboard, KPIs/tiles, in-app pages (\`/dashboard/page/...\`), to "add to my dashboard", a "hello world" **inside Braian**, or mini-apps/widgets **in this app**, call \`switch_to_app_builder\`, then immediately \`__lazy__tool__discovery__\` with the toolNames that tool returns. Then use \`read_workspace_dashboard\`, \`apply_workspace_dashboard\` (\`manifestJson\` string), and \`upsert_workspace_page\` (\`pageJson\` string). Do **not** tell them to use the "Make app" toggle, and do **not** paste standalone \`.html\` files for Braian's dashboard — pass stringified JSON matching the manifest/page shapes described in app-builder mode.
+**Workspace dashboard (in-app):** If the user wants the **Braian** sidebar Dashboard, KPIs/tiles, in-app pages (\`/dashboard/page/...\`), to "add to my dashboard", a "hello world" **inside Braian**, or mini-apps/widgets **in this app**, call \`switch_to_app_builder\`, then immediately \`__lazy__tool__discovery__\` with the toolNames that tool returns. Then use \`read_workspace_dashboard\`, \`apply_workspace_dashboard\` (\`manifestJson\` string), and \`upsert_workspace_page\` (\`pageJson\` string). Do **not** tell them to use the chat **App** mode control, and do **not** paste standalone \`.html\` files for Braian's dashboard — pass stringified JSON matching the manifest/page shapes described in app-builder mode.
 
 If open_document_canvas is not available (unsaved chat), say they need a saved conversation first, then they can ask again.
 
 You may use tools offered in this turn when appropriate. Do not claim to have read arbitrary files or run shell commands unless those tools exist here or the user attached file content in the system messages above.`
 
-export const APP_BUILDER_SYSTEM = `**Workspace dashboard (Make app mode):** You may edit the user's **internal** Braian UI for this workspace only (not a public website).
+export const APP_BUILDER_SYSTEM = `**Workspace dashboard (App mode):** You may edit the user's **internal** Braian UI for this workspace only (not a public website).
 
 **Paths (relative to workspace root):**
 - Main board: \`.braian/dashboard/board.json\`
@@ -71,7 +71,7 @@ Rules:
 
 **Document canvas previews:** When the \`open_document_canvas\` tool is available (saved conversation), after you have inspected and/or written outputs, call it with **full markdown** for the workspace panel: a short **inspection summary** (tables or bullet points derived from your pandas/script output) and a **deliverables** section (relative paths under the workspace, row/column notes). For huge tables, show a **sample** in the canvas and point to the on-disk file for the full data. If a “Document canvas snapshot” system message is present, merge your report into that markdown (preserve the user’s manual edits unless they asked to remove them). If \`open_document_canvas\` is not in this turn (unsaved chat), say that saving the chat enables side-panel previews.
 
-**Braian dashboard / in-app pages:** If the user wants tiles, KPIs, or pages **inside Braian** (not a generic browser \`index.html\`), call \`switch_to_app_builder\` then \`__lazy__tool__discovery__\` with the returned toolNames, then the dashboard tools — same workflow as in document mode; do not ask them to flip "Make app" in the UI.
+**Braian dashboard / in-app pages:** If the user wants tiles, KPIs, or pages **inside Braian** (not a generic browser \`index.html\`), call \`switch_to_app_builder\` then \`__lazy__tool__discovery__\` with the returned toolNames, then the dashboard tools — same workflow as in document mode; do not ask them to switch to App mode in the UI.
 
 Safety: the user runs this on their own machine; you still must stay within workspace-scoped tools and not assume access outside them.`
 

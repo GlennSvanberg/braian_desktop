@@ -2,8 +2,14 @@ import overviewMd from '../../../docs/app/overview.md?raw'
 import toolsMd from '../../../docs/app/tools.md?raw'
 import memoryMd from '../../../docs/app/memory.md?raw'
 import capabilitiesMd from '../../../docs/app/capabilities.md?raw'
+import dashboardMd from '../../../docs/app/dashboard.md?raw'
 
-export type InAppDocSlug = 'overview' | 'tools' | 'memory' | 'capabilities'
+export type InAppDocSlug =
+  | 'overview'
+  | 'tools'
+  | 'memory'
+  | 'capabilities'
+  | 'dashboard'
 
 export type InAppDocMeta = {
   slug: InAppDocSlug
@@ -17,6 +23,13 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     title: 'Overview',
     description: 'Workspaces, chat, canvas, and where the app runs.',
     body: overviewMd,
+  },
+  {
+    slug: 'dashboard',
+    title: 'Dashboard & in-app pages',
+    description:
+      'Workspace board.json, pages, tile types, and Document / Code / App chat modes.',
+    body: dashboardMd,
   },
   {
     slug: 'tools',

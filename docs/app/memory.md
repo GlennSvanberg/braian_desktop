@@ -18,5 +18,6 @@ Memory updates are produced by the model merging new information with the existi
 ## Related
 
 - [Overview](/docs/overview)
+- [Dashboard & in-app pages](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Capabilities](/docs/capabilities)
