@@ -4,6 +4,7 @@ import { useMatches, useRouterState } from '@tanstack/react-router'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { isTauri } from '@/lib/tauri-env'
+import { cn } from '@/lib/utils'
 import type { ConversationDto } from '@/lib/workspace-api'
 
 import { useWorkspace } from './workspace-context'
@@ -72,7 +73,10 @@ export function AppHeader() {
 
   return (
     <header
-      className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-2 backdrop-blur-md supports-backdrop-filter:bg-background/70 md:px-3"
+      className={cn(
+        'flex shrink-0 items-center gap-3 border-b border-border bg-background/85 px-2 backdrop-blur-md supports-backdrop-filter:bg-background/70 md:px-3',
+        tauriChrome ? 'min-h-16 py-2' : 'h-14',
+      )}
       data-tauri-drag-region={tauriChrome ? true : undefined}
     >
       <SidebarTrigger className="-ml-0.5" {...noDrag} />
@@ -83,7 +87,10 @@ export function AppHeader() {
         {...noDrag}
       />
       <div
-        className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-1"
+        className={cn(
+          'flex min-w-0 flex-1 flex-col justify-center gap-0.5',
+          tauriChrome ? 'min-h-11 px-1 py-0.5 md:px-2' : 'py-1',
+        )}
         onDoubleClick={
           tauriChrome
             ? () => {

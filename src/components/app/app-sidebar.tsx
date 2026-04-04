@@ -474,9 +474,15 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="Braian home">
               <Link to="/dashboard">
-                <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-sm font-bold shadow-sm">
-                  B
-                </div>
+                <img
+                  src="/braian-logo.png"
+                  alt=""
+                  width={32}
+                  height={32}
+                  draggable={false}
+                  className="size-8 shrink-0 rounded-lg object-contain shadow-sm"
+                  aria-hidden
+                />
                 <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Braian</span>
                   <span className="text-sidebar-foreground/65 truncate text-xs">
