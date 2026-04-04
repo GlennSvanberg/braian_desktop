@@ -16,7 +16,7 @@ import {
   workspaceWriteTextFile,
 } from '@/lib/workspace-api'
 
-import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 
 import type { ChatTurnContext } from './types'
 
@@ -89,7 +89,7 @@ export function buildDashboardTools(
   context: ChatTurnContext | undefined,
   options?: BuildDashboardToolsOptions,
 ) {
-  if (!context?.workspaceId || isDetachedWorkspaceSessionId(context.workspaceId)) {
+  if (!context?.workspaceId || isNonWorkspaceScopedSessionId(context.workspaceId)) {
     return []
   }
 

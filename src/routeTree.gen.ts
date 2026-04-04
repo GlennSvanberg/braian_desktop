@@ -13,6 +13,7 @@ import { Route as ShellRouteRouteImport } from './routes/_shell/route'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as ShellSettingsRouteImport } from './routes/_shell/settings'
 import { Route as ShellDashboardRouteImport } from './routes/_shell/dashboard'
+import { Route as ShellUserIndexRouteImport } from './routes/_shell/user.index'
 import { Route as ShellDocsIndexRouteImport } from './routes/_shell/docs.index'
 import { Route as ShellDashboardIndexRouteImport } from './routes/_shell/dashboard.index'
 import { Route as ShellDocsSlugRouteImport } from './routes/_shell/docs.$slug'
@@ -37,6 +38,11 @@ const ShellSettingsRoute = ShellSettingsRouteImport.update({
 const ShellDashboardRoute = ShellDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => ShellRouteRoute,
+} as any)
+const ShellUserIndexRoute = ShellUserIndexRouteImport.update({
+  id: '/user/',
+  path: '/user/',
   getParentRoute: () => ShellRouteRoute,
 } as any)
 const ShellDocsIndexRoute = ShellDocsIndexRouteImport.update({
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/docs/$slug': typeof ShellDocsSlugRoute
   '/dashboard/': typeof ShellDashboardIndexRoute
   '/docs/': typeof ShellDocsIndexRoute
+  '/user/': typeof ShellUserIndexRoute
   '/dashboard/page/$pageId': typeof ShellDashboardPagePageIdRoute
 }
 export interface FileRoutesByTo {
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/docs/$slug': typeof ShellDocsSlugRoute
   '/dashboard': typeof ShellDashboardIndexRoute
   '/docs': typeof ShellDocsIndexRoute
+  '/user': typeof ShellUserIndexRoute
   '/dashboard/page/$pageId': typeof ShellDashboardPagePageIdRoute
 }
 export interface FileRoutesById {
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/_shell/docs/$slug': typeof ShellDocsSlugRoute
   '/_shell/dashboard/': typeof ShellDashboardIndexRoute
   '/_shell/docs/': typeof ShellDocsIndexRoute
+  '/_shell/user/': typeof ShellUserIndexRoute
   '/_shell/dashboard/page/$pageId': typeof ShellDashboardPagePageIdRoute
 }
 export interface FileRouteTypes {
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/docs/$slug'
     | '/dashboard/'
     | '/docs/'
+    | '/user/'
     | '/dashboard/page/$pageId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/docs/$slug'
     | '/dashboard'
     | '/docs'
+    | '/user'
     | '/dashboard/page/$pageId'
   id:
     | '__root__'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/_shell/docs/$slug'
     | '/_shell/dashboard/'
     | '/_shell/docs/'
+    | '/_shell/user/'
     | '/_shell/dashboard/page/$pageId'
   fileRoutesById: FileRoutesById
 }
@@ -173,6 +185,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof ShellDashboardRouteImport
+      parentRoute: typeof ShellRouteRoute
+    }
+    '/_shell/user/': {
+      id: '/_shell/user/'
+      path: '/user'
+      fullPath: '/user/'
+      preLoaderRoute: typeof ShellUserIndexRouteImport
       parentRoute: typeof ShellRouteRoute
     }
     '/_shell/docs/': {
@@ -242,6 +261,7 @@ interface ShellRouteRouteChildren {
   ShellChatNewRoute: typeof ShellChatNewRoute
   ShellDocsSlugRoute: typeof ShellDocsSlugRoute
   ShellDocsIndexRoute: typeof ShellDocsIndexRoute
+  ShellUserIndexRoute: typeof ShellUserIndexRoute
 }
 
 const ShellRouteRouteChildren: ShellRouteRouteChildren = {
@@ -252,6 +272,7 @@ const ShellRouteRouteChildren: ShellRouteRouteChildren = {
   ShellChatNewRoute: ShellChatNewRoute,
   ShellDocsSlugRoute: ShellDocsSlugRoute,
   ShellDocsIndexRoute: ShellDocsIndexRoute,
+  ShellUserIndexRoute: ShellUserIndexRoute,
 }
 
 const ShellRouteRouteWithChildren = ShellRouteRoute._addFileChildren(

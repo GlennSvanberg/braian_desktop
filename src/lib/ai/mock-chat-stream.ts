@@ -94,6 +94,49 @@ export async function* streamMockChatTurn(
     }
   }
 
+  if (context?.turnKind === 'profile') {
+    signal?.throwIfAborted()
+    const hints = /name|call me|i am|live in|from |language|prefer|norwegian|english/i.test(
+      userText,
+    )
+    if (hints) {
+      const mockToolId = `mock-profile-tool-${Date.now()}`
+      yield {
+        type: 'tool-start',
+        toolCallId: mockToolId,
+        toolName: 'update_user_profile',
+      }
+      yield {
+        type: 'tool-args-delta',
+        toolCallId: mockToolId,
+        delta: '{"notes":"(mock mode) sample note"}',
+      }
+      await delay(35, signal)
+      yield {
+        type: 'tool-end',
+        toolCallId: mockToolId,
+        toolName: 'update_user_profile',
+        input: { notes: '(mock mode) sample note' },
+        result: JSON.stringify({
+          ok: true,
+          message: 'Profile updated (mock).',
+        }),
+      }
+    }
+    const replyText = hints
+      ? 'Mock mode: simulated update_user_profile. With a real model, only that tool is available here and it merges into your saved profile.'
+      : `${pickRandomReply()} Mock mode: this is the profile coach chat — in production only update_user_profile runs. Mention your name or languages to see a mock tool call.`
+    const pieces = splitForStreaming(replyText)
+    for (const piece of pieces) {
+      signal?.throwIfAborted()
+      yield { type: 'text-delta', text: piece }
+      await delay(28 + Math.floor(Math.random() * 40), signal)
+    }
+    signal?.throwIfAborted()
+    yield { type: 'done' }
+    return
+  }
+
   const isCodeMode = context?.agentMode === 'code'
   const hasPersistedConversation =
     context?.conversationId != null && context.conversationId !== ''

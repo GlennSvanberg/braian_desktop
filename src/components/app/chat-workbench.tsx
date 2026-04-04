@@ -54,8 +54,12 @@ import {
   filterWorkspaceFilesForMention,
   getMentionQuery,
 } from '@/lib/chat-mention-files'
-import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
+import {
+  DETACHED_WORKSPACE_SESSION_ID,
+  USER_PROFILE_WORKSPACE_SESSION_ID,
+} from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
+import { PROFILE_CHAT_SESSION_KEY } from '@/lib/chat-sessions/store'
 import {
   DEFAULT_CHAT_THREAD,
   type ChatThreadState,
@@ -108,6 +112,8 @@ type ChatWorkbenchProps = {
    * active workspace until the user uses “Move to workspace”.
    */
   useDetachedSession?: boolean
+  /** Global profile coach (sidebar → You): dedicated session and tools only. */
+  variant?: 'workspace' | 'profile'
 }
 
 export function ChatWorkbench({
@@ -115,9 +121,11 @@ export function ChatWorkbench({
   conversationMeta,
   initialThread = null,
   useDetachedSession = false,
+  variant = 'workspace',
 }: ChatWorkbenchProps) {
+  const isProfileSession = variant === 'profile'
   const isDetachedSession =
-    useDetachedSession === true && conversationId === null
+    useDetachedSession === true && conversationId === null && !isProfileSession
   const navigate = useNavigate()
   const router = useRouter()
   const {
@@ -135,10 +143,12 @@ export function ChatWorkbench({
   const hydratedSessionKeyRef = useRef<string | null>(null)
   const sessionKey = useMemo(
     () =>
-      isDetachedSession
-        ? chatSessionKey(DETACHED_WORKSPACE_SESSION_ID, null)
-        : chatSessionKey(activeWorkspaceId, conversationId),
-    [isDetachedSession, activeWorkspaceId, conversationId],
+      isProfileSession
+        ? PROFILE_CHAT_SESSION_KEY
+        : isDetachedSession
+          ? chatSessionKey(DETACHED_WORKSPACE_SESSION_ID, null)
+          : chatSessionKey(activeWorkspaceId, conversationId),
+    [isProfileSession, isDetachedSession, activeWorkspaceId, conversationId],
   )
   const thread = useChatThread(sessionKey)
   const {
@@ -177,15 +187,17 @@ export function ChatWorkbench({
     ? getConversationById(conversationId)
     : undefined
   const [conversationTitle, setConversationTitle] = useState(() =>
-    conversationMeta?.title ??
-      saved?.title ??
-      (isDetachedSession ? DEFAULT_AGENT_TITLE : DEFAULT_CHAT_TITLE),
+    isProfileSession
+      ? 'Your profile'
+      : (conversationMeta?.title ??
+        saved?.title ??
+        (isDetachedSession ? DEFAULT_AGENT_TITLE : DEFAULT_CHAT_TITLE)),
   )
   const autoTitleAppliedRef = useRef<string | null>(null)
   const isNewChat = conversationId === null
 
   useEffect(() => {
-    if (!isDetachedSession) return
+    if (!isDetachedSession || isProfileSession) return
     if (autoTitleAppliedRef.current === 'detached-title') return
     if (
       conversationTitle !== DEFAULT_AGENT_TITLE &&
@@ -199,7 +211,7 @@ export function ChatWorkbench({
     if (!firstUser) return
     setConversationTitle(deriveConversationTitle(firstUser.content))
     autoTitleAppliedRef.current = 'detached-title'
-  }, [isDetachedSession, conversationTitle, thread.messages])
+  }, [isDetachedSession, isProfileSession, conversationTitle, thread.messages])
 
   useEffect(() => {
     if (!moveOpen || workspaces.length === 0) return
@@ -224,16 +236,17 @@ export function ChatWorkbench({
   )
 
   useEffect(() => {
+    if (isProfileSession) return
     autoTitleAppliedRef.current = null
-  }, [conversationId])
+  }, [conversationId, isProfileSession])
 
   useEffect(() => {
-    if (!conversationMeta) return
+    if (!conversationMeta || isProfileSession) return
     setConversationTitle(conversationMeta.title)
-  }, [conversationMeta?.id, conversationMeta?.title])
+  }, [conversationMeta?.id, conversationMeta?.title, isProfileSession])
 
   useEffect(() => {
-    if (!conversationId || !conversationMeta) return
+    if (!conversationId || !conversationMeta || isProfileSession) return
     if (autoTitleAppliedRef.current === conversationId) return
     if (conversationTitle !== DEFAULT_CHAT_TITLE) return
     const firstUser = thread.messages.find(
@@ -247,6 +260,7 @@ export function ChatWorkbench({
     conversationMeta,
     conversationTitle,
     thread.messages,
+    isProfileSession,
   ])
 
   const isMobile = useIsMobile()
@@ -261,6 +275,8 @@ export function ChatWorkbench({
     agentMode,
     appHarnessEnabled,
   } = thread
+
+  const showArtifactPanel = artifactOpen && !isProfileSession
 
   const mention = useMemo(
     () => getMentionQuery(draft, caretPos),
@@ -277,6 +293,7 @@ export function ChatWorkbench({
     mention != null &&
     !mentionMenuSuppressed &&
     !isDetachedSession &&
+    !isProfileSession &&
     isTauriRuntime &&
     !!activeWorkspace?.rootPath
 
@@ -299,6 +316,7 @@ export function ChatWorkbench({
       const mentionTags: string[] = []
       if (
         isDetachedSession ||
+        isProfileSession ||
         !isTauriRuntime ||
         !activeWorkspace?.rootPath
       ) {
@@ -334,6 +352,7 @@ export function ChatWorkbench({
       activeWorkspaceId,
       addContextFileEntry,
       isDetachedSession,
+      isProfileSession,
       isTauriRuntime,
       sessionKey,
     ],
@@ -342,6 +361,7 @@ export function ChatWorkbench({
   const onAttachFiles = useCallback(async () => {
     if (
       isDetachedSession ||
+      isProfileSession ||
       !isTauriRuntime ||
       !activeWorkspace?.rootPath
     ) {
@@ -360,15 +380,17 @@ export function ChatWorkbench({
     activeWorkspace?.rootPath,
     attachAbsolutePaths,
     isDetachedSession,
+    isProfileSession,
     isTauriRuntime,
   ])
 
   const onNativeFileDrop = useCallback(
     async (paths: string[]) => {
+      if (isProfileSession) return
       const tags = await attachAbsolutePaths(paths)
       appendDraftMentions(tags)
     },
-    [appendDraftMentions, attachAbsolutePaths],
+    [appendDraftMentions, attachAbsolutePaths, isProfileSession],
   )
 
   useEffect(() => {
@@ -384,7 +406,12 @@ export function ChatWorkbench({
   }, [mention?.start])
 
   useEffect(() => {
-    if (!isTauriRuntime || !activeWorkspaceId || isDetachedSession) {
+    if (
+      !isTauriRuntime ||
+      !activeWorkspaceId ||
+      isDetachedSession ||
+      isProfileSession
+    ) {
       setWorkspaceFileIndex([])
       return
     }
@@ -397,7 +424,7 @@ export function ChatWorkbench({
     return () => {
       cancelled = true
     }
-  }, [isTauriRuntime, activeWorkspaceId, isDetachedSession])
+  }, [isTauriRuntime, activeWorkspaceId, isDetachedSession, isProfileSession])
 
   useEffect(() => {
     if (!isTauriRuntime) return
@@ -412,6 +439,13 @@ export function ChatWorkbench({
         ])
       if (!alive) return
       unlisten = await getCurrentWebview().onDragDropEvent(async (e) => {
+        if (isProfileSession) {
+          if (e.payload.type === 'leave') {
+            dragHasFilesRef.current = false
+            setFileDragHighlight(false)
+          }
+          return
+        }
         const el = composerDropZoneRef.current
         if (!el) return
         const factor = await getCurrentWindow().scaleFactor()
@@ -449,7 +483,7 @@ export function ChatWorkbench({
       alive = false
       unlisten?.()
     }
-  }, [isTauriRuntime, onNativeFileDrop])
+  }, [isTauriRuntime, isProfileSession, onNativeFileDrop])
 
   const pickMention = useCallback(
     (pick: WorkspaceFileIndexEntry) => {
@@ -488,6 +522,7 @@ export function ChatWorkbench({
   )
 
   useLayoutEffect(() => {
+    if (isProfileSession) return
     if (conversationId == null || !metaForSave) return
     const init = initialThreadRef.current
     if (!init) return
@@ -504,19 +539,27 @@ export function ChatWorkbench({
     } else {
       lastSerializedRef.current = null
     }
-  }, [conversationId, isTauriRuntime, metaForSave, sessionKey])
+  }, [conversationId, isProfileSession, isTauriRuntime, metaForSave, sessionKey])
 
   useEffect(() => {
+    if (isProfileSession) return
     seedCanvasPreviewIfEmpty(sessionKey, conversationId, {
       title: conversationTitle,
       canvasKind: conversationMeta
         ? normalizeCanvasKind(conversationMeta.canvasKind)
         : undefined,
     })
-  }, [sessionKey, conversationId, conversationMeta, conversationTitle])
+  }, [
+    sessionKey,
+    conversationId,
+    conversationMeta,
+    conversationTitle,
+    isProfileSession,
+  ])
 
   useEffect(() => {
     if (
+      isProfileSession ||
       conversationId == null ||
       !metaForSave ||
       !isTauriRuntime ||
@@ -539,6 +582,7 @@ export function ChatWorkbench({
   }, [
     conversationId,
     generating,
+    isProfileSession,
     isTauriRuntime,
     metaForSave,
     refreshConversations,
@@ -762,10 +806,10 @@ export function ChatWorkbench({
     <div
       className={cn(
         'bg-background flex h-full min-h-0 flex-col',
-        !artifactOpen && 'flex-1',
-        artifactOpen && !isMobile && 'md:rounded-l-xl',
-        artifactOpen && isMobile && 'min-h-[min(100dvh,520px)]',
-        !artifactOpen && 'md:rounded-xl md:border md:border-border',
+        !showArtifactPanel && 'flex-1',
+        showArtifactPanel && !isMobile && 'md:rounded-l-xl',
+        showArtifactPanel && isMobile && 'min-h-[min(100dvh,520px)]',
+        !showArtifactPanel && 'md:rounded-xl md:border md:border-border',
       )}
     >
       <ScrollArea className="min-h-0 flex-1">
@@ -803,9 +847,12 @@ export function ChatWorkbench({
                     Move to workspace
                   </Button>
                 ) : null}
-                {conversationId && isTauriRuntime && !isDetachedSession
-                  ? agentModeGroup
-                  : null}
+                {conversationId &&
+                isTauriRuntime &&
+                !isDetachedSession &&
+                !isProfileSession ? (
+                  agentModeGroup
+                ) : null}
                 {generating ? (
                   <Button
                     type="button"
@@ -818,7 +865,10 @@ export function ChatWorkbench({
                     Stop
                   </Button>
                 ) : null}
-                {!generating && conversationId && isTauriRuntime ? (
+                {!generating &&
+                conversationId &&
+                isTauriRuntime &&
+                !isProfileSession ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -842,6 +892,14 @@ export function ChatWorkbench({
             </div>
             {memoryUpdateHint ? (
               <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
+            ) : null}
+            {isProfileSession ? (
+              <p className="text-text-3 text-xs leading-relaxed">
+                This chat only updates your global profile (name, location,
+                languages, and notes). Everything you save here is included in
+                other workspace chats. Come back anytime to add or change
+                details.
+              </p>
             ) : null}
             {isDetachedSession ? (
               <p className="text-text-3 text-xs leading-relaxed">
@@ -867,7 +925,14 @@ export function ChatWorkbench({
           </div>
           {messages.length === 0 ? (
             <div className="border-border bg-muted/25 text-text-3 rounded-xl border border-dashed px-4 py-8 text-center text-sm leading-relaxed">
-              {isNewChat ? (
+              {isProfileSession ? (
+                <p className="mx-auto max-w-md leading-relaxed">
+                  Say hello — the assistant will ask a few questions and save
+                  what you share to your profile. You can also tell it directly
+                  (for example: “My name is …, I work in …, please use
+                  English and Norwegian”).
+                </p>
+              ) : isNewChat ? (
                 isDetachedSession ? (
                   isTauriRuntime && workspaces.length > 0 ? (
                     <div className="flex flex-col items-center gap-6">
@@ -981,12 +1046,15 @@ export function ChatWorkbench({
                           <ChatAssistantMessageBody
                             message={m}
                             workspaceFileContext={
-                              isTauriRuntime && activeWorkspace?.rootPath
-                                ? {
-                                    isDesktop: true,
-                                    workspaceRootPath: activeWorkspace.rootPath,
-                                  }
-                                : null
+                              isProfileSession
+                                ? null
+                                : isTauriRuntime && activeWorkspace?.rootPath
+                                  ? {
+                                      isDesktop: true,
+                                      workspaceRootPath:
+                                        activeWorkspace.rootPath,
+                                    }
+                                  : null
                             }
                           />
                         )}
@@ -1008,6 +1076,7 @@ export function ChatWorkbench({
         }}
         onDrop={(e) => {
           e.preventDefault()
+          if (isProfileSession) return
           const dropped = Array.from(e.dataTransfer.files)
           const paths: string[] = []
           for (const f of dropped) {
@@ -1019,7 +1088,10 @@ export function ChatWorkbench({
           if (paths.length > 0) void onNativeFileDrop(paths)
         }}
       >
-        {isTauriRuntime && activeWorkspace?.rootPath && !isDetachedSession ? (
+        {isTauriRuntime &&
+        activeWorkspace?.rootPath &&
+        !isDetachedSession &&
+        !isProfileSession ? (
           <WorkspaceFilesPanel
             className="mb-2"
             workspaceId={activeWorkspaceId}
@@ -1108,9 +1180,11 @@ export function ChatWorkbench({
           <Textarea
             ref={textareaRef}
             placeholder={
-              isDetachedSession
-                ? 'Message Braian… (move to a workspace to attach files and use the project folder)'
-                : 'Message Braian… (drop files here, or @ to attach)'
+              isProfileSession
+                ? 'Message Braian… (this chat only updates your saved profile)'
+                : isDetachedSession
+                  ? 'Message Braian… (move to a workspace to attach files and use the project folder)'
+                  : 'Message Braian… (drop files here, or @ to attach)'
             }
             value={draft}
             onChange={(e) => {
@@ -1128,7 +1202,8 @@ export function ChatWorkbench({
               <p>Enter to send · Shift+Enter for newline</p>
               {isTauriRuntime &&
               activeWorkspace?.rootPath &&
-              !isDetachedSession ? (
+              !isDetachedSession &&
+              !isProfileSession ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1168,7 +1243,11 @@ export function ChatWorkbench({
         open={contextManagerOpen}
         onOpenChange={setContextManagerOpen}
         workspaceId={
-          isDetachedSession ? DETACHED_WORKSPACE_SESSION_ID : activeWorkspaceId
+          isProfileSession
+            ? USER_PROFILE_WORKSPACE_SESSION_ID
+            : isDetachedSession
+              ? DETACHED_WORKSPACE_SESSION_ID
+              : activeWorkspaceId
         }
         conversationId={conversationId}
         thread={thread}
@@ -1225,7 +1304,7 @@ export function ChatWorkbench({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {!artifactOpen ? (
+      {!showArtifactPanel ? (
         <div className="flex min-h-0 flex-1 flex-col">{chatColumn}</div>
       ) : (
         <ResizablePanelGroup

@@ -7,7 +7,11 @@ import {
   MEMORY_INJECT_MAX_BYTES,
   MEMORY_RELATIVE_PATH,
 } from '@/lib/memory/constants'
-import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
+import {
+  formatUserProfileForPrompt,
+  userProfileGet,
+} from '@/lib/user-profile-api'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
 
 import { buildCanvasTools } from './canvas-tools'
@@ -16,6 +20,7 @@ import { buildDashboardTools } from './dashboard-tools'
 import { isMockAiMode } from './mock-mode'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
+import { buildUserProfileTools } from './user-profile-tools'
 import type { ChatTurnContext, PriorChatMessage } from './types'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
@@ -75,6 +80,17 @@ Rules:
 
 Safety: the user runs this on their own machine; you still must stay within workspace-scoped tools and not assume access outside them.`
 
+export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Desktop. Your job is to get to know the user in a friendly, efficient way and to keep their **global profile** up to date.
+
+**Behavior:**
+- Ask short, natural questions (name, where they are, languages they prefer for answers, timezone or locale if relevant, role or context that helps assistants across workspaces).
+- When the user shares something they want remembered, call **update_user_profile** with only the fields that changed. Do not invent facts.
+- If they clear or correct something, use the tool with null or empty string for that field, or an updated list for languages.
+- Remind them they can return to **sidebar → You** anytime to update who they are.
+- You have **no** workspace files, code, document canvas, or dashboard tools — only **update_user_profile**. If they ask for other work, say that normal chats in a workspace handle that, and stay focused on profile here.
+
+**Privacy:** Only store what they explicitly give you or clearly confirm.`
+
 export type ChatSystemSectionDisplay = {
   id: string
   label: string
@@ -110,6 +126,10 @@ const SOURCE_APP_BUILDER = 'src/lib/ai/chat-turn-args.ts (APP_BUILDER_SYSTEM)'
 const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
+const SOURCE_USER_CONTEXT = 'src/lib/ai/chat-turn-args.ts (user context + client time)'
+const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM)'
+const SOURCE_PROFILE_STATE =
+  'src/lib/user-profile-api.ts (formatUserProfileForPrompt)'
 
 const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   open_document_canvas: 'src/lib/ai/canvas-tools.ts',
@@ -123,12 +143,35 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   read_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
   apply_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
   upsert_workspace_page: 'src/lib/ai/dashboard-tools.ts',
+  update_user_profile: 'src/lib/ai/user-profile-tools.ts',
+}
+
+/** User profile lines plus automatic local time (injected on every default agent turn). */
+export function buildUserContextSystemSectionText(now: Date = new Date()): string {
+  const profileBlock = formatUserProfileForPrompt(userProfileGet())
+  const local = now.toLocaleString(undefined, {
+    dateStyle: 'full',
+    timeStyle: 'long',
+  })
+  const iso = now.toISOString()
+  return [
+    '## User profile (editable in sidebar → You)',
+    '',
+    profileBlock,
+    '',
+    '## Current client time (automatic; not a user setting)',
+    '',
+    `Local: ${local}`,
+    `ISO: ${iso}`,
+    '',
+    'Use the profile and time for tone, locale, scheduling, and recency. Do not read the clock aloud unless the user asks for the time or date.',
+  ].join('\n')
 }
 
 export async function loadWorkspaceMemorySystemBlock(
   workspaceId: string,
 ): Promise<string> {
-  if (isDetachedWorkspaceSessionId(workspaceId)) {
+  if (isNonWorkspaceScopedSessionId(workspaceId)) {
     return ''
   }
   try {
@@ -268,13 +311,49 @@ export async function buildTanStackChatTurnArgs(
 
   const mockAi = isMockAiMode()
   const ctx = options.context
-  const isCodeMode = ctx?.agentMode === 'code'
 
   const history: ModelMessage[] = (options.priorMessages ?? []).map((m) => ({
     role: m.role,
     content: m.content,
   }))
   history.push({ role: 'user', content: options.userText })
+
+  if (ctx?.turnKind === 'profile') {
+    const tools = buildUserProfileTools()
+    const profileText = formatUserProfileForPrompt(userProfileGet())
+    const systemSections: ChatSystemSectionDisplay[] = [
+      {
+        id: 'profile-coach',
+        label: 'Profile coach',
+        source: SOURCE_PROFILE_COACH,
+        text: PROFILE_COACH_SYSTEM,
+      },
+      {
+        id: 'profile-state',
+        label: 'Current user profile (authoritative)',
+        source: SOURCE_PROFILE_STATE,
+        text: profileText,
+      },
+    ]
+    return {
+      systemSections,
+      systemPrompts: systemSections.map((s) => s.text),
+      messages: history,
+      tools,
+      toolsDisplay: tools.map((t) => toolToDisplayInfo(t)),
+      provider: settings.provider as AiProviderId,
+      modelId: settings.modelId,
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey.trim(),
+      mockAi,
+      isCodeMode: false,
+      conversationId: undefined,
+      maxIterations: tools.length > 0 ? 16 : null,
+      settingsWarnings,
+    }
+  }
+
+  const isCodeMode = ctx?.agentMode === 'code'
 
   const canvasTools = buildCanvasTools(ctx)
   const codingTools = buildCodingTools(ctx, { lazy: !isCodeMode })
@@ -321,6 +400,13 @@ export async function buildTanStackChatTurnArgs(
     })
   }
 
+  systemSections.push({
+    id: 'user-context',
+    label: 'User context',
+    source: SOURCE_USER_CONTEXT,
+    text: buildUserContextSystemSectionText(),
+  })
+
   if (memoryBlock) {
     systemSections.push({
       id: 'memory',
@@ -351,7 +437,7 @@ export async function buildTanStackChatTurnArgs(
   if (
     ctx?.appHarnessEnabled === true &&
     ctx.workspaceId != null &&
-    !isDetachedWorkspaceSessionId(ctx.workspaceId)
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
   ) {
     systemSections.push({
       id: 'app-builder',

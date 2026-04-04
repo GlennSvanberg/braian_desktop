@@ -16,7 +16,10 @@ import {
   tanStackTurnArgsToSnapshot,
   type SerializableModelRequestSnapshot,
 } from '@/lib/ai/chat-turn-args'
-import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import {
+  isDetachedWorkspaceSessionId,
+  isUserProfileSessionId,
+} from '@/lib/chat-sessions/detached'
 import { chatMessageContentForLlmHistory } from '@/lib/chat-sessions/store'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
@@ -232,20 +235,25 @@ export function ChatContextManagerDialog({
       try {
         const ap = thread.artifactPayload
         const documentCanvasSnapshot =
-          ap?.kind === 'document'
-            ? {
-                body: ap.body,
-                ...(ap.title !== undefined && ap.title !== ''
-                  ? { title: ap.title }
-                  : {}),
-              }
-            : null
+          isUserProfileSessionId(workspaceId)
+            ? null
+            : ap?.kind === 'document'
+              ? {
+                  body: ap.body,
+                  ...(ap.title !== undefined && ap.title !== ''
+                    ? { title: ap.title }
+                    : {}),
+                }
+              : null
 
         let contextFiles:
           | Awaited<ReturnType<typeof loadContextFilesForModel>>
           | undefined
         if (thread.contextFiles.length > 0) {
-          if (isDetachedWorkspaceSessionId(workspaceId)) {
+          if (
+            isDetachedWorkspaceSessionId(workspaceId) ||
+            isUserProfileSessionId(workspaceId)
+          ) {
             contextFiles = undefined
           } else if (!isTauriRuntime) {
             contextFiles = thread.contextFiles.map((f) => ({
@@ -282,6 +290,9 @@ export function ChatContextManagerDialog({
           context: {
             workspaceId,
             conversationId,
+            ...(isUserProfileSessionId(workspaceId)
+              ? { turnKind: 'profile' as const }
+              : {}),
             agentMode: thread.agentMode ?? 'document',
             appHarnessEnabled: thread.appHarnessEnabled ?? false,
             documentCanvasSnapshot,

@@ -2,6 +2,7 @@ export type {
   ChatStreamChunk,
   ChatStreamProvider,
   ChatTurnContext,
+  ChatTurnKind,
   PriorChatMessage,
 } from './types'
 export { streamMockChatTurn } from './mock-chat-stream'

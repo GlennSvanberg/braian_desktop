@@ -10,7 +10,11 @@ vi.mock('@/lib/workspace-api', () => ({
   workspaceReadTextFile: vi.fn().mockRejectedValue(new Error('no file')),
 }))
 
-import { buildTanStackChatTurnArgs } from '@/lib/ai/chat-turn-args'
+import {
+  buildTanStackChatTurnArgs,
+  PROFILE_COACH_SYSTEM,
+} from '@/lib/ai/chat-turn-args'
+import { USER_PROFILE_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { aiSettingsGet } from '@/lib/ai-settings-api'
 
 const validSettings = {
@@ -173,6 +177,44 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(true)
   })
 
+  it('includes user-context section with ISO time on default turns', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const uc = r.systemSections.find((s) => s.id === 'user-context')
+    expect(uc).toBeDefined()
+    expect(uc?.text).toMatch(/ISO:/)
+    expect(uc?.text).toMatch(/User profile/)
+  })
+
+  it('profile turnKind uses coach prompt and only update_user_profile', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: USER_PROFILE_WORKSPACE_SESSION_ID,
+        conversationId: null,
+        turnKind: 'profile',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.toolsDisplay.map((t) => t.name)).toEqual(['update_user_profile'])
+    expect(r.systemSections[0]?.text).toBe(PROFILE_COACH_SYSTEM)
+    expect(
+      r.systemSections.some((s) => s.id === 'profile-state'),
+    ).toBe(true)
+    expect(r.systemSections.some((s) => s.id === 'user-context')).toBe(false)
+    expect(r.isCodeMode).toBe(false)
+    expect(r.maxIterations).toBe(16)
+  })
+
   it('omits dashboard tools when workspace is detached even if harness on', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
@@ -192,5 +234,25 @@ describe('buildTanStackChatTurnArgs', () => {
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
+  })
+
+  it('omits dashboard tools for user profile workspace id even if harness on', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: USER_PROFILE_WORKSPACE_SESSION_ID,
+        conversationId: 'c1',
+        agentMode: 'document',
+        appHarnessEnabled: true,
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'read_workspace_dashboard'),
+    ).toBe(false)
+    expect(
+      r.systemSections.some((s) => s.id === 'app-builder'),
+    ).toBe(false)
   })
 })

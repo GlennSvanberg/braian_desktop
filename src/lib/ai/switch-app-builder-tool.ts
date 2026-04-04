@@ -1,7 +1,7 @@
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 
-import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 
 import { DASHBOARD_TOOL_NAMES } from './dashboard-tools'
 
@@ -23,7 +23,7 @@ const discoveryNamesJson = JSON.stringify([...DASHBOARD_TOOL_NAMES])
 export function buildSwitchToAppBuilderTool(context: ChatTurnContext | undefined) {
   if (
     !context?.workspaceId ||
-    isDetachedWorkspaceSessionId(context.workspaceId) ||
+    isNonWorkspaceScopedSessionId(context.workspaceId) ||
     context.appHarnessEnabled === true
   ) {
     return null

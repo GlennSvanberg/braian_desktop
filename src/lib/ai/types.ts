@@ -16,9 +16,13 @@ export type ContextFileForModel = {
   fileTruncated?: boolean
 }
 
+export type ChatTurnKind = 'default' | 'profile'
+
 export type ChatTurnContext = {
   workspaceId: string
   conversationId: string | null
+  /** Profile coach chat (sidebar → You): only `update_user_profile` tool. */
+  turnKind?: ChatTurnKind
   /** Document canvas vs coding agent (files + commands under workspace). */
   agentMode?: AgentMode
   /** Workspace dashboard builder tools + instructions (App segment in chat toolbar). */

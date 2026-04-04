@@ -11,6 +11,7 @@ import {
   Plus,
   Settings,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import {
   Link,
@@ -371,6 +372,7 @@ export function AppSidebar() {
   } = useWorkspace()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const docsActive = pathname.startsWith('/docs')
+  const userPageActive = pathname.startsWith('/user')
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameDraft, setRenameDraft] = useState('')
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
@@ -606,6 +608,18 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="gap-2">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={userPageActive}
+              tooltip="Your profile"
+            >
+              <Link to="/user">
+                <UserRound />
+                <span>You</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

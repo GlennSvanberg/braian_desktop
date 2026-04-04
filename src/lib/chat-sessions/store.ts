@@ -14,9 +14,13 @@ import { getConversationById } from '@/lib/mock-workspace-data'
 import { isTauri } from '@/lib/tauri-env'
 import type { AgentMode } from '@/lib/workspace-api'
 
-import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import {
+  isDetachedWorkspaceSessionId,
+  isUserProfileSessionId,
+  USER_PROFILE_WORKSPACE_SESSION_ID,
+} from '@/lib/chat-sessions/detached'
 
-import { parseChatSessionKey } from './keys'
+import { chatSessionKey, parseChatSessionKey } from './keys'
 import {
   DEFAULT_CHAT_THREAD,
   type AssistantPart,
@@ -25,6 +29,72 @@ import {
   type ChatThreadState,
   type ContextFileEntry,
 } from './types'
+
+const PROFILE_THREAD_LS_KEY = 'braian.io.userProfileChatThread.v1'
+
+/** Stable session key for sidebar → You (profile coach chat). */
+export const PROFILE_CHAT_SESSION_KEY = chatSessionKey(
+  USER_PROFILE_WORKSPACE_SESSION_ID,
+  null,
+)
+
+let profileThreadHydrated = false
+let profileThreadSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function hydrateUserProfileThreadOnce() {
+  if (profileThreadHydrated) return
+  profileThreadHydrated = true
+  if (typeof localStorage === 'undefined') return
+  try {
+    const raw = localStorage.getItem(PROFILE_THREAD_LS_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Partial<ChatThreadState>
+    const messages = Array.isArray(parsed.messages)
+      ? (parsed.messages as ChatMessage[])
+      : []
+    const merged: ChatThreadState = {
+      ...DEFAULT_CHAT_THREAD,
+      messages,
+      draft: typeof parsed.draft === 'string' ? parsed.draft : '',
+      agentMode: parsed.agentMode === 'code' ? 'code' : 'document',
+      appHarnessEnabled: false,
+      contextFiles: [],
+      artifactOpen: false,
+      artifactPayload: null,
+      generating: false,
+      pendingUserMessages: [],
+      lastModelRequestSnapshot: null,
+    }
+    threads = { ...threads, [PROFILE_CHAT_SESSION_KEY]: merged }
+  } catch (e) {
+    console.error('[braian] profile chat hydrate', e)
+  }
+}
+
+function ensureProfileThreadHydrated(sessionKey: string) {
+  if (sessionKey !== PROFILE_CHAT_SESSION_KEY) return
+  hydrateUserProfileThreadOnce()
+}
+
+function scheduleProfileThreadPersist() {
+  if (typeof localStorage === 'undefined') return
+  if (profileThreadSaveTimer) clearTimeout(profileThreadSaveTimer)
+  profileThreadSaveTimer = setTimeout(() => {
+    profileThreadSaveTimer = null
+    const t = threads[PROFILE_CHAT_SESSION_KEY]
+    if (!t) return
+    try {
+      const payload = {
+        messages: t.messages,
+        draft: t.draft,
+        agentMode: t.agentMode,
+      }
+      localStorage.setItem(PROFILE_THREAD_LS_KEY, JSON.stringify(payload))
+    } catch (e) {
+      console.error('[braian] profile chat persist', e)
+    }
+  }, 400)
+}
 
 /** Include tool traces so follow-up turns stay grounded in prior workspace reads/runs. */
 function assistantContentForLlmHistory(m: AssistantChatMessage): string {
@@ -70,6 +140,7 @@ function emitGenerating() {
 }
 
 function getThread(key: string): ChatThreadState {
+  ensureProfileThreadHydrated(key)
   return threads[key] ?? DEFAULT_CHAT_THREAD
 }
 
@@ -96,6 +167,9 @@ function patchThread(
   if (next === prev) return
   threads = { ...threads, [key]: next }
   emitThreads()
+  if (key === PROFILE_CHAT_SESSION_KEY) {
+    scheduleProfileThreadPersist()
+  }
 }
 
 const abortBySession = new Map<string, AbortController>()
@@ -195,6 +269,7 @@ export function subscribeGenerating(cb: () => void) {
 }
 
 export function getThreadSnapshot(key: string): ChatThreadState {
+  ensureProfileThreadHydrated(key)
   return threads[key] ?? DEFAULT_CHAT_THREAD
 }
 
@@ -218,6 +293,9 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
     },
   }
   emitThreads()
+  if (sessionKey === PROFILE_CHAT_SESSION_KEY) {
+    scheduleProfileThreadPersist()
+  }
 }
 
 export function getGeneratingSnapshot(key: string): boolean {
@@ -355,20 +433,25 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const appHarnessEnabled = threadNow.appHarnessEnabled ?? false
       const ap = threadNow.artifactPayload
       const documentCanvasSnapshot =
-        ap?.kind === 'document'
-          ? {
-              body: ap.body,
-              ...(ap.title !== undefined && ap.title !== ''
-                ? { title: ap.title }
-                : {}),
-            }
-          : null
+        isUserProfileSessionId(workspaceId)
+          ? null
+          : ap?.kind === 'document'
+            ? {
+                body: ap.body,
+                ...(ap.title !== undefined && ap.title !== ''
+                  ? { title: ap.title }
+                  : {}),
+              }
+            : null
 
       let contextFiles:
         | Awaited<ReturnType<typeof loadContextFilesForModel>>
         | undefined
       if (prev.contextFiles.length > 0) {
-        if (isDetachedWorkspaceSessionId(workspaceId)) {
+        if (
+          isDetachedWorkspaceSessionId(workspaceId) ||
+          isUserProfileSessionId(workspaceId)
+        ) {
           contextFiles = undefined
         } else if (!isTauri()) {
           contextFiles = prev.contextFiles.map((f) => ({
@@ -395,6 +478,9 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const chatTurnContext = {
         workspaceId,
         conversationId,
+        ...(isUserProfileSessionId(workspaceId)
+          ? { turnKind: 'profile' as const }
+          : {}),
         agentMode,
         appHarnessEnabled,
         documentCanvasSnapshot,
@@ -550,7 +636,8 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           streamCompletedOk &&
           conversationId &&
           isTauri() &&
-          !isDetachedWorkspaceSessionId(workspaceId)
+          !isDetachedWorkspaceSessionId(workspaceId) &&
+          !isUserProfileSessionId(workspaceId)
         ) {
           void import('@/lib/memory/scheduler').then((m) =>
             m.scheduleMemoryReviewAfterIdle(workspaceId, conversationId),

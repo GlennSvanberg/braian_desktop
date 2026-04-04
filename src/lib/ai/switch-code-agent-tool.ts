@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { WORKSPACE_CODE_TOOL_NAMES } from '@/lib/ai/coding-tools'
 
-import { isDetachedWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 
 import type { ChatTurnContext } from './types'
 
@@ -23,7 +23,7 @@ const discoveryNamesJson = JSON.stringify([...WORKSPACE_CODE_TOOL_NAMES])
 export function buildSwitchToCodeAgentTool(context: ChatTurnContext | undefined) {
   if (
     !context?.workspaceId ||
-    isDetachedWorkspaceSessionId(context.workspaceId)
+    isNonWorkspaceScopedSessionId(context.workspaceId)
   ) {
     return null
   }
