@@ -9,7 +9,11 @@ use uuid::Uuid;
 
 use crate::db;
 
-const CONVERSATION_SCHEMA_VERSION: u32 = 1;
+const CONVERSATION_SCHEMA_VERSION: u32 = 2;
+
+fn conversation_schema_supported(v: u32) -> bool {
+  v == 1 || v == CONVERSATION_SCHEMA_VERSION
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +23,16 @@ pub struct ConversationRecord {
   pub title: String,
   pub updated_at_ms: i64,
   pub canvas_kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextFileRecord {
+  pub relative_path: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub display_name: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub added_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +47,8 @@ struct ConversationFileV1 {
   artifact_open: bool,
   draft: String,
   messages: Vec<ChatMessageFile>,
+  #[serde(default)]
+  context_files: Vec<ContextFileRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +79,8 @@ pub struct ChatThreadDto {
   pub artifact_payload: Option<Value>,
   pub draft: String,
   pub generating: bool,
+  #[serde(default)]
+  pub context_files: Vec<ContextFileRecord>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -83,6 +101,8 @@ pub struct ConversationSaveInput {
   pub draft: String,
   pub messages: Vec<ChatMessageDto>,
   pub artifact_payload: Option<Value>,
+  #[serde(default)]
+  pub context_files: Vec<ContextFileRecord>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -142,7 +162,7 @@ fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   Ok(())
 }
 
-fn workspace_root_path(conn: &Connection, workspace_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn workspace_root_path(conn: &Connection, workspace_id: &str) -> Result<PathBuf, String> {
   let path: String = conn
     .query_row(
       "SELECT root_path FROM workspaces WHERE id = ?1",
@@ -304,6 +324,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
     artifact_payload: artifact,
     draft: f.draft,
     generating: false,
+    context_files: f.context_files,
   }
 }
 
@@ -335,7 +356,7 @@ pub fn conversation_list(
     if f.workspace_id != workspace_id {
       continue;
     }
-    if f.schema_version != CONVERSATION_SCHEMA_VERSION {
+    if !conversation_schema_supported(f.schema_version) {
       log::warn!(
         "Skipping conversation {} unsupported schema {}",
         f.id,
@@ -382,6 +403,7 @@ pub fn conversation_create(
     artifact_open: false,
     draft: String::new(),
     messages: vec![],
+    context_files: vec![],
   };
   let path = conversation_path(&root, &id);
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
@@ -420,7 +442,7 @@ pub fn conversation_open(app: AppHandle, id: String) -> Result<Option<Conversati
     Err(e) if e == "Conversation not found." => return Ok(None),
     Err(e) => return Err(e),
   };
-  if f.schema_version != CONVERSATION_SCHEMA_VERSION {
+  if !conversation_schema_supported(f.schema_version) {
     return Err(format!(
       "Unsupported conversation schema version {}",
       f.schema_version
@@ -468,6 +490,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
         status: m.status.clone(),
       })
       .collect(),
+    context_files: input.context_files.clone(),
   };
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
   fs::write(&path, json).map_err(|e| e.to_string())?;
@@ -500,6 +523,41 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
       }
     }
   }
+  Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationSetTitleInput {
+  pub id: String,
+  pub workspace_id: String,
+  pub title: String,
+}
+
+#[tauri::command]
+pub fn conversation_set_title(
+  app: AppHandle,
+  input: ConversationSetTitleInput,
+) -> Result<(), String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &input.workspace_id)?;
+  let path = conversation_path(&root, &input.id);
+  if !path.is_file() {
+    return Err("Conversation not found.".to_string());
+  }
+  let mut file = load_conversation_file(&path)?;
+  if file.workspace_id != input.workspace_id || file.id != input.id {
+    return Err("Conversation workspace mismatch.".to_string());
+  }
+  let trimmed = input.title.trim();
+  if trimmed.is_empty() {
+    return Err("Title cannot be empty.".to_string());
+  }
+  ensure_braian_layout(&root)?;
+  file.title = trimmed.to_string();
+  file.updated_at_ms = now_ms();
+  let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+  fs::write(&path, json).map_err(|e| e.to_string())?;
   Ok(())
 }
 

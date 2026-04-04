@@ -1,8 +1,32 @@
-import { CornerDownLeft, Loader2, Sparkles } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import {
+  Check,
+  Copy,
+  CornerDownLeft,
+  Loader2,
+  Paperclip,
+  Sparkles,
+  Square,
+  X,
+} from 'lucide-react'
+import { open } from '@tauri-apps/plugin-dialog'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
+import {
+  assistantPlainTextForCopy,
+  ChatAssistantMessageBody,
+  ChatUserMessageBody,
+} from '@/components/app/chat-message-body'
 import { ArtifactPanel } from '@/components/app/artifact-panel'
+import { WorkspaceFilesPanel } from '@/components/app/workspace-files-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ResizableHandle,
@@ -20,10 +44,19 @@ import {
   useChatThread,
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
+import {
+  DEFAULT_CHAT_TITLE,
+  deriveConversationTitle,
+} from '@/lib/conversation-title'
 import { getConversationById } from '@/lib/mock-workspace-data'
+import {
+  isPathUnderRoot,
+  relativePathFromRoot,
+} from '@/lib/workspace-path-utils'
 import {
   buildConversationSavePayload,
   conversationSave,
+  workspaceImportFile,
   type ConversationDto,
 } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
@@ -50,29 +83,125 @@ export function ChatWorkbench({
   conversationMeta,
   initialThread = null,
 }: ChatWorkbenchProps) {
-  const { activeWorkspaceId, refreshConversations, isTauriRuntime } =
-    useWorkspace()
+  const {
+    activeWorkspaceId,
+    activeWorkspace,
+    refreshConversations,
+    isTauriRuntime,
+  } = useWorkspace()
   const lastSerializedRef = useRef<string | null>(null)
   const initialThreadRef = useRef(initialThread)
   initialThreadRef.current = initialThread
   const hydratedSessionKeyRef = useRef<string | null>(null)
   const sessionKey = chatSessionKey(activeWorkspaceId, conversationId)
   const thread = useChatThread(sessionKey)
-  const { sendChatTurn, setChatDraft, patchDocumentArtifactBody } =
-    useChatThreadActions()
+  const {
+    sendChatTurn,
+    setChatDraft,
+    patchDocumentArtifactBody,
+    stopChatGeneration,
+    addContextFileEntry,
+    removeContextFileEntry,
+  } = useChatThreadActions()
+
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
 
   const saved = conversationId
     ? getConversationById(conversationId)
     : undefined
-  const chatTitle =
-    conversationMeta?.title ?? saved?.title ?? 'New chat'
+  const [conversationTitle, setConversationTitle] = useState(() =>
+    conversationMeta?.title ?? saved?.title ?? DEFAULT_CHAT_TITLE,
+  )
+  const autoTitleAppliedRef = useRef<string | null>(null)
   const isNewChat = conversationId === null
 
+  const metaForSave = useMemo(
+    () =>
+      conversationMeta != null
+        ? { ...conversationMeta, title: conversationTitle }
+        : null,
+    [conversationMeta, conversationTitle],
+  )
+
+  useEffect(() => {
+    autoTitleAppliedRef.current = null
+  }, [conversationId])
+
+  useEffect(() => {
+    if (!conversationMeta) return
+    setConversationTitle(conversationMeta.title)
+  }, [conversationMeta?.id, conversationMeta?.title])
+
+  useEffect(() => {
+    if (!conversationId || !conversationMeta) return
+    if (autoTitleAppliedRef.current === conversationId) return
+    if (conversationTitle !== DEFAULT_CHAT_TITLE) return
+    const firstUser = thread.messages.find(
+      (m) => m.role === 'user' && m.content.trim().length > 0,
+    )
+    if (!firstUser) return
+    setConversationTitle(deriveConversationTitle(firstUser.content))
+    autoTitleAppliedRef.current = conversationId
+  }, [
+    conversationId,
+    conversationMeta,
+    conversationTitle,
+    thread.messages,
+  ])
+
   const isMobile = useIsMobile()
-  const { messages, artifactOpen, artifactPayload, draft, generating } = thread
+  const {
+    messages,
+    artifactOpen,
+    artifactPayload,
+    draft,
+    generating,
+    pendingUserMessages,
+    contextFiles,
+  } = thread
+
+  const onAttachFiles = useCallback(async () => {
+    if (!isTauriRuntime || !activeWorkspace?.rootPath) return
+    const picked = await open({
+      multiple: true,
+      directory: false,
+      title: 'Attach files to this chat',
+      defaultPath: activeWorkspace.rootPath,
+    })
+    if (picked == null) return
+    const paths = Array.isArray(picked) ? picked : [picked]
+    for (const abs of paths) {
+      try {
+        if (isPathUnderRoot(abs, activeWorkspace.rootPath)) {
+          const rel = relativePathFromRoot(abs, activeWorkspace.rootPath)
+          const name = abs.replace(/[/\\]/g, '/').split('/').pop() ?? rel
+          addContextFileEntry(sessionKey, {
+            relativePath: rel,
+            displayName: name,
+          })
+        } else {
+          const { relativePath, displayName } = await workspaceImportFile(
+            activeWorkspaceId,
+            conversationId,
+            abs,
+          )
+          addContextFileEntry(sessionKey, { relativePath, displayName })
+        }
+      } catch (e) {
+        console.error('[braian] attach file', e)
+      }
+    }
+  }, [
+    activeWorkspace?.rootPath,
+    activeWorkspaceId,
+    addContextFileEntry,
+    conversationId,
+    isTauriRuntime,
+    sessionKey,
+  ])
 
   useLayoutEffect(() => {
-    if (conversationId == null || !conversationMeta) return
+    if (conversationId == null || !metaForSave) return
     const init = initialThreadRef.current
     if (!init) return
     if (hydratedSessionKeyRef.current === sessionKey) return
@@ -82,34 +211,34 @@ export function ChatWorkbench({
       lastSerializedRef.current = JSON.stringify(
         buildConversationSavePayload(
           { ...init, generating: false },
-          conversationMeta,
+          metaForSave,
         ),
       )
     } else {
       lastSerializedRef.current = null
     }
-  }, [conversationId, conversationMeta, isTauriRuntime, sessionKey])
+  }, [conversationId, isTauriRuntime, metaForSave, sessionKey])
 
   useEffect(() => {
     seedCanvasPreviewIfEmpty(sessionKey, conversationId, {
-      title: conversationMeta?.title,
+      title: conversationTitle,
       canvasKind: conversationMeta
         ? normalizeCanvasKind(conversationMeta.canvasKind)
         : undefined,
     })
-  }, [sessionKey, conversationId, conversationMeta])
+  }, [sessionKey, conversationId, conversationMeta, conversationTitle])
 
   useEffect(() => {
     if (
       conversationId == null ||
-      !conversationMeta ||
+      !metaForSave ||
       !isTauriRuntime ||
       generating
     ) {
       return
     }
     const t = window.setTimeout(() => {
-      const payload = buildConversationSavePayload(thread, conversationMeta)
+      const payload = buildConversationSavePayload(thread, metaForSave)
       const s = JSON.stringify(payload)
       if (s === lastSerializedRef.current) return
       void conversationSave(payload)
@@ -122,9 +251,9 @@ export function ChatWorkbench({
     return () => window.clearTimeout(t)
   }, [
     conversationId,
-    conversationMeta,
     generating,
     isTauriRuntime,
+    metaForSave,
     refreshConversations,
     thread,
   ])
@@ -140,9 +269,27 @@ export function ChatWorkbench({
     }
   }
 
+  const copyMessageText = useCallback(async (messageId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedMessageId(messageId)
+      window.setTimeout(() => {
+        setCopiedMessageId((id) => (id === messageId ? null : id))
+      }, 1500)
+    } catch (err) {
+      console.error('[braian] copy failed', err)
+    }
+  }, [])
+
   const helperSubtitle = artifactOpen
     ? 'Workspace canvas is open · resize the split or keep typing below.'
     : 'Primary assistant replies stream here. Configure your API key under Settings. Dev mock: localStorage braian.mockAi = 1.'
+  const filesPrivacyNote =
+    contextFiles.length > 0
+      ? 'Attached file contents are sent to your configured LLM provider when you send a message.'
+      : null
+
+  const queuedCount = pendingUserMessages.length
 
   const chatColumn = (
     <div
@@ -161,8 +308,10 @@ export function ChatWorkbench({
               <Sparkles className="size-4" />
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
-              <div className="flex items-center gap-2">
-                <p className="text-text-1 text-sm font-medium">{chatTitle}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-text-1 text-sm font-medium">
+                  {conversationTitle}
+                </p>
                 {generating ? (
                   <span className="text-text-3 inline-flex items-center gap-1.5 text-xs">
                     <Loader2
@@ -173,10 +322,29 @@ export function ChatWorkbench({
                     <span className="hidden sm:inline">Working…</span>
                   </span>
                 ) : null}
+                {generating ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-text-2 border-border h-7 gap-1.5 px-2 text-xs"
+                    onClick={() => stopChatGeneration(sessionKey)}
+                  >
+                    <Square className="size-2.5 fill-current" aria-hidden />
+                    Stop
+                  </Button>
+                ) : null}
               </div>
               <p className="text-text-3 mt-1 text-xs leading-relaxed">
                 {helperSubtitle}
               </p>
+              {contextFiles.length > 0 ? (
+                <p className="text-text-3 mt-1 text-xs leading-relaxed">
+                  {contextFiles.length} file
+                  {contextFiles.length === 1 ? '' : 's'} in chat context
+                  {filesPrivacyNote ? ` · ${filesPrivacyNote}` : ''}
+                </p>
+              ) : null}
             </div>
           </div>
           {messages.length === 0 ? (
@@ -187,57 +355,148 @@ export function ChatWorkbench({
             </div>
           ) : (
             <div className="flex flex-col gap-5">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={cn(
-                    'flex',
-                    m.role === 'user' ? 'justify-end' : 'justify-start',
-                  )}
-                >
+              {messages.map((m) => {
+                const copyText =
+                  m.role === 'user'
+                    ? m.content
+                    : assistantPlainTextForCopy(m)
+                const canCopy = copyText.length > 0
+                const isUser = m.role === 'user'
+
+                return (
                   <div
+                    key={m.id}
                     className={cn(
-                      'max-w-[min(100%,42rem)] rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
-                      m.role === 'user'
-                        ? 'bg-primary text-primary-foreground border-primary/20 rounded-tr-md'
-                        : 'bg-card text-text-2 border-border rounded-tl-md',
-                      m.role === 'assistant' &&
-                        m.status === 'streaming' &&
-                        !m.content &&
-                        'text-text-3 italic',
+                      'flex',
+                      isUser ? 'justify-end' : 'justify-start',
                     )}
                   >
-                    {m.content ||
-                      (m.role === 'assistant' && m.status === 'streaming'
-                        ? '…'
-                        : '')}
+                    <div
+                      className={cn(
+                        'group/message relative max-w-[min(100%,42rem)]',
+                      )}
+                    >
+                      {canCopy ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            'text-text-3 hover:text-text-2 absolute top-1 right-1 z-10 size-7 shrink-0',
+                            'opacity-70 md:opacity-0 md:transition-opacity',
+                            'md:group-hover/message:opacity-100',
+                            'focus-visible:opacity-100',
+                          )}
+                          aria-label="Copy message"
+                          title="Copy message"
+                          onClick={() => copyMessageText(m.id, copyText)}
+                        >
+                          {copiedMessageId === m.id ? (
+                            <Check className="size-3.5 text-accent-600" />
+                          ) : (
+                            <Copy className="size-3.5" />
+                          )}
+                        </Button>
+                      ) : null}
+                      <div
+                        className={cn(
+                          'rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
+                          isUser
+                            ? 'bg-primary text-primary-foreground border-primary/20 rounded-tr-md pr-10'
+                            : 'bg-card text-text-2 border-border rounded-tl-md pr-10',
+                          m.role === 'assistant' &&
+                            m.status === 'streaming' &&
+                            !m.content &&
+                            (!m.parts || m.parts.length === 0) &&
+                            'text-text-3 italic',
+                        )}
+                      >
+                        {isUser ? (
+                          <ChatUserMessageBody content={m.content} />
+                        ) : (
+                          <ChatAssistantMessageBody message={m} />
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
       </ScrollArea>
       <div className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t p-3 backdrop-blur-md md:p-4">
+        {isTauriRuntime && activeWorkspace?.rootPath ? (
+          <WorkspaceFilesPanel
+            className="mb-2"
+            workspaceId={activeWorkspaceId}
+            workspaceRootPath={activeWorkspace.rootPath}
+            sessionKey={sessionKey}
+          />
+        ) : null}
+        {contextFiles.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {contextFiles.map((f) => (
+              <Badge
+                key={f.relativePath}
+                variant="secondary"
+                className="text-text-2 border-border max-w-full gap-1 pr-0.5 font-normal"
+                title={f.relativePath}
+              >
+                <span className="max-w-[14rem] truncate">
+                  {f.displayName?.trim() ||
+                    f.relativePath.split('/').pop() ||
+                    f.relativePath}
+                </span>
+                <button
+                  type="button"
+                  className="hover:bg-muted rounded-full p-0.5"
+                  aria-label={`Remove ${f.relativePath}`}
+                  onClick={() =>
+                    removeContextFileEntry(sessionKey, f.relativePath)
+                  }
+                >
+                  <X className="size-3 opacity-70" aria-hidden />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        ) : null}
         <div className="bg-card border-border focus-within:ring-ring/40 relative rounded-xl border shadow-sm focus-within:ring-2">
           <Textarea
             placeholder="Message Braian…"
             value={draft}
             onChange={(e) => setChatDraft(sessionKey, e.target.value)}
             onKeyDown={onKeyDown}
-            disabled={generating}
-            className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 text-sm shadow-none focus-visible:ring-0 disabled:opacity-60"
+            className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 text-sm shadow-none focus-visible:ring-0"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <p className="text-text-3 px-1.5 text-xs">
-              Enter to send · Shift+Enter for newline
-            </p>
+            <div className="text-text-3 flex min-w-0 flex-wrap items-center gap-2 px-1.5 text-xs leading-relaxed">
+              <p>Enter to send · Shift+Enter for newline</p>
+              {isTauriRuntime && activeWorkspace?.rootPath ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-text-2 h-7 gap-1 px-2 text-xs"
+                  onClick={() => void onAttachFiles()}
+                >
+                  <Paperclip className="size-3.5" aria-hidden />
+                  Attach files
+                </Button>
+              ) : null}
+              {queuedCount > 0 ? (
+                <p className="text-accent-600 font-medium">
+                  {queuedCount} message{queuedCount === 1 ? '' : 's'} queued
+                </p>
+              ) : null}
+            </div>
             <Button
               type="button"
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 shrink-0"
               onClick={sendMessage}
-              disabled={!draft.trim() || generating}
+              disabled={!draft.trim()}
             >
               Send
               <CornerDownLeft className="size-3.5 opacity-80" />
@@ -254,7 +513,7 @@ export function ChatWorkbench({
         <div className="flex min-h-0 flex-1 flex-col">{chatColumn}</div>
       ) : (
         <ResizablePanelGroup
-          direction={isMobile ? 'vertical' : 'horizontal'}
+          orientation={isMobile ? 'vertical' : 'horizontal'}
           className="min-h-0 flex-1 rounded-none md:rounded-xl md:border md:border-border"
         >
           <ResizablePanel

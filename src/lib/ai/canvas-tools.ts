@@ -16,7 +16,7 @@ const openDocumentCanvasInputSchema = z.object({
 
 const openDocumentCanvasTool = toolDefinition({
   name: 'open_document_canvas',
-  description: `Open the document canvas (workspace side panel) and set its markdown. Use when the user wants long-form text—stories, specs, memos—edited in the canvas, not only in chat. Put the full initial markdown in the tool argument; do not rely on chat alone for the document body.`,
+  description: `Write the document canvas (side panel) markdown to disk and refresh the UI. Always pass the **entire** file content. If a document canvas snapshot was provided in the system prompt for this turn, treat it as the current file: merge the user's request into that text and preserve their manual edits unless they asked to remove them.`,
   inputSchema: openDocumentCanvasInputSchema,
 })
 

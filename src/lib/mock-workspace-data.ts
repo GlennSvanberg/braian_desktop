@@ -121,3 +121,9 @@ export function getConversationsForWorkspace(workspaceId: string) {
 export function getConversationById(conversationId: string) {
   return MOCK_CONVERSATIONS.find((c) => c.id === conversationId)
 }
+
+/** Browser dev: update mock store title (mirrors desktop `conversation_set_title`). */
+export function mockConversationSetTitle(id: string, title: string): void {
+  const c = MOCK_CONVERSATIONS.find((x) => x.id === id)
+  if (c) c.title = title.trim()
+}

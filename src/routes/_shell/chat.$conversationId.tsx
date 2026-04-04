@@ -19,9 +19,7 @@ export const Route = createFileRoute('/_shell/chat/$conversationId')({
 function ChatPage() {
   const navigate = useNavigate()
   const { activeWorkspaceId, loading: workspaceLoading } = useWorkspace()
-  const { conversation, initialThread } = Route.useRouteContext({
-    from: '/_shell/chat/$conversationId',
-  })
+  const { conversation, initialThread } = Route.useRouteContext()
 
   useEffect(() => {
     if (workspaceLoading || !activeWorkspaceId) return
@@ -37,6 +35,7 @@ function ChatPage() {
 
   return (
     <ChatWorkbench
+      key={conversation.id}
       conversationId={conversation.id}
       conversationMeta={conversation}
       initialThread={initialThread}

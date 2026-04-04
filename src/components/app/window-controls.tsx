@@ -37,7 +37,10 @@ export function WindowControls() {
   const win = getCurrentWindow()
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5 pr-1 pl-2">
+    <div
+      className="flex shrink-0 items-center gap-0.5 pr-1 pl-2"
+      data-tauri-drag-region={false}
+    >
       <button
         type="button"
         className={ctrlBtn}

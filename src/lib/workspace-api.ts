@@ -5,6 +5,7 @@ import {
   MOCK_WORKSPACES,
   getConversationById,
   getConversationsForWorkspace,
+  mockConversationSetTitle,
 } from '@/lib/mock-workspace-data'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
@@ -117,6 +118,30 @@ export async function conversationCreate(
   return invoke<ConversationDto>('conversation_create', { workspaceId })
 }
 
+export async function conversationSetTitle(input: {
+  id: string
+  workspaceId: string
+  title: string
+}): Promise<void> {
+  if (!isTauri()) {
+    mockConversationSetTitle(input.id, input.title)
+    return
+  }
+  await invoke('conversation_set_title', {
+    input: {
+      id: input.id,
+      workspaceId: input.workspaceId,
+      title: input.title,
+    },
+  })
+}
+
+export type ContextFileEntryDto = {
+  relativePath: string
+  displayName?: string
+  addedAtMs?: number
+}
+
 export type ConversationSavePayload = {
   id: string
   workspaceId: string
@@ -131,6 +156,7 @@ export type ConversationSavePayload = {
     status?: string
   }>
   artifactPayload: WorkspaceArtifactPayload | null
+  contextFiles: ContextFileEntryDto[]
 }
 
 export type ConversationOpenResult = {
@@ -151,6 +177,7 @@ type ConversationOpenInvoke = {
     artifactPayload: unknown
     draft: string
     generating: boolean
+    contextFiles?: ContextFileEntryDto[]
   }
 }
 
@@ -163,9 +190,13 @@ function mapInvokeThreadToState(
         m.status === 'streaming' || m.status === 'complete'
           ? m.status
           : undefined
+      const role = m.role as 'user' | 'assistant'
+      if (role === 'user') {
+        return { id: m.id, role: 'user' as const, content: m.content }
+      }
       return {
         id: m.id,
-        role: m.role as 'user' | 'assistant',
+        role: 'assistant' as const,
         content: m.content,
         ...(status ? { status } : {}),
       }
@@ -174,6 +205,8 @@ function mapInvokeThreadToState(
     artifactPayload: (thread.artifactPayload ?? null) as WorkspaceArtifactPayload | null,
     draft: thread.draft,
     generating: thread.generating,
+    pendingUserMessages: [],
+    contextFiles: thread.contextFiles ?? [],
   }
 }
 
@@ -194,19 +227,30 @@ export async function conversationOpen(
     if (c.demoMessages?.length) {
       const { getMockArtifactPayloadForChat } = await import('@/lib/artifacts')
       const thread: ChatThreadState = {
-        messages: c.demoMessages.map((m, i) => ({
-          id: `seed-${c.id}-${i}`,
-          role: m.role,
-          content: m.content,
-          status: 'complete' as const,
-        })),
-        artifactOpen: true,
+        messages: c.demoMessages.map((m, i) => {
+          if (m.role === 'user') {
+            return {
+              id: `seed-${c.id}-${i}`,
+              role: 'user' as const,
+              content: m.content,
+            }
+          }
+          return {
+            id: `seed-${c.id}-${i}`,
+            role: 'assistant' as const,
+            content: m.content,
+            status: 'complete' as const,
+          }
+        }),
+        artifactOpen: false,
         artifactPayload: getMockArtifactPayloadForChat(c.id, {
           title: c.title,
           canvasKind: c.canvasKind,
         }),
         draft: '',
         generating: false,
+        pendingUserMessages: [],
+        contextFiles: [],
       }
       return { conversation, thread }
     }
@@ -216,6 +260,8 @@ export async function conversationOpen(
       artifactPayload: null,
       draft: '',
       generating: false,
+      pendingUserMessages: [],
+      contextFiles: [],
     }
     return { conversation, thread }
   }
@@ -252,8 +298,91 @@ export function buildConversationSavePayload(
       role: m.role,
       content: m.content,
       status:
-        m.status === 'streaming' ? 'complete' : m.status,
+        m.role === 'assistant'
+          ? m.status === 'streaming'
+            ? 'complete'
+            : m.status
+          : undefined,
     })),
     artifactPayload: thread.artifactPayload,
+    contextFiles: thread.contextFiles.map((f) => ({
+      relativePath: f.relativePath,
+      ...(f.displayName != null && f.displayName !== ''
+        ? { displayName: f.displayName }
+        : {}),
+      ...(f.addedAtMs != null ? { addedAtMs: f.addedAtMs } : {}),
+    })),
   }
+}
+
+export type WorkspaceReadTextFileResult = {
+  text: string
+  truncated: boolean
+}
+
+export async function workspaceReadTextFile(
+  workspaceId: string,
+  relativePath: string,
+  maxBytes?: number | null,
+): Promise<WorkspaceReadTextFileResult> {
+  if (!isTauri()) {
+    throw new Error('Reading workspace files requires the desktop app.')
+  }
+  return invoke<WorkspaceReadTextFileResult>('workspace_read_text_file', {
+    workspaceId,
+    relativePath,
+    maxBytes: maxBytes ?? null,
+  })
+}
+
+export type WorkspaceImportFileResult = {
+  relativePath: string
+  displayName: string
+}
+
+export async function workspaceImportFile(
+  workspaceId: string,
+  conversationId: string | null,
+  sourcePath: string,
+): Promise<WorkspaceImportFileResult> {
+  if (!isTauri()) {
+    throw new Error('Importing files requires the desktop app.')
+  }
+  return invoke<WorkspaceImportFileResult>('workspace_import_file', {
+    workspaceId,
+    conversationId,
+    sourcePath,
+  })
+}
+
+export type WorkspaceDirEntryDto = {
+  name: string
+  relativePath: string
+  isDir: boolean
+}
+
+export async function workspaceListDir(
+  workspaceId: string,
+  relativeDir: string,
+): Promise<WorkspaceDirEntryDto[]> {
+  if (!isTauri()) return []
+  return invoke<WorkspaceDirEntryDto[]>('workspace_list_dir', {
+    workspaceId,
+    relativeDir,
+  })
+}
+
+export type WorkspaceFileIndexEntry = {
+  relativePath: string
+  name: string
+}
+
+/** Recursive file index for @ mentions (excludes node_modules, .git, etc.). */
+export async function workspaceListAllFiles(
+  workspaceId: string,
+): Promise<WorkspaceFileIndexEntry[]> {
+  if (!isTauri()) return []
+  return invoke<WorkspaceFileIndexEntry[]>('workspace_list_all_files', {
+    workspaceId,
+  })
 }

@@ -2,6 +2,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Frameless Tauri window: Chromium/WebView2 honors -webkit-app-region for dragging. */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+[data-tauri-drag-region="false"] {
+  -webkit-app-region: no-drag;
+}
+
 /* Semantic palette: Braian prototype neutrals + semantic colors; green primary (not steel-blue). */
 html.light {
   color-scheme: light;
@@ -211,4 +219,116 @@ html:not(.light):not(.dark) {
 
 .markdown-document-canvas .mdxeditor {
   --basePageBg: transparent;
+}
+
+/* Chat column: streamed Markdown (react-markdown); tokens only. */
+.chat-message-markdown {
+  color: var(--app-text-2);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.chat-message-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.chat-message-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-markdown h1,
+.chat-message-markdown h2,
+.chat-message-markdown h3,
+.chat-message-markdown h4 {
+  color: var(--app-text-1);
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.chat-message-markdown h1 {
+  font-size: 1.125rem;
+}
+
+.chat-message-markdown h2 {
+  font-size: 1.05rem;
+}
+
+.chat-message-markdown h3,
+.chat-message-markdown h4 {
+  font-size: 1rem;
+}
+
+.chat-message-markdown p {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.chat-message-markdown ul,
+.chat-message-markdown ol {
+  margin: 0.35rem 0;
+  padding-left: 1.25rem;
+}
+
+.chat-message-markdown li {
+  margin: 0.15rem 0;
+}
+
+.chat-message-markdown a {
+  color: var(--app-accent-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-message-markdown blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--app-accent-500);
+  color: var(--app-text-3);
+}
+
+.chat-message-markdown code {
+  font-size: 0.8125em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  background: var(--app-muted);
+  color: var(--app-text-1);
+}
+
+.chat-message-markdown pre {
+  margin: 0.5rem 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-2);
+  overflow-x: auto;
+}
+
+.chat-message-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.8125rem;
+}
+
+.chat-message-markdown table {
+  width: 100%;
+  margin: 0.5rem 0;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+}
+
+.chat-message-markdown th,
+.chat-message-markdown td {
+  border: 1px solid var(--app-border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.chat-message-markdown th {
+  background: var(--app-muted);
+  color: var(--app-text-1);
+}
+
+.chat-tool-call pre {
+  scrollbar-width: thin;
 }

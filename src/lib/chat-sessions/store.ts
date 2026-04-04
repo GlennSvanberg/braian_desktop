@@ -1,12 +1,21 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
 import { streamChatTurn } from '@/lib/ai'
-import { getPlaceholderArtifactPayload } from '@/lib/artifacts/placeholder-payloads'
+import type { ChatStreamChunk } from '@/lib/ai/types'
+import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
+import { isTauri } from '@/lib/tauri-env'
 
 import { parseChatSessionKey } from './keys'
-import { DEFAULT_CHAT_THREAD, type ChatThreadState } from './types'
+import {
+  DEFAULT_CHAT_THREAD,
+  type AssistantPart,
+  type AssistantChatMessage,
+  type ChatMessage,
+  type ChatThreadState,
+  type ContextFileEntry,
+} from './types'
 
 function createId() {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -58,6 +67,90 @@ function patchThread(
 
 const abortBySession = new Map<string, AbortController>()
 
+function appendAssistantTextDelta(
+  parts: AssistantPart[] | undefined,
+  delta: string,
+): AssistantPart[] | undefined {
+  if (!delta) return parts
+  if (!parts || parts.length === 0) {
+    return [{ type: 'text', text: delta }]
+  }
+  const last = parts[parts.length - 1]
+  if (last.type === 'text') {
+    return [
+      ...parts.slice(0, -1),
+      { type: 'text', text: last.text + delta },
+    ]
+  }
+  return [...parts, { type: 'text', text: delta }]
+}
+
+function appendToolStart(
+  parts: AssistantPart[] | undefined,
+  toolCallId: string,
+  toolName: string,
+): AssistantPart[] {
+  const base = parts ?? []
+  return [
+    ...base,
+    {
+      type: 'tool',
+      toolCallId,
+      toolName,
+      argsText: '',
+      status: 'streaming',
+    },
+  ]
+}
+
+function appendToolArgs(
+  parts: AssistantPart[] | undefined,
+  toolCallId: string,
+  delta: string,
+): AssistantPart[] | undefined {
+  if (!parts || !delta) return parts
+  return parts.map((p) =>
+    p.type === 'tool' && p.toolCallId === toolCallId
+      ? { ...p, argsText: p.argsText + delta }
+      : p,
+  )
+}
+
+function finalizeToolPart(
+  parts: AssistantPart[] | undefined,
+  chunk: Extract<ChatStreamChunk, { type: 'tool-end' }>,
+): AssistantPart[] | undefined {
+  if (!parts) return undefined
+  const resultSummary =
+    chunk.result ??
+    (chunk.input !== undefined
+      ? typeof chunk.input === 'string'
+        ? chunk.input
+        : JSON.stringify(chunk.input)
+      : undefined)
+  return parts.map((p) =>
+    p.type === 'tool' && p.toolCallId === chunk.toolCallId
+      ? {
+          ...p,
+          toolName: chunk.toolName || p.toolName,
+          status: 'done' as const,
+          ...(resultSummary ? { result: resultSummary } : {}),
+        }
+      : p,
+  )
+}
+
+function mapAssistant(
+  messages: ChatMessage[],
+  assistantId: string,
+  fn: (m: AssistantChatMessage) => AssistantChatMessage,
+): ChatMessage[] {
+  return messages.map((m) => {
+    if (m.role !== 'assistant' || m.id !== assistantId) return m
+    return fn(m)
+  })
+}
+
 export function subscribeThreads(cb: () => void) {
   threadListeners.add(cb)
   return () => threadListeners.delete(cb)
@@ -76,7 +169,12 @@ export function getThreadSnapshot(key: string): ChatThreadState {
 export function replaceThread(sessionKey: string, state: ChatThreadState) {
   threads = {
     ...threads,
-    [sessionKey]: { ...state, generating: false },
+    [sessionKey]: {
+      ...state,
+      generating: false,
+      pendingUserMessages: state.pendingUserMessages ?? [],
+      contextFiles: state.contextFiles ?? [],
+    },
   }
   emitThreads()
 }
@@ -100,12 +198,21 @@ export function patchDocumentArtifactBody(sessionKey: string, body: string) {
   })
 }
 
+/** Abort the current assistant stream for this session (explicit Stop). */
+export function stopChatGeneration(sessionKey: string) {
+  abortBySession.get(sessionKey)?.abort()
+}
+
 type SeedCanvasOpts = {
   title?: string
   canvasKind?: 'document' | 'tabular' | 'visual'
 }
 
-/** Open the workspace canvas with the mock payload for this saved chat (empty threads only). */
+/**
+ * Seed mock-browser demo threads only (empty threads, known conversation ids).
+ * Does not open the artifact panel — it opens when the assistant emits canvas content
+ * (e.g. `open_document_canvas` → artifact chunk).
+ */
 export function seedCanvasPreviewIfEmpty(
   sessionKey: string,
   conversationId: string | null,
@@ -117,49 +224,39 @@ export function seedCanvasPreviewIfEmpty(
 
   const conv = getConversationById(conversationId)
   const demoMessages = conv?.demoMessages
+  if (!demoMessages || demoMessages.length === 0) return
+
   const payloadOpts = {
     title: opts?.title,
     canvasKind: opts?.canvasKind,
   }
-  if (demoMessages && demoMessages.length > 0) {
-    patchThread(sessionKey, {
-      messages: demoMessages.map((m, i) => ({
+  patchThread(sessionKey, {
+    messages: demoMessages.map((m, i) => {
+      if (m.role === 'user') {
+        return {
+          id: `seed-${conversationId}-${i}`,
+          role: 'user' as const,
+          content: m.content,
+        }
+      }
+      return {
         id: `seed-${conversationId}-${i}`,
-        role: m.role,
+        role: 'assistant' as const,
         content: m.content,
         status: 'complete' as const,
-      })),
-      artifactOpen: true,
-      artifactPayload: getMockArtifactPayloadForChat(
-        conversationId,
-        payloadOpts,
-      ),
-    })
-    return
-  }
-
-  if (prev.artifactPayload !== null) return
-  const kind =
-    payloadOpts.canvasKind ??
-    (conv?.canvasKind as 'document' | 'tabular' | 'visual' | undefined) ??
-    'document'
-  const title =
-    payloadOpts.title ?? conv?.title ?? 'New chat'
-  patchThread(sessionKey, {
-    artifactOpen: true,
-    artifactPayload: getPlaceholderArtifactPayload(kind, title),
+      }
+    }),
+    artifactOpen: false,
+    artifactPayload: getMockArtifactPayloadForChat(
+      conversationId,
+      payloadOpts,
+    ),
   })
 }
 
-export function sendChatTurn(sessionKey: string, text: string) {
-  const trimmed = text.trim()
-  if (!trimmed) return
-
+function startChatTurnInternal(sessionKey: string, trimmed: string) {
   const prev = getThread(sessionKey)
-  if (prev.generating) return
 
-  const existing = abortBySession.get(sessionKey)
-  existing?.abort()
   const ac = new AbortController()
   abortBySession.set(sessionKey, ac)
 
@@ -169,17 +266,16 @@ export function sendChatTurn(sessionKey: string, text: string) {
     content: trimmed,
   }
   const assistantId = createId()
-  const assistantMsg = {
+  const assistantMsg: AssistantChatMessage = {
     id: assistantId,
-    role: 'assistant' as const,
+    role: 'assistant',
     content: '',
-    status: 'streaming' as const,
+    status: 'streaming',
   }
 
   setGenerating(sessionKey, true)
   patchThread(sessionKey, (p) => ({
     ...p,
-    draft: '',
     generating: true,
     messages: [...p.messages, userMsg, assistantMsg],
   }))
@@ -192,23 +288,64 @@ export function sendChatTurn(sessionKey: string, text: string) {
   void (async () => {
     try {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
+      const ap = getThread(sessionKey).artifactPayload
+      const documentCanvasSnapshot =
+        ap?.kind === 'document'
+          ? {
+              body: ap.body,
+              ...(ap.title !== undefined && ap.title !== ''
+                ? { title: ap.title }
+                : {}),
+            }
+          : null
+
+      let contextFiles:
+        | Awaited<ReturnType<typeof loadContextFilesForModel>>
+        | undefined
+      if (prev.contextFiles.length > 0) {
+        if (!isTauri()) {
+          contextFiles = prev.contextFiles.map((f) => ({
+            relativePath: f.relativePath,
+            ...(f.displayName != null && f.displayName !== ''
+              ? { displayName: f.displayName }
+              : {}),
+            text: '[File contents load in the desktop app only; this is a web preview.]',
+            fileTruncated: false,
+          }))
+        } else {
+          try {
+            contextFiles = await loadContextFilesForModel(
+              workspaceId,
+              prev.contextFiles,
+            )
+          } catch (e) {
+            console.error('[braian] load context files', e)
+            contextFiles = undefined
+          }
+        }
+      }
+
       for await (const chunk of streamChatTurn(
         trimmed,
         ac.signal,
         {
           workspaceId,
           conversationId,
+          documentCanvasSnapshot,
+          ...(contextFiles != null && contextFiles.length > 0
+            ? { contextFiles }
+            : {}),
         },
         priorMessages,
       )) {
         if (chunk.type === 'text-delta') {
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: p.messages.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: m.content + chunk.text }
-                : m,
-            ),
+            messages: mapAssistant(p.messages, assistantId, (m) => ({
+              ...m,
+              content: m.content + chunk.text,
+              parts: appendAssistantTextDelta(m.parts, chunk.text),
+            })),
           }))
         } else if (chunk.type === 'artifact') {
           patchThread(sessionKey, (p) => ({
@@ -216,12 +353,41 @@ export function sendChatTurn(sessionKey: string, text: string) {
             artifactOpen: true,
             artifactPayload: chunk.payload,
           }))
+        } else if (chunk.type === 'tool-start') {
+          patchThread(sessionKey, (p) => ({
+            ...p,
+            messages: mapAssistant(p.messages, assistantId, (m) => ({
+              ...m,
+              parts: appendToolStart(
+                m.parts,
+                chunk.toolCallId,
+                chunk.toolName,
+              ),
+            })),
+          }))
+        } else if (chunk.type === 'tool-args-delta') {
+          patchThread(sessionKey, (p) => ({
+            ...p,
+            messages: mapAssistant(p.messages, assistantId, (m) => ({
+              ...m,
+              parts: appendToolArgs(m.parts, chunk.toolCallId, chunk.delta),
+            })),
+          }))
+        } else if (chunk.type === 'tool-end') {
+          patchThread(sessionKey, (p) => ({
+            ...p,
+            messages: mapAssistant(p.messages, assistantId, (m) => ({
+              ...m,
+              parts: finalizeToolPart(m.parts, chunk),
+            })),
+          }))
         } else if (chunk.type === 'done') {
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: p.messages.map((m) =>
-              m.id === assistantId ? { ...m, status: 'complete' as const } : m,
-            ),
+            messages: mapAssistant(p.messages, assistantId, (m) => ({
+              ...m,
+              status: 'complete' as const,
+            })),
           }))
         }
       }
@@ -242,17 +408,13 @@ export function sendChatTurn(sessionKey: string, text: string) {
           detail.length > 600 ? `${detail.slice(0, 600)}…` : detail
         patchThread(sessionKey, (p) => ({
           ...p,
-          messages: p.messages.map((m) =>
-            m.id === assistantId
-              ? {
-                  ...m,
-                  content:
-                    m.content ||
-                    `Could not get a reply.\n\n${userLine}`,
-                  status: 'complete' as const,
-                }
-              : m,
-          ),
+          messages: mapAssistant(p.messages, assistantId, (m) => ({
+            ...m,
+            content:
+              m.content ||
+              `Could not get a reply.\n\n${userLine}`,
+            status: 'complete' as const,
+          })),
         }))
       }
     } finally {
@@ -263,14 +425,42 @@ export function sendChatTurn(sessionKey: string, text: string) {
       patchThread(sessionKey, (p) => ({
         ...p,
         generating: false,
-        messages: p.messages.map((m) =>
-          m.id === assistantId && m.status === 'streaming'
+        messages: mapAssistant(p.messages, assistantId, (m) =>
+          m.status === 'streaming'
             ? { ...m, status: 'complete' as const }
             : m,
         ),
       }))
+
+      const after = getThread(sessionKey)
+      if (after.pendingUserMessages.length > 0) {
+        const [next, ...rest] = after.pendingUserMessages
+        patchThread(sessionKey, (p) => ({
+          ...p,
+          pendingUserMessages: rest,
+        }))
+        queueMicrotask(() => startChatTurnInternal(sessionKey, next))
+      }
     }
   })()
+}
+
+export function sendChatTurn(sessionKey: string, text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return
+
+  const prev = getThread(sessionKey)
+  if (prev.generating) {
+    patchThread(sessionKey, (p) => ({
+      ...p,
+      pendingUserMessages: [...p.pendingUserMessages, trimmed],
+      draft: '',
+    }))
+    return
+  }
+
+  patchThread(sessionKey, (p) => (p.draft === '' ? p : { ...p, draft: '' }))
+  startChatTurnInternal(sessionKey, trimmed)
 }
 
 export function useChatThread(sessionKey: string): ChatThreadState {
@@ -289,6 +479,37 @@ export function useSessionGenerating(sessionKey: string): boolean {
   )
 }
 
+export function addContextFileEntry(
+  sessionKey: string,
+  entry: ContextFileEntry,
+) {
+  patchThread(sessionKey, (p) => {
+    if (p.contextFiles.some((x) => x.relativePath === entry.relativePath)) {
+      return p
+    }
+    return {
+      ...p,
+      contextFiles: [
+        ...p.contextFiles,
+        {
+          ...entry,
+          addedAtMs: entry.addedAtMs ?? Date.now(),
+        },
+      ],
+    }
+  })
+}
+
+export function removeContextFileEntry(
+  sessionKey: string,
+  relativePath: string,
+) {
+  patchThread(sessionKey, (p) => ({
+    ...p,
+    contextFiles: p.contextFiles.filter((x) => x.relativePath !== relativePath),
+  }))
+}
+
 export function useChatThreadActions() {
   const send = useCallback((sessionKey: string, text: string) => {
     sendChatTurn(sessionKey, text)
@@ -299,9 +520,15 @@ export function useChatThreadActions() {
   const patchDocBody = useCallback((sessionKey: string, body: string) => {
     patchDocumentArtifactBody(sessionKey, body)
   }, [])
+  const stop = useCallback((sessionKey: string) => {
+    stopChatGeneration(sessionKey)
+  }, [])
   return {
     sendChatTurn: send,
     setChatDraft: setDraft,
     patchDocumentArtifactBody: patchDocBody,
+    stopChatGeneration: stop,
+    addContextFileEntry,
+    removeContextFileEntry,
   }
 }

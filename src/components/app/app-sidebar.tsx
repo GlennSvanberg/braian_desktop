@@ -3,12 +3,33 @@ import {
   LayoutDashboard,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   PanelLeftIcon,
   Plus,
   Settings,
 } from 'lucide-react'
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import {
+  Link,
+  useNavigate,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router'
 
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +47,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
+import { conversationSetTitle } from '@/lib/workspace-api'
 
 import type { WorkspaceConversation } from './workspace-context'
 import { useWorkspace } from './workspace-context'
@@ -99,10 +121,12 @@ function ConversationSidebarItem({
   workspaceId,
   conversation,
   pathname,
+  onRename,
 }: {
   workspaceId: string
   conversation: WorkspaceConversation
   pathname: string
+  onRename: (c: WorkspaceConversation) => void
 }) {
   const sessionKey = chatSessionKey(workspaceId, conversation.id)
   const generating = useSessionGenerating(sessionKey)
@@ -110,34 +134,98 @@ function ConversationSidebarItem({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        tooltip={`${conversation.title} · ${conversation.updatedLabel}`}
-      >
-        <Link
-          to="/chat/$conversationId"
-          params={{ conversationId: conversation.id }}
+      <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        <SidebarMenuButton
+          asChild
+          isActive={active}
+          className="min-w-0 flex-1 pr-1"
+          tooltip={`${conversation.title} · ${conversation.updatedLabel}`}
         >
-          <MessageSquare className="size-4 shrink-0" aria-hidden />
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate">{conversation.title}</span>
-            {generating ? (
-              <Loader2
-                className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
-                aria-label="Generating reply"
-              />
-            ) : null}
-          </span>
-        </Link>
-      </SidebarMenuButton>
+          <Link
+            to="/chat/$conversationId"
+            params={{ conversationId: conversation.id }}
+          >
+            <MessageSquare className="size-4 shrink-0" aria-hidden />
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate">{conversation.title}</span>
+              {generating ? (
+                <Loader2
+                  className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
+                  aria-label="Generating reply"
+                />
+              ) : null}
+            </span>
+          </Link>
+        </SidebarMenuButton>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-sidebar-foreground size-8 shrink-0 opacity-70 hover:opacity-100"
+              aria-label={`Actions for ${conversation.title}`}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+            >
+              <MoreHorizontal className="size-4" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onSelect={() => onRename(conversation)}>
+              Rename…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </SidebarMenuItem>
   )
 }
 
 export function AppSidebar() {
-  const { activeWorkspaceId, activeWorkspace, conversations } = useWorkspace()
+  const router = useRouter()
+  const { activeWorkspaceId, activeWorkspace, conversations, refreshConversations } =
+    useWorkspace()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
+  const [renameBusy, setRenameBusy] = useState(false)
+
+  const openRename = (c: WorkspaceConversation) => {
+    setRenameTargetId(c.id)
+    setRenameDraft(c.title)
+    setRenameOpen(true)
+  }
+
+  const submitRename = () => {
+    if (!activeWorkspaceId || !renameTargetId) return
+    const trimmed = renameDraft.trim()
+    if (!trimmed) return
+    setRenameBusy(true)
+    void (async () => {
+      try {
+        await conversationSetTitle({
+          id: renameTargetId,
+          workspaceId: activeWorkspaceId,
+          title: trimmed,
+        })
+        await refreshConversations()
+        if (pathname === `/chat/${renameTargetId}`) {
+          await router.invalidate()
+        }
+        setRenameOpen(false)
+      } catch (e) {
+        console.error(e)
+        const msg = e instanceof Error ? e.message : String(e)
+        window.alert(msg)
+      } finally {
+        setRenameBusy(false)
+      }
+    })()
+  }
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -217,6 +305,7 @@ export function AppSidebar() {
                       workspaceId={activeWorkspaceId}
                       conversation={c}
                       pathname={pathname}
+                      onRename={openRename}
                     />
                   ))
                 )}
@@ -237,6 +326,52 @@ export function AppSidebar() {
         </div>
       </SidebarFooter>
       <SidebarRail />
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent showCloseButton={!renameBusy}>
+          <DialogHeader>
+            <DialogTitle>Rename chat</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameDraft}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submitRename()
+              }
+            }}
+            placeholder="Chat title"
+            autoFocus
+            disabled={renameBusy}
+            aria-label="Chat title"
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={renameBusy}
+              onClick={() => setRenameOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="gap-2"
+              disabled={renameBusy || !renameDraft.trim()}
+              onClick={submitRename}
+            >
+              {renameBusy ? (
+                <>
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                  Saving…
+                </>
+              ) : (
+                'Save'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   )
 }

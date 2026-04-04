@@ -1,8 +1,27 @@
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 
+/** In-memory document canvas at send time (includes edits not yet flushed to disk). */
+export type DocumentCanvasSnapshot = {
+  body: string
+  title?: string
+}
+
+/** Resolved UTF-8 text for one workspace file passed to the model this turn. */
+export type ContextFileForModel = {
+  relativePath: string
+  displayName?: string
+  text: string
+  /** True when read was truncated by byte or total-char budget. */
+  fileTruncated?: boolean
+}
+
 export type ChatTurnContext = {
   workspaceId: string
   conversationId: string | null
+  /** When set, the model must treat this as the latest canvas markdown for this turn. */
+  documentCanvasSnapshot?: DocumentCanvasSnapshot | null
+  /** Workspace files loaded for this user turn (paths relative to workspace root). */
+  contextFiles?: ContextFileForModel[]
 }
 
 export type PriorChatMessage = {
@@ -15,6 +34,23 @@ export type ChatStreamChunk =
   | {
       type: 'artifact'
       payload: WorkspaceArtifactPayload
+    }
+  | {
+      type: 'tool-start'
+      toolCallId: string
+      toolName: string
+    }
+  | {
+      type: 'tool-args-delta'
+      toolCallId: string
+      delta: string
+    }
+  | {
+      type: 'tool-end'
+      toolCallId: string
+      toolName: string
+      input?: unknown
+      result?: string
     }
   | { type: 'done' }
 

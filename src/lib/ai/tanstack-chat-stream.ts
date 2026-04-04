@@ -23,11 +23,15 @@ import type {
 
 const TRIAGE_SYSTEM = `You are Braian, the user's primary assistant in Braian Desktop — a local-first workspace for business users with chat and a workspace panel for documents, data, and visuals.
 
-When the user wants to draft or co-write long-form text (stories, specs, documents) in the workspace canvas, call the tool open_document_canvas with the full markdown. Do not only paste long documents in chat when they asked for the canvas.
+When the user wants to draft or co-write long-form text (stories, specs, documents) in the workspace canvas, call the tool open_document_canvas with the **complete** markdown for the file after your edits.
+
+If a "Document canvas snapshot" system message is present, it is the **authoritative latest text** (including the user's manual edits). Start from that snapshot, apply only what they asked for, and pass the **full merged** markdown to open_document_canvas—never discard their writing unless they explicitly asked to remove it.
+
+If a "Attached workspace files" system message is present, those excerpts are the **authoritative file contents for this turn** (paths are relative to the workspace root). Large files may be truncated.
 
 If open_document_canvas is not available (unsaved chat), say they need a saved conversation first, then they can ask again.
 
-You may use tools offered in this turn when appropriate. Do not claim to have read arbitrary files or run shell commands unless those tools exist here.`
+You may use tools offered in this turn when appropriate. Do not claim to have read arbitrary files or run shell commands unless those tools exist here or the user attached file content in the system messages above.`
 
 function resolveFetch(): typeof fetch {
   if (isTauri()) {
@@ -38,6 +42,39 @@ function resolveFetch(): typeof fetch {
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '')
+}
+
+function contextFilesSystemPrompt(
+  files: NonNullable<ChatTurnContext['contextFiles']>,
+): string {
+  if (files.length === 0) return ''
+  const lines: string[] = [
+    'Attached workspace files for this user message (paths relative to workspace root).',
+    '',
+  ]
+  for (const f of files) {
+    const label = f.displayName?.trim() || f.relativePath
+    const truncNote = f.fileTruncated
+      ? '\n[Note: this file was truncated by size limits — only the beginning is included.]\n'
+      : ''
+    lines.push(`--- FILE: ${f.relativePath} (${label}) ---`)
+    lines.push(f.text)
+    lines.push(truncNote + '--- END FILE ---\n')
+  }
+  return lines.join('\n')
+}
+
+function documentCanvasSnapshotPrompt(
+  snapshot: NonNullable<ChatTurnContext['documentCanvasSnapshot']>,
+): string {
+  const titleNote =
+    snapshot.title != null && snapshot.title !== ''
+      ? `Canvas title: ${snapshot.title}\n\n`
+      : ''
+  return (
+    `${titleNote}Document canvas snapshot (latest markdown from the workspace panel as of this user message — your open_document_canvas output must be this entire text plus your edits, preserving the user's work):\n\n` +
+    snapshot.body
+  )
 }
 
 function braianArtifactFromCustomValue(
@@ -97,6 +134,18 @@ export async function* streamTanStackChatTurn(
 
   const canvasTools = buildCanvasTools(context)
 
+  const cf =
+    context?.contextFiles != null && context.contextFiles.length > 0
+      ? contextFilesSystemPrompt(context.contextFiles)
+      : ''
+  const systemPrompts = [
+    TRIAGE_SYSTEM,
+    ...(cf ? [cf] : []),
+    ...(context?.documentCanvasSnapshot != null
+      ? [documentCanvasSnapshotPrompt(context.documentCanvasSnapshot)]
+      : []),
+  ]
+
   // Dynamic model ids from settings use type assertions; adapters validate at runtime.
   const stream = chat({
     adapter: buildAdapter(
@@ -107,7 +156,7 @@ export async function* streamTanStackChatTurn(
       fetchImpl,
     ) as AnyTextAdapter,
     messages: history,
-    systemPrompts: [TRIAGE_SYSTEM],
+    systemPrompts,
     abortController: ac,
     conversationId:
       context?.conversationId != null ? context.conversationId : undefined,
@@ -126,6 +175,37 @@ export async function* streamTanStackChatTurn(
         const payload = braianArtifactFromCustomValue(chunk.value)
         if (payload) {
           yield { type: 'artifact', payload }
+        }
+      } else if (chunk.type === 'TOOL_CALL_START') {
+        const toolCallId =
+          typeof chunk.toolCallId === 'string' ? chunk.toolCallId : ''
+        const toolName =
+          typeof chunk.toolName === 'string' ? chunk.toolName : 'tool'
+        if (toolCallId) {
+          yield { type: 'tool-start', toolCallId, toolName }
+        }
+      } else if (chunk.type === 'TOOL_CALL_ARGS') {
+        const toolCallId =
+          typeof chunk.toolCallId === 'string' ? chunk.toolCallId : ''
+        const delta = typeof chunk.delta === 'string' ? chunk.delta : ''
+        if (toolCallId && delta) {
+          yield { type: 'tool-args-delta', toolCallId, delta }
+        }
+      } else if (chunk.type === 'TOOL_CALL_END') {
+        const toolCallId =
+          typeof chunk.toolCallId === 'string' ? chunk.toolCallId : ''
+        const toolName =
+          typeof chunk.toolName === 'string' ? chunk.toolName : 'tool'
+        if (toolCallId) {
+          yield {
+            type: 'tool-end',
+            toolCallId,
+            toolName,
+            ...(chunk.input !== undefined ? { input: chunk.input } : {}),
+            ...(typeof chunk.result === 'string'
+              ? { result: chunk.result }
+              : {}),
+          }
         }
       } else if (chunk.type === 'RUN_ERROR') {
         const msg = chunk.error?.message ?? 'The model returned an error.'
