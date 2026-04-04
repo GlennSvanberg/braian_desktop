@@ -122,4 +122,75 @@ describe('buildTanStackChatTurnArgs', () => {
       { role: 'user', content: 'last' },
     ])
   })
+
+  it('uses lazy dashboard tools and switch_to_app_builder when harness is off', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+        appHarnessEnabled: false,
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const dashRead = r.toolsDisplay.find(
+      (t) => t.name === 'read_workspace_dashboard',
+    )
+    expect(dashRead?.lazy).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
+    ).toBe(true)
+    expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
+  })
+
+  it('includes eager dashboard tools, app-builder section, no switch when harness on', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+        appHarnessEnabled: true,
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const dashRead = r.toolsDisplay.find(
+      (t) => t.name === 'read_workspace_dashboard',
+    )
+    expect(dashRead?.lazy).toBeUndefined()
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'apply_workspace_dashboard'),
+    ).toBe(true)
+    expect(r.toolsDisplay.some((t) => t.name === 'upsert_workspace_page')).toBe(
+      true,
+    )
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
+    ).toBe(false)
+    expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(true)
+  })
+
+  it('omits dashboard tools when workspace is detached even if harness on', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: '__braian_detached__',
+        conversationId: 'c1',
+        agentMode: 'document',
+        appHarnessEnabled: true,
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'read_workspace_dashboard'),
+    ).toBe(false)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
+    ).toBe(false)
+    expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
+  })
 })

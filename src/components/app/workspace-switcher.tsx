@@ -112,6 +112,7 @@ export function WorkspaceSwitcher() {
       setCreateOpen(false)
       await refreshWorkspaces()
       setActiveWorkspaceId(ws.id)
+      navigate({ to: '/dashboard' })
     })
   }
 
@@ -125,6 +126,7 @@ export function WorkspaceSwitcher() {
       const ws = await workspaceAddFromPath(path)
       await refreshWorkspaces()
       setActiveWorkspaceId(ws.id)
+      navigate({ to: '/dashboard' })
     })
   }
 
@@ -234,7 +236,10 @@ export function WorkspaceSwitcher() {
                 workspaces.map((ws) => (
                   <DropdownMenuItem
                     key={ws.id}
-                    onClick={() => setActiveWorkspaceId(ws.id)}
+                    onClick={() => {
+                      setActiveWorkspaceId(ws.id)
+                      navigate({ to: '/dashboard' })
+                    }}
                     className="cursor-pointer gap-2 p-2"
                   >
                     <div className="flex size-6 items-center justify-center rounded-md border border-border bg-muted">

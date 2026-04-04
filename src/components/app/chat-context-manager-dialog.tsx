@@ -283,6 +283,7 @@ export function ChatContextManagerDialog({
             workspaceId,
             conversationId,
             agentMode: thread.agentMode ?? 'document',
+            appHarnessEnabled: thread.appHarnessEnabled ?? false,
             documentCanvasSnapshot,
             ...(contextFiles != null && contextFiles.length > 0
               ? { contextFiles }
@@ -316,6 +317,7 @@ export function ChatContextManagerDialog({
     thread.messages,
     thread.draft,
     thread.agentMode,
+    thread.appHarnessEnabled,
     thread.artifactPayload,
     thread.contextFiles,
     isTauriRuntime,

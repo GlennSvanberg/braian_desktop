@@ -3,6 +3,7 @@ import {
   Check,
   Copy,
   CornerDownLeft,
+  FolderOpen,
   Loader2,
   Paperclip,
   Square,
@@ -145,6 +146,8 @@ export function ChatWorkbench({
     setChatDraft,
     patchDocumentArtifactBody,
     stopChatGeneration,
+    setChatAgentMode,
+    setChatAppHarnessEnabled,
     addContextFileEntry,
     removeContextFileEntry,
   } = useChatThreadActions()
@@ -163,6 +166,9 @@ export function ChatWorkbench({
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetWs, setMoveTargetWs] = useState('')
   const [moveBusy, setMoveBusy] = useState(false)
+  const [movingIntoWorkspaceId, setMovingIntoWorkspaceId] = useState<
+    string | null
+  >(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const composerDropZoneRef = useRef<HTMLDivElement>(null)
   const dragHasFilesRef = useRef(false)
@@ -253,6 +259,7 @@ export function ChatWorkbench({
     pendingUserMessages,
     contextFiles,
     agentMode,
+    appHarnessEnabled,
   } = thread
 
   const mention = useMemo(
@@ -597,61 +604,70 @@ export function ChatWorkbench({
     }
   }, [])
 
-  const confirmMoveToWorkspace = useCallback(async () => {
-    if (!isDetachedSession || !moveTargetWs || moveBusy || generating) return
-    setMoveBusy(true)
-    try {
-      const threadNow = getThreadSnapshot(sessionKey)
-      const created = await conversationCreate(moveTargetWs)
-      const trimmedTitle = conversationTitle.trim()
-      const title =
-        trimmedTitle &&
-        trimmedTitle !== DEFAULT_AGENT_TITLE &&
-        trimmedTitle !== DEFAULT_CHAT_TITLE
-          ? trimmedTitle
-          : (() => {
-              const firstUser = threadNow.messages.find(
-                (m) => m.role === 'user' && m.content.trim().length > 0,
-              )
-              return firstUser
-                ? deriveConversationTitle(firstUser.content)
-                : created.title
-            })()
-      const meta = {
-        id: created.id,
-        workspaceId: moveTargetWs,
-        title,
-        canvasKind: created.canvasKind,
+  const runMoveToWorkspace = useCallback(
+    async (targetWorkspaceId: string) => {
+      if (!isDetachedSession || !targetWorkspaceId || moveBusy || generating)
+        return
+      setMoveBusy(true)
+      setMovingIntoWorkspaceId(targetWorkspaceId)
+      try {
+        const threadNow = getThreadSnapshot(sessionKey)
+        const created = await conversationCreate(targetWorkspaceId)
+        const trimmedTitle = conversationTitle.trim()
+        const title =
+          trimmedTitle &&
+          trimmedTitle !== DEFAULT_AGENT_TITLE &&
+          trimmedTitle !== DEFAULT_CHAT_TITLE
+            ? trimmedTitle
+            : (() => {
+                const firstUser = threadNow.messages.find(
+                  (m) => m.role === 'user' && m.content.trim().length > 0,
+                )
+                return firstUser
+                  ? deriveConversationTitle(firstUser.content)
+                  : created.title
+              })()
+        const meta = {
+          id: created.id,
+          workspaceId: targetWorkspaceId,
+          title,
+          canvasKind: created.canvasKind,
+        }
+        const payload = buildConversationSavePayload(threadNow, meta)
+        await conversationSave(payload)
+        await refreshConversationLists()
+        replaceThread(sessionKey, { ...DEFAULT_CHAT_THREAD })
+        setActiveWorkspaceId(targetWorkspaceId)
+        setMoveOpen(false)
+        navigate({
+          to: '/chat/$conversationId',
+          params: { conversationId: created.id },
+        })
+        await router.invalidate()
+      } catch (e) {
+        console.error(e)
+        window.alert(e instanceof Error ? e.message : String(e))
+      } finally {
+        setMoveBusy(false)
+        setMovingIntoWorkspaceId(null)
       }
-      const payload = buildConversationSavePayload(threadNow, meta)
-      await conversationSave(payload)
-      await refreshConversationLists()
-      replaceThread(sessionKey, { ...DEFAULT_CHAT_THREAD })
-      setActiveWorkspaceId(moveTargetWs)
-      setMoveOpen(false)
-      navigate({
-        to: '/chat/$conversationId',
-        params: { conversationId: created.id },
-      })
-      await router.invalidate()
-    } catch (e) {
-      console.error(e)
-      window.alert(e instanceof Error ? e.message : String(e))
-    } finally {
-      setMoveBusy(false)
-    }
-  }, [
-    isDetachedSession,
-    moveTargetWs,
-    moveBusy,
-    generating,
-    sessionKey,
-    conversationTitle,
-    refreshConversationLists,
-    setActiveWorkspaceId,
-    navigate,
-    router,
-  ])
+    },
+    [
+      isDetachedSession,
+      moveBusy,
+      generating,
+      sessionKey,
+      conversationTitle,
+      refreshConversationLists,
+      setActiveWorkspaceId,
+      navigate,
+      router,
+    ],
+  )
+
+  const confirmMoveToWorkspace = useCallback(() => {
+    void runMoveToWorkspace(moveTargetWs)
+  }, [runMoveToWorkspace, moveTargetWs])
 
   const onUpdateMemoryNow = useCallback(() => {
     if (!conversationId || !activeWorkspaceId || memoryUpdateBusy) return
@@ -728,6 +744,20 @@ export function ChatWorkbench({
                     Move to workspace
                   </Button>
                 ) : null}
+                {conversationId && isTauriRuntime && !isDetachedSession ? (
+                  <Button
+                    type="button"
+                    variant={appHarnessEnabled ? 'default' : 'outline'}
+                    size="sm"
+                    className="border-border h-7 gap-1.5 px-2 text-xs"
+                    title="Enables workspace dashboard tools and builder instructions for this chat."
+                    onClick={() =>
+                      setChatAppHarnessEnabled(sessionKey, !appHarnessEnabled)
+                    }
+                  >
+                    Make app
+                  </Button>
+                ) : null}
                 {generating ? (
                   <Button
                     type="button"
@@ -789,11 +819,54 @@ export function ChatWorkbench({
           </div>
           {messages.length === 0 ? (
             <div className="border-border bg-muted/25 text-text-3 rounded-xl border border-dashed px-4 py-8 text-center text-sm leading-relaxed">
-              {isNewChat
-                ? isDetachedSession
-                  ? 'New agent (no workspace yet). Send a message to start. When you are ready, use Move to workspace so this thread is saved with a project and file tools are available.'
-                  : 'New conversation. Send a message to start; the workspace panel opens beside chat when you have a canvas.'
-                : 'This thread starts empty. Send a message to chat with the assistant.'}
+              {isNewChat ? (
+                isDetachedSession ? (
+                  isTauriRuntime && workspaces.length > 0 ? (
+                    <div className="flex flex-col items-center gap-6">
+                      <p className="max-w-md leading-relaxed">
+                        New agent (no workspace yet). Send a message to start,
+                        or move into a workspace when you are ready so this
+                        thread is saved with a project and file tools are
+                        available.
+                      </p>
+                      <div className="flex w-full max-w-md flex-col gap-3">
+                        {workspaces.map((w) => (
+                          <Button
+                            key={w.id}
+                            type="button"
+                            variant="outline"
+                            size="lg"
+                            className="border-border text-text-1 hover:bg-muted/60 h-auto min-h-14 justify-start gap-3 px-4 py-3 text-left text-base font-medium shadow-sm"
+                            disabled={generating || moveBusy}
+                            onClick={() => void runMoveToWorkspace(w.id)}
+                          >
+                            {moveBusy && movingIntoWorkspaceId === w.id ? (
+                              <Loader2
+                                className="text-text-3 size-5 shrink-0 animate-spin"
+                                aria-hidden
+                              />
+                            ) : (
+                              <FolderOpen
+                                className="text-accent-600 size-5 shrink-0"
+                                aria-hidden
+                              />
+                            )}
+                            <span className="min-w-0 flex-1 truncate">
+                              {w.name}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    'New agent (no workspace yet). Send a message to start. When you are ready, use Move to workspace so this thread is saved with a project and file tools are available.'
+                  )
+                ) : (
+                  'New conversation. Send a message to start; the workspace panel opens beside chat when you have a canvas.'
+                )
+              ) : (
+                'This thread starts empty. Send a message to chat with the assistant.'
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-5">

@@ -6,6 +6,7 @@ import {
   tanStackTurnArgsToSnapshot,
 } from '@/lib/ai/chat-turn-args'
 import { discoveryResultIncludesCodeTools } from '@/lib/ai/coding-tools'
+import { discoveryResultIncludesDashboardTools } from '@/lib/ai/dashboard-tools'
 import type { ChatStreamChunk } from '@/lib/ai/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
@@ -213,6 +214,7 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
       pendingUserMessages: state.pendingUserMessages ?? [],
       contextFiles: state.contextFiles ?? [],
       agentMode: state.agentMode ?? 'document',
+      appHarnessEnabled: state.appHarnessEnabled ?? false,
     },
   }
   emitThreads()
@@ -248,6 +250,17 @@ export function setChatAgentMode(
 ) {
   patchThread(sessionKey, (prev) =>
     prev.agentMode === agentMode ? prev : { ...prev, agentMode },
+  )
+}
+
+export function setChatAppHarnessEnabled(
+  sessionKey: string,
+  appHarnessEnabled: boolean,
+) {
+  patchThread(sessionKey, (prev) =>
+    prev.appHarnessEnabled === appHarnessEnabled
+      ? prev
+      : { ...prev, appHarnessEnabled },
   )
 }
 
@@ -339,6 +352,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
       const threadNow = getThread(sessionKey)
       const agentMode = threadNow.agentMode ?? 'document'
+      const appHarnessEnabled = threadNow.appHarnessEnabled ?? false
       const ap = threadNow.artifactPayload
       const documentCanvasSnapshot =
         ap?.kind === 'document'
@@ -382,10 +396,16 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         workspaceId,
         conversationId,
         agentMode,
+        appHarnessEnabled,
         documentCanvasSnapshot,
         onAgentModeChange: (mode: AgentMode) => {
           if (mode === 'code') {
             setChatAgentMode(sessionKey, 'code')
+          }
+        },
+        onAppHarnessEnabledChange: (enabled: boolean) => {
+          if (enabled) {
+            setChatAppHarnessEnabled(sessionKey, true)
           }
         },
         ...(contextFiles != null && contextFiles.length > 0
@@ -449,11 +469,13 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
             })),
           }))
         } else if (chunk.type === 'tool-end') {
-          if (
-            chunk.toolName === '__lazy__tool__discovery__' &&
-            discoveryResultIncludesCodeTools(chunk.result)
-          ) {
-            setChatAgentMode(sessionKey, 'code')
+          if (chunk.toolName === '__lazy__tool__discovery__') {
+            if (discoveryResultIncludesCodeTools(chunk.result)) {
+              setChatAgentMode(sessionKey, 'code')
+            }
+            if (discoveryResultIncludesDashboardTools(chunk.result)) {
+              setChatAppHarnessEnabled(sessionKey, true)
+            }
           }
           patchThread(sessionKey, (p) => ({
             ...p,
@@ -623,6 +645,7 @@ export function useChatThreadActions() {
     patchDocumentArtifactBody: patchDocBody,
     stopChatGeneration: stop,
     setChatAgentMode,
+    setChatAppHarnessEnabled,
     addContextFileEntry,
     removeContextFileEntry,
   }

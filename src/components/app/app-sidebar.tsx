@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   BookOpen,
   ChevronDown,
+  FileText,
   LayoutDashboard,
   Loader2,
   MessageSquare,
@@ -59,6 +60,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { listWorkspaceDashboardPageIds } from '@/lib/workspace-dashboard'
 import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
@@ -262,24 +264,43 @@ function WorkspaceConversationGroup({
       >
         <div className="flex w-full min-w-0 items-center gap-0.5 pe-0.5">
           <CollapsibleTrigger asChild>
-            <SidebarMenuButton
+            <Button
               type="button"
-              className="text-sidebar-foreground/75 h-8 min-w-0 flex-1 gap-1.5 pr-1 text-xs font-medium data-[state=open]:bg-sidebar-accent/35"
+              variant="ghost"
+              size="icon"
+              className="text-sidebar-foreground/75 size-7 shrink-0 data-[state=open]:bg-sidebar-accent/35"
+              aria-label={
+                chatsExpanded ? 'Collapse chats' : 'Expand chats'
+              }
             >
               <ChevronDown
                 className="size-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-0 group-data-[state=closed]/collapsible:-rotate-90"
                 aria-hidden
               />
-              <span className="truncate">{workspace.name}</span>
-            </SidebarMenuButton>
+            </Button>
           </CollapsibleTrigger>
+          <SidebarMenuButton
+            type="button"
+            isActive={
+              workspace.id === activeWorkspaceId &&
+              pathname.startsWith('/dashboard')
+            }
+            tooltip={workspace.name}
+            className="text-sidebar-foreground/75 h-8 min-w-0 w-auto max-w-full flex-1 gap-1.5 pr-1 text-xs font-medium"
+            onClick={() => {
+              setActiveWorkspaceId(workspace.id)
+              navigate({ to: '/dashboard' })
+            }}
+          >
+            <span className="truncate">{workspace.name}</span>
+          </SidebarMenuButton>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="text-sidebar-foreground/70 size-7 shrink-0 opacity-0 transition-opacity group-hover/workspace-row:opacity-100 group-focus-within/workspace-row:opacity-100"
+                className="text-sidebar-foreground/70 size-7 shrink-0"
                 disabled={newPending}
                 aria-label={`New chat in ${workspace.name}`}
                 onClick={onNewInWorkspace}
@@ -362,6 +383,21 @@ export function AppSidebar() {
   const [expandedChatsByWs, setExpandedChatsByWs] = useState<
     Record<string, boolean>
   >({})
+  const [dashboardPageIds, setDashboardPageIds] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!isTauriRuntime || !activeWorkspaceId) {
+      setDashboardPageIds([])
+      return
+    }
+    let cancelled = false
+    void listWorkspaceDashboardPageIds(activeWorkspaceId).then((ids) => {
+      if (!cancelled) setDashboardPageIds(ids)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [activeWorkspaceId, isTauriRuntime, pathname])
 
   const visibleWorkspaces = showAllWorkspaces
     ? workspaces
@@ -484,6 +520,33 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {dashboardPageIds.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>App pages</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {dashboardPageIds.map((pageId) => (
+                  <SidebarMenuItem key={pageId}>
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={pageId}
+                      isActive={pathname === `/dashboard/page/${pageId}`}
+                    >
+                      <Link
+                        to="/dashboard/page/$pageId"
+                        params={{ pageId }}
+                        className="truncate"
+                      >
+                        <FileText className="size-4 shrink-0 opacity-70" aria-hidden />
+                        <span className="truncate">{pageId}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
         <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
           <SidebarGroupContent className="min-h-0">

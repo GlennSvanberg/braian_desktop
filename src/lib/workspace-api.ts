@@ -184,6 +184,7 @@ export type ConversationSavePayload = {
   artifactPayload: WorkspaceArtifactPayload | null
   contextFiles: ContextFileEntryDto[]
   agentMode: AgentMode
+  appHarnessEnabled: boolean
 }
 
 export type ConversationOpenResult = {
@@ -206,11 +207,16 @@ type ConversationOpenInvoke = {
     generating: boolean
     contextFiles?: ContextFileEntryDto[]
     agentMode?: string
+    appHarnessEnabled?: boolean
   }
 }
 
 function normalizeAgentMode(raw: string | undefined): AgentMode {
   return raw === 'code' ? 'code' : 'document'
+}
+
+function normalizeAppHarnessEnabled(raw: boolean | undefined): boolean {
+  return raw === true
 }
 
 function mapInvokeThreadToState(
@@ -240,6 +246,7 @@ function mapInvokeThreadToState(
     pendingUserMessages: [],
     contextFiles: thread.contextFiles ?? [],
     agentMode: normalizeAgentMode(thread.agentMode),
+    appHarnessEnabled: normalizeAppHarnessEnabled(thread.appHarnessEnabled),
     lastModelRequestSnapshot: null,
   }
 }
@@ -286,6 +293,7 @@ export async function conversationOpen(
         pendingUserMessages: [],
         contextFiles: [],
         agentMode: 'document',
+        appHarnessEnabled: false,
         lastModelRequestSnapshot: null,
       }
       return { conversation, thread }
@@ -299,6 +307,7 @@ export async function conversationOpen(
       pendingUserMessages: [],
       contextFiles: [],
       agentMode: 'document',
+      appHarnessEnabled: false,
       lastModelRequestSnapshot: null,
     }
     return { conversation, thread }
@@ -351,6 +360,7 @@ export function buildConversationSavePayload(
       ...(f.addedAtMs != null ? { addedAtMs: f.addedAtMs } : {}),
     })),
     agentMode: thread.agentMode ?? 'document',
+    appHarnessEnabled: thread.appHarnessEnabled ?? false,
   }
 }
 

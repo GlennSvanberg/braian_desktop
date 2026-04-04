@@ -15,6 +15,10 @@ fn default_agent_mode() -> String {
   "document".to_string()
 }
 
+fn default_app_harness_enabled() -> bool {
+  false
+}
+
 fn conversation_schema_supported(v: u32) -> bool {
   v == 1 || v == 2 || v == CONVERSATION_SCHEMA_VERSION
 }
@@ -56,6 +60,9 @@ struct ConversationFileV1 {
   /// `"document"` | `"code"` — persisted chat agent mode.
   #[serde(default = "default_agent_mode")]
   agent_mode: String,
+  /// When true, the model receives workspace dashboard builder tools and instructions.
+  #[serde(default = "default_app_harness_enabled")]
+  app_harness_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +97,8 @@ pub struct ChatThreadDto {
   pub context_files: Vec<ContextFileRecord>,
   #[serde(default = "default_agent_mode")]
   pub agent_mode: String,
+  #[serde(default = "default_app_harness_enabled")]
+  pub app_harness_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -114,6 +123,8 @@ pub struct ConversationSaveInput {
   pub context_files: Vec<ContextFileRecord>,
   #[serde(default = "default_agent_mode")]
   pub agent_mode: String,
+  #[serde(default = "default_app_harness_enabled")]
+  pub app_harness_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +157,14 @@ fn artifacts_dir(workspace_root: &Path) -> PathBuf {
 
 fn canvas_dir(workspace_root: &Path) -> PathBuf {
   braian_dir(workspace_root).join("canvas")
+}
+
+fn dashboard_dir(workspace_root: &Path) -> PathBuf {
+  braian_dir(workspace_root).join("dashboard")
+}
+
+fn dashboard_pages_dir(workspace_root: &Path) -> PathBuf {
+  dashboard_dir(workspace_root).join("pages")
 }
 
 fn conversation_path(workspace_root: &Path, id: &str) -> PathBuf {
@@ -183,6 +202,7 @@ fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   fs::create_dir_all(conversations_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(artifacts_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(canvas_dir(workspace_root)).map_err(|e| e.to_string())?;
+  fs::create_dir_all(dashboard_pages_dir(workspace_root)).map_err(|e| e.to_string())?;
   let schema_path = b.join("schema.json");
   if !schema_path.exists() {
     fs::create_dir_all(&b).map_err(|e| e.to_string())?;
@@ -360,6 +380,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
     generating: false,
     context_files: f.context_files,
     agent_mode: f.agent_mode,
+    app_harness_enabled: f.app_harness_enabled,
   }
 }
 
@@ -440,6 +461,7 @@ pub fn conversation_create(
     messages: vec![],
     context_files: vec![],
     agent_mode: default_agent_mode(),
+    app_harness_enabled: false,
   };
   let path = conversation_path(&root, &id);
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
@@ -528,6 +550,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
       .collect(),
     context_files: input.context_files.clone(),
     agent_mode: input.agent_mode.clone(),
+    app_harness_enabled: input.app_harness_enabled,
   };
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
   fs::write(&path, json).map_err(|e| e.to_string())?;

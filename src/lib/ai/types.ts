@@ -21,8 +21,12 @@ export type ChatTurnContext = {
   conversationId: string | null
   /** Document canvas vs coding agent (files + commands under workspace). */
   agentMode?: AgentMode
+  /** Workspace dashboard builder tools + instructions (Make app in UI). */
+  appHarnessEnabled?: boolean
   /** Called when the model enables code capabilities (e.g. `switch_to_code_agent` tool). */
   onAgentModeChange?: (mode: AgentMode) => void
+  /** Called when the model enables workspace dashboard tools (e.g. `switch_to_app_builder`). */
+  onAppHarnessEnabledChange?: (enabled: boolean) => void
   /** When set, the model must treat this as the latest canvas markdown for this turn. */
   documentCanvasSnapshot?: DocumentCanvasSnapshot | null
   /** Workspace files loaded for this user turn (paths relative to workspace root). */

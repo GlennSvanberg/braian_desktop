@@ -12,7 +12,9 @@ import { workspaceReadTextFile } from '@/lib/workspace-api'
 
 import { buildCanvasTools } from './canvas-tools'
 import { buildCodingTools } from './coding-tools'
+import { buildDashboardTools } from './dashboard-tools'
 import { isMockAiMode } from './mock-mode'
+import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import type { ChatTurnContext, PriorChatMessage } from './types'
 
@@ -28,9 +30,28 @@ If a "Attached workspace files" system message is present, those excerpts are th
 
 **Workspace capabilities:** When the chat is saved you have the document canvas tool. For tasks that need Python, terminal commands, real \`.xlsx\` / files on disk, or reading arbitrary workspace paths, **you** enable code tools: call \`switch_to_code_agent\`, then immediately call \`__lazy__tool__discovery__\` with the toolNames returned by that tool. After that, use read/write/list/run tools — do **not** ask the user to change modes in the UI. Until you complete those steps, do not claim you ran scripts or wrote binary files. You may still draft markdown in the canvas when that alone satisfies the request.
 
+**Workspace dashboard (in-app):** If the user wants the **Braian** sidebar Dashboard, KPIs/tiles, in-app pages (\`/dashboard/page/...\`), to "add to my dashboard", a "hello world" **inside Braian**, or mini-apps/widgets **in this app**, call \`switch_to_app_builder\`, then immediately \`__lazy__tool__discovery__\` with the toolNames that tool returns. Then use \`read_workspace_dashboard\`, \`apply_workspace_dashboard\` (\`manifestJson\` string), and \`upsert_workspace_page\` (\`pageJson\` string). Do **not** tell them to use the "Make app" toggle, and do **not** paste standalone \`.html\` files for Braian's dashboard — pass stringified JSON matching the manifest/page shapes described in app-builder mode.
+
 If open_document_canvas is not available (unsaved chat), say they need a saved conversation first, then they can ask again.
 
 You may use tools offered in this turn when appropriate. Do not claim to have read arbitrary files or run shell commands unless those tools exist here or the user attached file content in the system messages above.`
+
+export const APP_BUILDER_SYSTEM = `**Workspace dashboard (Make app mode):** You may edit the user's **internal** Braian UI for this workspace only (not a public website).
+
+**Paths (relative to workspace root):**
+- Main board: \`.braian/dashboard/board.json\`
+- Full-screen pages: \`.braian/dashboard/pages/<pageId>.json\` — opened inside Braian at \`/dashboard/page/<pageId>\`.
+
+**Manifest (\`board.json\`):** \`schemaVersion\` must be \`1\`. Top-level optional \`title\`. Required \`regions\`:
+- \`insights\`: array of KPI tiles: \`{ "id", "kind": "kpi", "label", "value", "hint?" }\` (max 8).
+- \`links\`: shortcuts — \`page_link\` \`{ "id", "kind": "page_link", "pageId", "label", "description?" }\` or \`external_link\` \`{ "id", "kind": "external_link", "label", "href" }\` (full URL, max 16).
+- \`main\`: larger tiles — \`markdown\` \`{ "id", "kind": "markdown", "body" }\` (GFM, prose only — no scripts), \`kpi\`, or \`page_link\` (max 24).
+
+**Page file:** \`schemaVersion\`: \`1\`, \`pageId\`, \`title\`, optional \`description\`, \`tiles\` (same tile shapes as \`main\`, max 32). \`pageId\` must match the filename (e.g. \`reports\` → \`reports.json\`).
+
+**Styling:** The shell renders tiles with Braian/shadcn components. Do **not** invent new tile \`kind\` values — only those above. Do not use raw hex colors in JSON; rely on short labels and markdown text. For external URLs use \`external_link\`.
+
+**Workflow:** Call \`read_workspace_dashboard\` before overwriting. \`apply_workspace_dashboard\` takes \`manifestJson\`: one string of **valid JSON** for the full manifest (stringify the object). \`upsert_workspace_page\` takes \`pageJson\`: one string of valid JSON for a single page. Prefer stable \`pageId\` slugs (lowercase, hyphens).`
 
 export const CODE_AGENT_SYSTEM = `You are a coding-style agent in Braian Desktop (local-first workspace). You can read and write UTF-8 files and run programs **only inside the user's active workspace** via the provided tools.
 
@@ -49,6 +70,8 @@ Rules:
 **Structured data (CSV, Excel, spreadsheets):** Use **Python with pandas** (and openpyxl or xlsxwriter as needed) via \`run_workspace_command\` to **inspect** files (shape, dtypes, head/sample rows, missing values) and to **produce real outputs** on disk (e.g. \`.xlsx\`). Do **not** satisfy “convert to Excel” or “inspect this file” with prose-only pasted CSV or generic instructions when tools can run code.
 
 **Document canvas previews:** When the \`open_document_canvas\` tool is available (saved conversation), after you have inspected and/or written outputs, call it with **full markdown** for the workspace panel: a short **inspection summary** (tables or bullet points derived from your pandas/script output) and a **deliverables** section (relative paths under the workspace, row/column notes). For huge tables, show a **sample** in the canvas and point to the on-disk file for the full data. If a “Document canvas snapshot” system message is present, merge your report into that markdown (preserve the user’s manual edits unless they asked to remove them). If \`open_document_canvas\` is not in this turn (unsaved chat), say that saving the chat enables side-panel previews.
+
+**Braian dashboard / in-app pages:** If the user wants tiles, KPIs, or pages **inside Braian** (not a generic browser \`index.html\`), call \`switch_to_app_builder\` then \`__lazy__tool__discovery__\` with the returned toolNames, then the dashboard tools — same workflow as in document mode; do not ask them to flip "Make app" in the UI.
 
 Safety: the user runs this on their own machine; you still must stay within workspace-scoped tools and not assume access outside them.`
 
@@ -83,6 +106,7 @@ export type SerializableModelRequestSnapshot = {
 
 const SOURCE_PRIMARY_DOC = 'src/lib/ai/chat-turn-args.ts (TRIAGE_SYSTEM)'
 const SOURCE_PRIMARY_CODE = 'src/lib/ai/chat-turn-args.ts (CODE_AGENT_SYSTEM)'
+const SOURCE_APP_BUILDER = 'src/lib/ai/chat-turn-args.ts (APP_BUILDER_SYSTEM)'
 const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
@@ -94,7 +118,11 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   list_workspace_dir: 'src/lib/ai/coding-tools.ts',
   run_workspace_command: 'src/lib/ai/coding-tools.ts',
   switch_to_code_agent: 'src/lib/ai/switch-code-agent-tool.ts',
+  switch_to_app_builder: 'src/lib/ai/switch-app-builder-tool.ts',
   __lazy__tool__discovery__: '@tanstack/ai (lazy tool discovery)',
+  read_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
+  apply_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
+  upsert_workspace_page: 'src/lib/ai/dashboard-tools.ts',
 }
 
 export async function loadWorkspaceMemorySystemBlock(
@@ -252,10 +280,14 @@ export async function buildTanStackChatTurnArgs(
   const codingTools = buildCodingTools(ctx, { lazy: !isCodeMode })
   const switchToCodeTool =
     !isCodeMode ? buildSwitchToCodeAgentTool(ctx) : null
+  const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
+  const dashboardTools = buildDashboardTools(ctx)
   const tools: Tool[] = [
     ...canvasTools,
     ...codingTools,
     ...(switchToCodeTool ? [switchToCodeTool] : []),
+    ...(switchToAppTool ? [switchToAppTool] : []),
+    ...dashboardTools,
   ]
 
   const memoryBlock =
@@ -316,12 +348,31 @@ export async function buildTanStackChatTurnArgs(
     })
   }
 
+  if (
+    ctx?.appHarnessEnabled === true &&
+    ctx.workspaceId != null &&
+    !isDetachedWorkspaceSessionId(ctx.workspaceId)
+  ) {
+    systemSections.push({
+      id: 'app-builder',
+      label: 'Workspace dashboard builder',
+      source: SOURCE_APP_BUILDER,
+      text: APP_BUILDER_SYSTEM,
+    })
+  }
+
   const systemPrompts = systemSections.map((s) => s.text)
 
   const toolsDisplay = tools.map((t) => toolToDisplayInfo(t))
 
   const maxIterations =
-    tools.length > 0 ? (isCodeMode ? 32 : 24) : null
+    tools.length > 0
+      ? isCodeMode
+        ? 32
+        : dashboardTools.length > 0
+          ? 28
+          : 24
+      : null
 
   return {
     systemSections,

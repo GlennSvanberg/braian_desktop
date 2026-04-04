@@ -14,9 +14,11 @@ import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as ShellSettingsRouteImport } from './routes/_shell/settings'
 import { Route as ShellDashboardRouteImport } from './routes/_shell/dashboard'
 import { Route as ShellDocsIndexRouteImport } from './routes/_shell/docs.index'
+import { Route as ShellDashboardIndexRouteImport } from './routes/_shell/dashboard.index'
 import { Route as ShellDocsSlugRouteImport } from './routes/_shell/docs.$slug'
 import { Route as ShellChatNewRouteImport } from './routes/_shell/chat.new'
 import { Route as ShellChatConversationIdRouteImport } from './routes/_shell/chat.$conversationId'
+import { Route as ShellDashboardPagePageIdRouteImport } from './routes/_shell/dashboard.page.$pageId'
 
 const ShellRouteRoute = ShellRouteRouteImport.update({
   id: '/_shell',
@@ -42,6 +44,11 @@ const ShellDocsIndexRoute = ShellDocsIndexRouteImport.update({
   path: '/docs/',
   getParentRoute: () => ShellRouteRoute,
 } as any)
+const ShellDashboardIndexRoute = ShellDashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ShellDashboardRoute,
+} as any)
 const ShellDocsSlugRoute = ShellDocsSlugRouteImport.update({
   id: '/docs/$slug',
   path: '/docs/$slug',
@@ -57,35 +64,46 @@ const ShellChatConversationIdRoute = ShellChatConversationIdRouteImport.update({
   path: '/chat/$conversationId',
   getParentRoute: () => ShellRouteRoute,
 } as any)
+const ShellDashboardPagePageIdRoute =
+  ShellDashboardPagePageIdRouteImport.update({
+    id: '/page/$pageId',
+    path: '/page/$pageId',
+    getParentRoute: () => ShellDashboardRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
-  '/dashboard': typeof ShellDashboardRoute
+  '/dashboard': typeof ShellDashboardRouteWithChildren
   '/settings': typeof ShellSettingsRoute
   '/chat/$conversationId': typeof ShellChatConversationIdRoute
   '/chat/new': typeof ShellChatNewRoute
   '/docs/$slug': typeof ShellDocsSlugRoute
+  '/dashboard/': typeof ShellDashboardIndexRoute
   '/docs/': typeof ShellDocsIndexRoute
+  '/dashboard/page/$pageId': typeof ShellDashboardPagePageIdRoute
 }
 export interface FileRoutesByTo {
-  '/dashboard': typeof ShellDashboardRoute
   '/settings': typeof ShellSettingsRoute
   '/': typeof ShellIndexRoute
   '/chat/$conversationId': typeof ShellChatConversationIdRoute
   '/chat/new': typeof ShellChatNewRoute
   '/docs/$slug': typeof ShellDocsSlugRoute
+  '/dashboard': typeof ShellDashboardIndexRoute
   '/docs': typeof ShellDocsIndexRoute
+  '/dashboard/page/$pageId': typeof ShellDashboardPagePageIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteRouteWithChildren
-  '/_shell/dashboard': typeof ShellDashboardRoute
+  '/_shell/dashboard': typeof ShellDashboardRouteWithChildren
   '/_shell/settings': typeof ShellSettingsRoute
   '/_shell/': typeof ShellIndexRoute
   '/_shell/chat/$conversationId': typeof ShellChatConversationIdRoute
   '/_shell/chat/new': typeof ShellChatNewRoute
   '/_shell/docs/$slug': typeof ShellDocsSlugRoute
+  '/_shell/dashboard/': typeof ShellDashboardIndexRoute
   '/_shell/docs/': typeof ShellDocsIndexRoute
+  '/_shell/dashboard/page/$pageId': typeof ShellDashboardPagePageIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -96,16 +114,19 @@ export interface FileRouteTypes {
     | '/chat/$conversationId'
     | '/chat/new'
     | '/docs/$slug'
+    | '/dashboard/'
     | '/docs/'
+    | '/dashboard/page/$pageId'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/dashboard'
     | '/settings'
     | '/'
     | '/chat/$conversationId'
     | '/chat/new'
     | '/docs/$slug'
+    | '/dashboard'
     | '/docs'
+    | '/dashboard/page/$pageId'
   id:
     | '__root__'
     | '/_shell'
@@ -115,7 +136,9 @@ export interface FileRouteTypes {
     | '/_shell/chat/$conversationId'
     | '/_shell/chat/new'
     | '/_shell/docs/$slug'
+    | '/_shell/dashboard/'
     | '/_shell/docs/'
+    | '/_shell/dashboard/page/$pageId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -159,6 +182,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellDocsIndexRouteImport
       parentRoute: typeof ShellRouteRoute
     }
+    '/_shell/dashboard/': {
+      id: '/_shell/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof ShellDashboardIndexRouteImport
+      parentRoute: typeof ShellDashboardRoute
+    }
     '/_shell/docs/$slug': {
       id: '/_shell/docs/$slug'
       path: '/docs/$slug'
@@ -180,11 +210,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellChatConversationIdRouteImport
       parentRoute: typeof ShellRouteRoute
     }
+    '/_shell/dashboard/page/$pageId': {
+      id: '/_shell/dashboard/page/$pageId'
+      path: '/page/$pageId'
+      fullPath: '/dashboard/page/$pageId'
+      preLoaderRoute: typeof ShellDashboardPagePageIdRouteImport
+      parentRoute: typeof ShellDashboardRoute
+    }
   }
 }
 
+interface ShellDashboardRouteChildren {
+  ShellDashboardIndexRoute: typeof ShellDashboardIndexRoute
+  ShellDashboardPagePageIdRoute: typeof ShellDashboardPagePageIdRoute
+}
+
+const ShellDashboardRouteChildren: ShellDashboardRouteChildren = {
+  ShellDashboardIndexRoute: ShellDashboardIndexRoute,
+  ShellDashboardPagePageIdRoute: ShellDashboardPagePageIdRoute,
+}
+
+const ShellDashboardRouteWithChildren = ShellDashboardRoute._addFileChildren(
+  ShellDashboardRouteChildren,
+)
+
 interface ShellRouteRouteChildren {
-  ShellDashboardRoute: typeof ShellDashboardRoute
+  ShellDashboardRoute: typeof ShellDashboardRouteWithChildren
   ShellSettingsRoute: typeof ShellSettingsRoute
   ShellIndexRoute: typeof ShellIndexRoute
   ShellChatConversationIdRoute: typeof ShellChatConversationIdRoute
@@ -194,7 +245,7 @@ interface ShellRouteRouteChildren {
 }
 
 const ShellRouteRouteChildren: ShellRouteRouteChildren = {
-  ShellDashboardRoute: ShellDashboardRoute,
+  ShellDashboardRoute: ShellDashboardRouteWithChildren,
   ShellSettingsRoute: ShellSettingsRoute,
   ShellIndexRoute: ShellIndexRoute,
   ShellChatConversationIdRoute: ShellChatConversationIdRoute,
