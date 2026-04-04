@@ -1,4 +1,5 @@
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
+import type { AgentMode } from '@/lib/workspace-api'
 
 /** In-memory document canvas at send time (includes edits not yet flushed to disk). */
 export type DocumentCanvasSnapshot = {
@@ -18,6 +19,10 @@ export type ContextFileForModel = {
 export type ChatTurnContext = {
   workspaceId: string
   conversationId: string | null
+  /** Document canvas vs coding agent (files + commands under workspace). */
+  agentMode?: AgentMode
+  /** Called when the model enables code capabilities (e.g. `switch_to_code_agent` tool). */
+  onAgentModeChange?: (mode: AgentMode) => void
   /** When set, the model must treat this as the latest canvas markdown for this turn. */
   documentCanvasSnapshot?: DocumentCanvasSnapshot | null
   /** Workspace files loaded for this user turn (paths relative to workspace root). */

@@ -9,10 +9,14 @@ use uuid::Uuid;
 
 use crate::db;
 
-const CONVERSATION_SCHEMA_VERSION: u32 = 2;
+const CONVERSATION_SCHEMA_VERSION: u32 = 3;
+
+fn default_agent_mode() -> String {
+  "document".to_string()
+}
 
 fn conversation_schema_supported(v: u32) -> bool {
-  v == 1 || v == CONVERSATION_SCHEMA_VERSION
+  v == 1 || v == 2 || v == CONVERSATION_SCHEMA_VERSION
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +53,9 @@ struct ConversationFileV1 {
   messages: Vec<ChatMessageFile>,
   #[serde(default)]
   context_files: Vec<ContextFileRecord>,
+  /// `"document"` | `"code"` — persisted chat agent mode.
+  #[serde(default = "default_agent_mode")]
+  agent_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +88,8 @@ pub struct ChatThreadDto {
   pub generating: bool,
   #[serde(default)]
   pub context_files: Vec<ContextFileRecord>,
+  #[serde(default = "default_agent_mode")]
+  pub agent_mode: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,6 +112,8 @@ pub struct ConversationSaveInput {
   pub artifact_payload: Option<Value>,
   #[serde(default)]
   pub context_files: Vec<ContextFileRecord>,
+  #[serde(default = "default_agent_mode")]
+  pub agent_mode: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,6 +160,24 @@ fn canvas_md_path(workspace_root: &Path, conversation_id: &str) -> PathBuf {
   canvas_dir(workspace_root).join(format!("{conversation_id}.md"))
 }
 
+fn memory_md_path(workspace_root: &Path) -> PathBuf {
+  braian_dir(workspace_root).join("MEMORY.md")
+}
+
+const MEMORY_MD_TEMPLATE: &str = r#"# Workspace memory
+
+Durable notes for this workspace (preferences, decisions, names). Braian may append when **automatic memory update** is enabled; you can edit freely.
+
+**Git:** This file may be committed. Do not store secrets or API keys here.
+
+## Preferences
+
+## Decisions
+
+## Open questions
+
+"#;
+
 fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   let b = braian_dir(workspace_root);
   fs::create_dir_all(conversations_dir(workspace_root)).map_err(|e| e.to_string())?;
@@ -158,6 +187,11 @@ fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   if !schema_path.exists() {
     fs::create_dir_all(&b).map_err(|e| e.to_string())?;
     fs::write(&schema_path, "{\"version\":1}\n").map_err(|e| e.to_string())?;
+  }
+  let mem_path = memory_md_path(workspace_root);
+  if !mem_path.exists() {
+    fs::create_dir_all(&b).map_err(|e| e.to_string())?;
+    fs::write(&mem_path, MEMORY_MD_TEMPLATE).map_err(|e| e.to_string())?;
   }
   Ok(())
 }
@@ -325,6 +359,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
     draft: f.draft,
     generating: false,
     context_files: f.context_files,
+    agent_mode: f.agent_mode,
   }
 }
 
@@ -404,6 +439,7 @@ pub fn conversation_create(
     draft: String::new(),
     messages: vec![],
     context_files: vec![],
+    agent_mode: default_agent_mode(),
   };
   let path = conversation_path(&root, &id);
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
@@ -491,6 +527,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
       })
       .collect(),
     context_files: input.context_files.clone(),
+    agent_mode: input.agent_mode.clone(),
   };
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
   fs::write(&path, json).map_err(|e| e.to_string())?;
@@ -558,6 +595,40 @@ pub fn conversation_set_title(
   file.updated_at_ms = now_ms();
   let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
   fs::write(&path, json).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationDeleteInput {
+  pub id: String,
+  pub workspace_id: String,
+}
+
+#[tauri::command]
+pub fn conversation_delete(
+  app: AppHandle,
+  input: ConversationDeleteInput,
+) -> Result<(), String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &input.workspace_id)?;
+  let path = conversation_path(&root, &input.id);
+  if !path.is_file() {
+    return Err("Conversation not found.".to_string());
+  }
+  let file = load_conversation_file(&path)?;
+  if file.workspace_id != input.workspace_id || file.id != input.id {
+    return Err("Conversation workspace mismatch.".to_string());
+  }
+  let art_path = artifact_path(&root, &input.id);
+  let canvas_md = canvas_md_path(&root, &input.id);
+  if art_path.is_file() {
+    fs::remove_file(&art_path).map_err(|e| e.to_string())?;
+  }
+  if canvas_md.is_file() {
+    fs::remove_file(&canvas_md).map_err(|e| e.to_string())?;
+  }
+  fs::remove_file(&path).map_err(|e| e.to_string())?;
   Ok(())
 }
 

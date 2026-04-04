@@ -1,4 +1,5 @@
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
+import type { AgentMode } from '@/lib/workspace-api'
 
 export type ChatRole = 'user' | 'assistant'
 
@@ -52,6 +53,8 @@ export type ChatThreadState = {
   pendingUserMessages: string[]
   /** Files pinned to this conversation for model context (paths relative to workspace root). */
   contextFiles: ContextFileEntry[]
+  /** Persisted with the conversation when saved. */
+  agentMode: AgentMode
 }
 
 export const DEFAULT_CHAT_THREAD: ChatThreadState = {
@@ -62,4 +65,5 @@ export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   generating: false,
   pendingUserMessages: [],
   contextFiles: [],
+  agentMode: 'document',
 }

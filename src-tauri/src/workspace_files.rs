@@ -4,14 +4,16 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tauri::AppHandle;
-use uuid::Uuid;
 
 use crate::braian_store::workspace_root_path;
 use crate::db;
 
 const DEFAULT_MAX_READ: u64 = 512 * 1024;
 
-fn safe_join_workspace(workspace_root: &Path, relative_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_join_workspace(
+  workspace_root: &Path,
+  relative_path: &str,
+) -> Result<PathBuf, String> {
   if relative_path.is_empty() || relative_path.contains('\0') {
     return Err("Invalid path.".to_string());
   }
@@ -107,6 +109,29 @@ pub fn workspace_read_text_file(
   Ok(WorkspaceReadTextFileResult { text, truncated })
 }
 
+/// Create parent directories as needed and write UTF-8 text. Path is relative to workspace root.
+#[tauri::command]
+pub fn workspace_write_text_file(
+  app: AppHandle,
+  workspace_id: String,
+  relative_path: String,
+  content: String,
+) -> Result<(), String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &workspace_id)?;
+  let path = safe_join_workspace(&root, relative_path.trim())?;
+  let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+  }
+  fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())?;
+  let canon_file = path.canonicalize().map_err(|e| e.to_string())?;
+  if !canon_file.starts_with(&canon_root) {
+    return Err("Path escapes workspace.".to_string());
+  }
+  Ok(())
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceImportFileResult {
@@ -118,7 +143,6 @@ pub struct WorkspaceImportFileResult {
 pub fn workspace_import_file(
   app: AppHandle,
   workspace_id: String,
-  conversation_id: Option<String>,
   source_path: String,
 ) -> Result<WorkspaceImportFileResult, String> {
   let src = PathBuf::from(source_path.trim());
@@ -128,19 +152,6 @@ pub fn workspace_import_file(
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   let root = workspace_root_path(&conn, &workspace_id)?;
   let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
-
-  let folder = conversation_id
-    .as_ref()
-    .map(|s| s.trim())
-    .filter(|s| !s.is_empty())
-    .unwrap_or("unsaved");
-  let uploads = safe_join_workspace(&root, ".braian")?;
-  let uploads = uploads.join("uploads").join(folder);
-  fs::create_dir_all(&uploads).map_err(|e| e.to_string())?;
-  let uploads_canon = uploads.canonicalize().map_err(|e| e.to_string())?;
-  if !uploads_canon.starts_with(&canon_root) {
-    return Err("Upload path escapes workspace.".to_string());
-  }
 
   let orig_name = src
     .file_name()
@@ -155,8 +166,7 @@ pub fn workspace_import_file(
       c => c,
     })
     .collect();
-  let unique = format!("{}_{}", Uuid::new_v4(), safe_name);
-  let dest = uploads_canon.join(unique);
+  let dest = unique_path_in_dir(&canon_root, &safe_name)?;
   fs::copy(&src, &dest).map_err(|e| e.to_string())?;
 
   let rel = relative_path_display(&root, &dest)?;
@@ -164,6 +174,29 @@ pub fn workspace_import_file(
     relative_path: rel,
     display_name: orig_name.to_string(),
   })
+}
+
+/// Destination path using `filename` when free; otherwise `name-2.ext`, `name-3.ext`, …
+fn unique_path_in_dir(dir: &Path, filename: &str) -> Result<PathBuf, String> {
+  let candidate = dir.join(filename);
+  if !candidate.exists() {
+    return Ok(candidate);
+  }
+  let (stem, ext_suffix) = match filename.rfind('.') {
+    Some(dot) if dot > 0 => (&filename[..dot], Some(&filename[dot..])),
+    _ => (filename, None),
+  };
+  for n in 2_i32..10_000 {
+    let name = match ext_suffix {
+      Some(sfx) => format!("{stem}-{n}{sfx}"),
+      None => format!("{stem}-{n}"),
+    };
+    let c = dir.join(name);
+    if !c.exists() {
+      return Ok(c);
+    }
+  }
+  Err("Could not find a free file name in workspace root.".to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -209,6 +242,9 @@ pub fn workspace_list_dir(
     if name == "." || name == ".." {
       continue;
     }
+    if name == ".braian" {
+      continue;
+    }
     let path = entry.path();
     let is_dir = entry
       .file_type()
@@ -237,6 +273,7 @@ pub fn workspace_list_dir(
 const WORKSPACE_FILE_WALK_MAX: usize = 8_000;
 
 const SKIP_WALK_DIR_NAMES: &[&str] = &[
+  ".braian",
   ".git",
   "node_modules",
   "target",

@@ -4,17 +4,20 @@ import {
   type AnyTextAdapter,
   type ModelMessage,
 } from '@tanstack/ai'
-import { createAnthropicChat } from '@tanstack/ai-anthropic'
-import { createGeminiChat } from '@tanstack/ai-gemini'
-import { createOpenaiChat } from '@tanstack/ai-openai'
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
-
 import { aiSettingsGet } from '@/lib/ai-settings-api'
 import type { AiProviderId } from '@/lib/ai/model-catalog'
-import { isTauri } from '@/lib/tauri-env'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
+import {
+  MEMORY_INJECT_MAX_BYTES,
+  MEMORY_RELATIVE_PATH,
+} from '@/lib/memory/constants'
+import { isTauri } from '@/lib/tauri-env'
+import { workspaceReadTextFile } from '@/lib/workspace-api'
 
+import { buildChatAdapter, resolveFetch } from './chat-adapter'
 import { buildCanvasTools } from './canvas-tools'
+import { buildCodingTools } from './coding-tools'
+import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import type {
   ChatStreamChunk,
   ChatTurnContext,
@@ -29,19 +32,50 @@ If a "Document canvas snapshot" system message is present, it is the **authorita
 
 If a "Attached workspace files" system message is present, those excerpts are the **authoritative file contents for this turn** (paths are relative to the workspace root). Large files may be truncated.
 
+**Workspace capabilities:** When the chat is saved you have the document canvas tool. For tasks that need Python, terminal commands, real \`.xlsx\` / files on disk, or reading arbitrary workspace paths, **you** enable code tools: call \`switch_to_code_agent\`, then immediately call \`__lazy__tool__discovery__\` with the toolNames returned by that tool. After that, use read/write/list/run tools — do **not** ask the user to change modes in the UI. Until you complete those steps, do not claim you ran scripts or wrote binary files. You may still draft markdown in the canvas when that alone satisfies the request.
+
 If open_document_canvas is not available (unsaved chat), say they need a saved conversation first, then they can ask again.
 
 You may use tools offered in this turn when appropriate. Do not claim to have read arbitrary files or run shell commands unless those tools exist here or the user attached file content in the system messages above.`
 
-function resolveFetch(): typeof fetch {
-  if (isTauri()) {
-    return tauriFetch as unknown as typeof fetch
-  }
-  return globalThis.fetch.bind(globalThis)
-}
+const CODE_AGENT_SYSTEM = `You are a coding-style agent in Braian Desktop (local-first workspace). You can read and write UTF-8 files and run programs **only inside the user's active workspace** via the provided tools.
 
-function normalizeBaseUrl(url: string): string {
-  return url.replace(/\/+$/, '')
+Workflow (like a CLI coding assistant): understand the task → read or list files as needed → write or update scripts (prefer **Python** for data work: CSV, Excel via pandas/openpyxl, downloads with urllib/requests) → run commands to install deps (e.g. pip/uv) and execute scripts → report stdout/stderr and outcomes honestly.
+
+If the user @-attached a CSV/Excel file, the system message shows its workspace path — use \`read_workspace_file\` on that path (or the excerpt plus write scripts that read it) and produce the requested output file (e.g. \`.xlsx\`) under the workspace with tools, not just prose.
+
+Rules:
+- Paths in tools are always **relative to the workspace root** (use forward slashes).
+- On **Windows**, prefer \`py\` with args like \`["-3", "scripts/foo.py"]\` or \`python\`; use \`powershell.exe\` or \`pwsh\` with \`-File\` or \`-Command\` as separate argv entries if Python is unavailable.
+- \`run_workspace_command\` does **not** use a shell: pass \`program\` + \`args\` only (no pipes unless you run a shell explicitly as program).
+- Do not claim a file was written or a command ran without a successful tool result.
+- Keep chat messages concise; put long output in tool results, then summarize.
+- If attached file excerpts appear below, treat them as authoritative for this turn alongside what you read from disk.
+
+**Structured data (CSV, Excel, spreadsheets):** Use **Python with pandas** (and openpyxl or xlsxwriter as needed) via \`run_workspace_command\` to **inspect** files (shape, dtypes, head/sample rows, missing values) and to **produce real outputs** on disk (e.g. \`.xlsx\`). Do **not** satisfy “convert to Excel” or “inspect this file” with prose-only pasted CSV or generic instructions when tools can run code.
+
+**Document canvas previews:** When the \`open_document_canvas\` tool is available (saved conversation), after you have inspected and/or written outputs, call it with **full markdown** for the workspace panel: a short **inspection summary** (tables or bullet points derived from your pandas/script output) and a **deliverables** section (relative paths under the workspace, row/column notes). For huge tables, show a **sample** in the canvas and point to the on-disk file for the full data. If a “Document canvas snapshot” system message is present, merge your report into that markdown (preserve the user’s manual edits unless they asked to remove them). If \`open_document_canvas\` is not in this turn (unsaved chat), say that saving the chat enables side-panel previews.
+
+Safety: the user runs this on their own machine; you still must stay within workspace-scoped tools and not assume access outside them.`
+
+async function loadWorkspaceMemorySystemBlock(
+  workspaceId: string,
+): Promise<string> {
+  try {
+    const { text, truncated } = await workspaceReadTextFile(
+      workspaceId,
+      MEMORY_RELATIVE_PATH,
+      MEMORY_INJECT_MAX_BYTES,
+    )
+    const t = text.trim()
+    if (!t) return ''
+    const note = truncated
+      ? '\n[Note: MEMORY.md was truncated for context size — beginning only.]\n'
+      : ''
+    return `Workspace memory (from \`${MEMORY_RELATIVE_PATH}\`):${note}\n\n${t}`
+  } catch {
+    return ''
+  }
 }
 
 function contextFilesSystemPrompt(
@@ -132,23 +166,43 @@ export async function* streamTanStackChatTurn(
   const model = settings.modelId
   const apiKey = settings.apiKey.trim()
 
+  const isCodeMode = context?.agentMode === 'code'
   const canvasTools = buildCanvasTools(context)
+  const codingTools = buildCodingTools(context, { lazy: !isCodeMode })
+  const switchToCodeTool =
+    !isCodeMode ? buildSwitchToCodeAgentTool(context) : null
+  const tools = [
+    ...canvasTools,
+    ...codingTools,
+    ...(switchToCodeTool ? [switchToCodeTool] : []),
+  ]
+
+  const memoryBlock =
+    context?.workspaceId != null
+      ? await loadWorkspaceMemorySystemBlock(context.workspaceId)
+      : ''
+  const memSlice = memoryBlock ? [memoryBlock] : []
 
   const cf =
     context?.contextFiles != null && context.contextFiles.length > 0
       ? contextFilesSystemPrompt(context.contextFiles)
       : ''
-  const systemPrompts = [
-    TRIAGE_SYSTEM,
-    ...(cf ? [cf] : []),
-    ...(context?.documentCanvasSnapshot != null
+  const snapshotBlock =
+    context?.documentCanvasSnapshot != null
       ? [documentCanvasSnapshotPrompt(context.documentCanvasSnapshot)]
-      : []),
-  ]
+      : []
+  const systemPrompts = isCodeMode
+    ? [CODE_AGENT_SYSTEM, ...memSlice, ...(cf ? [cf] : []), ...snapshotBlock]
+    : [TRIAGE_SYSTEM, ...memSlice, ...(cf ? [cf] : []), ...snapshotBlock]
+
+  const agentLoopStrategy =
+    tools.length > 0
+      ? maxIterations(isCodeMode ? 32 : 24)
+      : undefined
 
   // Dynamic model ids from settings use type assertions; adapters validate at runtime.
   const stream = chat({
-    adapter: buildAdapter(
+    adapter: buildChatAdapter(
       provider,
       model,
       apiKey,
@@ -160,8 +214,8 @@ export async function* streamTanStackChatTurn(
     abortController: ac,
     conversationId:
       context?.conversationId != null ? context.conversationId : undefined,
-    tools: canvasTools.length > 0 ? canvasTools : undefined,
-    agentLoopStrategy: canvasTools.length > 0 ? maxIterations(12) : undefined,
+    tools: tools.length > 0 ? tools : undefined,
+    agentLoopStrategy,
   })
 
   try {
@@ -218,45 +272,4 @@ export async function* streamTanStackChatTurn(
   }
 
   yield { type: 'done' }
-}
-
-/** Tauri’s WebView is still a browser context; official SDKs block unless opted in. We only run this path in the desktop app with Tauri HTTP fetch (no public page). */
-const desktopBrowserSdkOpts = {
-  dangerouslyAllowBrowser: true as const,
-}
-
-function buildAdapter(
-  provider: AiProviderId,
-  model: string,
-  apiKey: string,
-  baseUrl: string | null,
-  fetchImpl: typeof fetch,
-) {
-  switch (provider) {
-    case 'openai':
-      return createOpenaiChat(model as never, apiKey, {
-        fetch: fetchImpl,
-        ...desktopBrowserSdkOpts,
-      })
-    case 'anthropic':
-      return createAnthropicChat(model as never, apiKey, {
-        fetch: fetchImpl,
-        ...desktopBrowserSdkOpts,
-      })
-    case 'gemini':
-      return createGeminiChat(model as never, apiKey, { fetch: fetchImpl })
-    case 'openai_compatible': {
-      const url = baseUrl?.trim()
-      if (!url) {
-        throw new Error('Base URL is required for OpenAI-compatible providers.')
-      }
-      return createOpenaiChat(model as never, apiKey, {
-        baseURL: normalizeBaseUrl(url),
-        fetch: fetchImpl,
-        ...desktopBrowserSdkOpts,
-      })
-    }
-    default:
-      throw new Error(`Unknown provider: ${provider}`)
-  }
 }

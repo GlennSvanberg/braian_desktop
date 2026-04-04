@@ -7,6 +7,7 @@ import {
   PanelLeftIcon,
   Plus,
   Settings,
+  Trash2,
 } from 'lucide-react'
 import {
   Link,
@@ -39,6 +40,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -47,7 +49,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
-import { conversationSetTitle } from '@/lib/workspace-api'
+import { conversationDelete, conversationSetTitle } from '@/lib/workspace-api'
 
 import type { WorkspaceConversation } from './workspace-context'
 import { useWorkspace } from './workspace-context'
@@ -122,11 +124,15 @@ function ConversationSidebarItem({
   conversation,
   pathname,
   onRename,
+  onDelete,
+  deletePending,
 }: {
   workspaceId: string
   conversation: WorkspaceConversation
   pathname: string
   onRename: (c: WorkspaceConversation) => void
+  onDelete: (c: WorkspaceConversation) => void
+  deletePending: boolean
 }) {
   const sessionKey = chatSessionKey(workspaceId, conversation.id)
   const generating = useSessionGenerating(sessionKey)
@@ -134,58 +140,73 @@ function ConversationSidebarItem({
 
   return (
     <SidebarMenuItem>
-      <div className="flex min-w-0 flex-1 items-center gap-0.5">
-        <SidebarMenuButton
-          asChild
-          isActive={active}
-          className="min-w-0 flex-1 pr-1"
-          tooltip={`${conversation.title} · ${conversation.updatedLabel}`}
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        className="pr-14"
+        tooltip={`${conversation.title} · ${conversation.updatedLabel}`}
+      >
+        <Link
+          to="/chat/$conversationId"
+          params={{ conversationId: conversation.id }}
         >
-          <Link
-            to="/chat/$conversationId"
-            params={{ conversationId: conversation.id }}
+          <MessageSquare className="size-4 shrink-0" aria-hidden />
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate">{conversation.title}</span>
+            {generating ? (
+              <Loader2
+                className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
+                aria-label="Generating reply"
+              />
+            ) : null}
+          </span>
+        </Link>
+      </SidebarMenuButton>
+      <SidebarMenuAction
+        showOnHover
+        disabled={deletePending}
+        className="text-sidebar-foreground/80 hover:text-destructive right-7"
+        aria-label={`Delete ${conversation.title}`}
+        title="Delete chat"
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onDelete(conversation)
+        }}
+      >
+        {deletePending ? (
+          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <Trash2 className="size-4" aria-hidden />
+        )}
+      </SidebarMenuAction>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <SidebarMenuAction
+            showOnHover
+            className="right-1"
+            aria-label={`Actions for ${conversation.title}`}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
           >
-            <MessageSquare className="size-4 shrink-0" aria-hidden />
-            <span className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="truncate">{conversation.title}</span>
-              {generating ? (
-                <Loader2
-                  className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
-                  aria-label="Generating reply"
-                />
-              ) : null}
-            </span>
-          </Link>
-        </SidebarMenuButton>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-sidebar-foreground size-8 shrink-0 opacity-70 hover:opacity-100"
-              aria-label={`Actions for ${conversation.title}`}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-            >
-              <MoreHorizontal className="size-4" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem onSelect={() => onRename(conversation)}>
-              Rename…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+            <MoreHorizontal className="size-4" aria-hidden />
+          </SidebarMenuAction>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem onSelect={() => onRename(conversation)}>
+            Rename…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </SidebarMenuItem>
   )
 }
 
 export function AppSidebar() {
   const router = useRouter()
+  const navigate = useNavigate()
   const { activeWorkspaceId, activeWorkspace, conversations, refreshConversations } =
     useWorkspace()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -193,6 +214,7 @@ export function AppSidebar() {
   const [renameDraft, setRenameDraft] = useState('')
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
   const [renameBusy, setRenameBusy] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   const openRename = (c: WorkspaceConversation) => {
     setRenameTargetId(c.id)
@@ -223,6 +245,34 @@ export function AppSidebar() {
         window.alert(msg)
       } finally {
         setRenameBusy(false)
+      }
+    })()
+  }
+
+  const confirmDelete = (c: WorkspaceConversation) => {
+    if (!activeWorkspaceId) return
+    const ok = window.confirm(
+      `Delete “${c.title}”? This cannot be undone.`,
+    )
+    if (!ok) return
+    setDeleteTargetId(c.id)
+    void (async () => {
+      try {
+        await conversationDelete({
+          id: c.id,
+          workspaceId: activeWorkspaceId,
+        })
+        await refreshConversations()
+        if (pathname === `/chat/${c.id}`) {
+          navigate({ to: '/chat/new' })
+          await router.invalidate()
+        }
+      } catch (e) {
+        console.error(e)
+        const msg = e instanceof Error ? e.message : String(e)
+        window.alert(msg)
+      } finally {
+        setDeleteTargetId(null)
       }
     })()
   }
@@ -306,6 +356,8 @@ export function AppSidebar() {
                       conversation={c}
                       pathname={pathname}
                       onRename={openRename}
+                      onDelete={confirmDelete}
+                      deletePending={deleteTargetId === c.id}
                     />
                   ))
                 )}

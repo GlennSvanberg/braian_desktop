@@ -5,6 +5,7 @@ import {
   MOCK_WORKSPACES,
   getConversationById,
   getConversationsForWorkspace,
+  mockConversationDelete,
   mockConversationSetTitle,
 } from '@/lib/mock-workspace-data'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
@@ -136,11 +137,29 @@ export async function conversationSetTitle(input: {
   })
 }
 
+export async function conversationDelete(input: {
+  id: string
+  workspaceId: string
+}): Promise<void> {
+  if (!isTauri()) {
+    mockConversationDelete(input.id)
+    return
+  }
+  await invoke('conversation_delete', {
+    input: {
+      id: input.id,
+      workspaceId: input.workspaceId,
+    },
+  })
+}
+
 export type ContextFileEntryDto = {
   relativePath: string
   displayName?: string
   addedAtMs?: number
 }
+
+export type AgentMode = 'document' | 'code'
 
 export type ConversationSavePayload = {
   id: string
@@ -157,6 +176,7 @@ export type ConversationSavePayload = {
   }>
   artifactPayload: WorkspaceArtifactPayload | null
   contextFiles: ContextFileEntryDto[]
+  agentMode: AgentMode
 }
 
 export type ConversationOpenResult = {
@@ -178,7 +198,12 @@ type ConversationOpenInvoke = {
     draft: string
     generating: boolean
     contextFiles?: ContextFileEntryDto[]
+    agentMode?: string
   }
+}
+
+function normalizeAgentMode(raw: string | undefined): AgentMode {
+  return raw === 'code' ? 'code' : 'document'
 }
 
 function mapInvokeThreadToState(
@@ -207,6 +232,7 @@ function mapInvokeThreadToState(
     generating: thread.generating,
     pendingUserMessages: [],
     contextFiles: thread.contextFiles ?? [],
+    agentMode: normalizeAgentMode(thread.agentMode),
   }
 }
 
@@ -251,6 +277,7 @@ export async function conversationOpen(
         generating: false,
         pendingUserMessages: [],
         contextFiles: [],
+        agentMode: 'document',
       }
       return { conversation, thread }
     }
@@ -262,6 +289,7 @@ export async function conversationOpen(
       generating: false,
       pendingUserMessages: [],
       contextFiles: [],
+      agentMode: 'document',
     }
     return { conversation, thread }
   }
@@ -312,6 +340,7 @@ export function buildConversationSavePayload(
         : {}),
       ...(f.addedAtMs != null ? { addedAtMs: f.addedAtMs } : {}),
     })),
+    agentMode: thread.agentMode ?? 'document',
   }
 }
 
@@ -335,6 +364,49 @@ export async function workspaceReadTextFile(
   })
 }
 
+export async function workspaceWriteTextFile(
+  workspaceId: string,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  if (!isTauri()) {
+    throw new Error('Writing workspace files requires the desktop app.')
+  }
+  await invoke('workspace_write_text_file', {
+    workspaceId,
+    relativePath,
+    content,
+  })
+}
+
+export type WorkspaceRunCommandResult = {
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  timedOut: boolean
+}
+
+export async function workspaceRunCommand(input: {
+  workspaceId: string
+  program: string
+  args: string[]
+  cwd?: string | null
+  timeoutMs?: number | null
+  maxOutputBytes?: number | null
+}): Promise<WorkspaceRunCommandResult> {
+  if (!isTauri()) {
+    throw new Error('Running commands requires the desktop app.')
+  }
+  return invoke<WorkspaceRunCommandResult>('workspace_run_command', {
+    workspaceId: input.workspaceId,
+    program: input.program,
+    args: input.args,
+    cwd: input.cwd ?? null,
+    timeoutMs: input.timeoutMs ?? null,
+    maxOutputBytes: input.maxOutputBytes ?? null,
+  })
+}
+
 export type WorkspaceImportFileResult = {
   relativePath: string
   displayName: string
@@ -342,7 +414,6 @@ export type WorkspaceImportFileResult = {
 
 export async function workspaceImportFile(
   workspaceId: string,
-  conversationId: string | null,
   sourcePath: string,
 ): Promise<WorkspaceImportFileResult> {
   if (!isTauri()) {
@@ -350,7 +421,6 @@ export async function workspaceImportFile(
   }
   return invoke<WorkspaceImportFileResult>('workspace_import_file', {
     workspaceId,
-    conversationId,
     sourcePath,
   })
 }

@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
 import { streamChatTurn } from '@/lib/ai'
+import { discoveryResultIncludesCodeTools } from '@/lib/ai/coding-tools'
 import type { ChatStreamChunk } from '@/lib/ai/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
@@ -165,6 +166,12 @@ export function getThreadSnapshot(key: string): ChatThreadState {
   return threads[key] ?? DEFAULT_CHAT_THREAD
 }
 
+/** Thread state only if this session has been hydrated or used (not DEFAULT placeholder). */
+export function getThreadIfLoaded(sessionKey: string): ChatThreadState | null {
+  if (!(sessionKey in threads)) return null
+  return threads[sessionKey] ?? null
+}
+
 /** Replace the entire thread for a session (e.g. hydrate from disk). */
 export function replaceThread(sessionKey: string, state: ChatThreadState) {
   threads = {
@@ -174,6 +181,7 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
       generating: false,
       pendingUserMessages: state.pendingUserMessages ?? [],
       contextFiles: state.contextFiles ?? [],
+      agentMode: state.agentMode ?? 'document',
     },
   }
   emitThreads()
@@ -201,6 +209,15 @@ export function patchDocumentArtifactBody(sessionKey: string, body: string) {
 /** Abort the current assistant stream for this session (explicit Stop). */
 export function stopChatGeneration(sessionKey: string) {
   abortBySession.get(sessionKey)?.abort()
+}
+
+export function setChatAgentMode(
+  sessionKey: string,
+  agentMode: 'document' | 'code',
+) {
+  patchThread(sessionKey, (prev) =>
+    prev.agentMode === agentMode ? prev : { ...prev, agentMode },
+  )
 }
 
 type SeedCanvasOpts = {
@@ -286,9 +303,12 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
   }))
 
   void (async () => {
+    let streamCompletedOk = false
     try {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
-      const ap = getThread(sessionKey).artifactPayload
+      const threadNow = getThread(sessionKey)
+      const agentMode = threadNow.agentMode ?? 'document'
+      const ap = threadNow.artifactPayload
       const documentCanvasSnapshot =
         ap?.kind === 'document'
           ? {
@@ -331,7 +351,13 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         {
           workspaceId,
           conversationId,
+          agentMode,
           documentCanvasSnapshot,
+          onAgentModeChange: (mode) => {
+            if (mode === 'code') {
+              setChatAgentMode(sessionKey, 'code')
+            }
+          },
           ...(contextFiles != null && contextFiles.length > 0
             ? { contextFiles }
             : {}),
@@ -374,6 +400,12 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
             })),
           }))
         } else if (chunk.type === 'tool-end') {
+          if (
+            chunk.toolName === '__lazy__tool__discovery__' &&
+            discoveryResultIncludesCodeTools(chunk.result)
+          ) {
+            setChatAgentMode(sessionKey, 'code')
+          }
           patchThread(sessionKey, (p) => ({
             ...p,
             messages: mapAssistant(p.messages, assistantId, (m) => ({
@@ -391,6 +423,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           }))
         }
       }
+      streamCompletedOk = true
     } catch (err) {
       const aborted =
         err instanceof DOMException && err.name === 'AbortError'
@@ -440,6 +473,13 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           pendingUserMessages: rest,
         }))
         queueMicrotask(() => startChatTurnInternal(sessionKey, next))
+      } else {
+        const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
+        if (streamCompletedOk && conversationId && isTauri()) {
+          void import('@/lib/memory/scheduler').then((m) =>
+            m.scheduleMemoryReviewAfterIdle(workspaceId, conversationId),
+          )
+        }
       }
     }
   })()
@@ -528,6 +568,7 @@ export function useChatThreadActions() {
     setChatDraft: setDraft,
     patchDocumentArtifactBody: patchDocBody,
     stopChatGeneration: stop,
+    setChatAgentMode,
     addContextFileEntry,
     removeContextFileEntry,
   }

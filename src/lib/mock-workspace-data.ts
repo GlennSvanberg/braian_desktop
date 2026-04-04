@@ -127,3 +127,9 @@ export function mockConversationSetTitle(id: string, title: string): void {
   const c = MOCK_CONVERSATIONS.find((x) => x.id === id)
   if (c) c.title = title.trim()
 }
+
+/** Browser dev: remove mock conversation (mirrors desktop `conversation_delete`). */
+export function mockConversationDelete(id: string): void {
+  const i = MOCK_CONVERSATIONS.findIndex((x) => x.id === id)
+  if (i >= 0) MOCK_CONVERSATIONS.splice(i, 1)
+}

@@ -15,6 +15,10 @@ import {
   defaultModelForProvider,
   providerMeta,
 } from '@/lib/ai/model-catalog'
+import {
+  memorySettingsGet,
+  memorySettingsSet,
+} from '@/lib/memory/memory-settings'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_shell/settings')({
@@ -27,12 +31,17 @@ function SettingsPage() {
   const [showKey, setShowKey] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedOk, setSavedOk] = useState(false)
+  const [memoryAutoReview, setMemoryAutoReview] = useState(false)
   const [form, setForm] = useState<AiSettingsDto>({
     provider: 'openai',
     apiKey: '',
     modelId: defaultModelForProvider('openai'),
     baseUrl: null,
   })
+
+  useEffect(() => {
+    setMemoryAutoReview(memorySettingsGet().autoReviewOnIdle)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -250,6 +259,44 @@ function SettingsPage() {
             </Button>
           </form>
         )}
+
+        <div className="border-border space-y-4 rounded-xl border p-4 shadow-sm md:p-5">
+          <div>
+            <h2 className="text-text-1 text-base font-semibold tracking-tight">
+              Workspace memory
+            </h2>
+            <p className="text-text-3 mt-1 text-sm leading-relaxed">
+              Each workspace keeps notes in{' '}
+              <code className="text-text-2 text-xs">.braian/MEMORY.md</code>.
+              The assistant reads a summary of this file during chat. Optional
+              background updates run only after you pause (debounced), not every
+              message.
+            </p>
+          </div>
+          <label className="text-text-2 flex cursor-pointer items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              className="border-border text-accent-600 mt-0.5 size-4 shrink-0 rounded"
+              checked={memoryAutoReview}
+              onChange={(e) => {
+                const v = e.target.checked
+                setMemoryAutoReview(v)
+                memorySettingsSet({ autoReviewOnIdle: v })
+              }}
+            />
+            <span>
+              <span className="text-text-1 font-medium">
+                Automatically update memory when I pause chatting
+              </span>
+              <span className="text-text-3 mt-1 block text-xs leading-relaxed">
+                Uses your configured model and API key after a few minutes of
+                idle time; at most about once every 20 minutes per workspace.
+                You can always edit the file directly or use &quot;Update
+                memory&quot; from an open chat.
+              </span>
+            </span>
+          </label>
+        </div>
       </div>
     </div>
   )

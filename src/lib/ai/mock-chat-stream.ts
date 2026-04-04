@@ -94,6 +94,7 @@ export async function* streamMockChatTurn(
     }
   }
 
+  const isCodeMode = context?.agentMode === 'code'
   const payload = getMockArtifactPayloadForChat(
     context?.conversationId ?? null,
   )
@@ -101,32 +102,36 @@ export async function* streamMockChatTurn(
     context?.contextFiles != null && context.contextFiles.length > 0
       ? ` (${context.contextFiles.length} attached file(s): ${context.contextFiles.map((f) => f.displayName?.trim() || f.relativePath).join(', ')}.)`
       : ''
-  const replyText = `${pickRandomReply()}${fileHint} ${canvasHint(payload.kind)}`
+  const replyText = isCodeMode
+    ? `${pickRandomReply()}${fileHint} Mock mode: coding tools (read/write/run) are not simulated — use the real desktop app without braian.mockAi for workspace commands.`
+    : `${pickRandomReply()}${fileHint} ${canvasHint(payload.kind)}`
 
   signal?.throwIfAborted()
-  const mockToolId = `mock-tool-${Date.now()}`
-  yield {
-    type: 'tool-start',
-    toolCallId: mockToolId,
-    toolName: 'open_document_canvas',
-  }
-  yield {
-    type: 'tool-args-delta',
-    toolCallId: mockToolId,
-    delta: '{"title":"Mock canvas","body":"# Hello from mock tool',
-  }
-  await delay(40, signal)
-  yield {
-    type: 'tool-args-delta',
-    toolCallId: mockToolId,
-    delta: '\\n\\nThis simulates streaming tool arguments."}',
-  }
-  await delay(50, signal)
-  yield {
-    type: 'tool-end',
-    toolCallId: mockToolId,
-    toolName: 'open_document_canvas',
-    input: { title: 'Mock canvas', body: '# Hello…' },
+  if (!isCodeMode) {
+    const mockToolId = `mock-tool-${Date.now()}`
+    yield {
+      type: 'tool-start',
+      toolCallId: mockToolId,
+      toolName: 'open_document_canvas',
+    }
+    yield {
+      type: 'tool-args-delta',
+      toolCallId: mockToolId,
+      delta: '{"title":"Mock canvas","body":"# Hello from mock tool',
+    }
+    await delay(40, signal)
+    yield {
+      type: 'tool-args-delta',
+      toolCallId: mockToolId,
+      delta: '\\n\\nThis simulates streaming tool arguments."}',
+    }
+    await delay(50, signal)
+    yield {
+      type: 'tool-end',
+      toolCallId: mockToolId,
+      toolName: 'open_document_canvas',
+      input: { title: 'Mock canvas', body: '# Hello…' },
+    }
   }
 
   const pieces = splitForStreaming(replyText)
@@ -137,7 +142,9 @@ export async function* streamMockChatTurn(
   }
 
   signal?.throwIfAborted()
-  yield { type: 'artifact', payload }
+  if (!isCodeMode) {
+    yield { type: 'artifact', payload }
+  }
 
   signal?.throwIfAborted()
   yield { type: 'done' }

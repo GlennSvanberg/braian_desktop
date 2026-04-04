@@ -1,4 +1,5 @@
 import {
+  Brain,
   Check,
   Copy,
   CornerDownLeft,
@@ -6,6 +7,7 @@ import {
   Paperclip,
   Sparkles,
   Square,
+  Terminal,
   X,
 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -36,9 +38,15 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { useIsMobile } from '@/hooks/use-mobile'
+import {
+  applyMentionToDraft,
+  filterWorkspaceFilesForMention,
+  getMentionQuery,
+} from '@/lib/chat-mention-files'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import {
+  getThreadSnapshot,
   replaceThread,
   seedCanvasPreviewIfEmpty,
   useChatThread,
@@ -57,7 +65,9 @@ import {
   buildConversationSavePayload,
   conversationSave,
   workspaceImportFile,
+  workspaceListAllFiles,
   type ConversationDto,
+  type WorkspaceFileIndexEntry,
 } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
 
@@ -105,6 +115,18 @@ export function ChatWorkbench({
   } = useChatThreadActions()
 
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [memoryUpdateBusy, setMemoryUpdateBusy] = useState(false)
+  const [memoryUpdateHint, setMemoryUpdateHint] = useState<string | null>(null)
+  const [workspaceFileIndex, setWorkspaceFileIndex] = useState<
+    WorkspaceFileIndexEntry[]
+  >([])
+  const [caretPos, setCaretPos] = useState(0)
+  const [mentionHighlight, setMentionHighlight] = useState(0)
+  const [mentionMenuSuppressed, setMentionMenuSuppressed] = useState(false)
+  const [fileDragHighlight, setFileDragHighlight] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const composerDropZoneRef = useRef<HTMLDivElement>(null)
+  const dragHasFilesRef = useRef(false)
 
   const saved = conversationId
     ? getConversationById(conversationId)
@@ -158,7 +180,77 @@ export function ChatWorkbench({
     generating,
     pendingUserMessages,
     contextFiles,
+    agentMode,
   } = thread
+
+  const mention = useMemo(
+    () => getMentionQuery(draft, caretPos),
+    [draft, caretPos],
+  )
+  const mentionOptions = useMemo(
+    () =>
+      mention
+        ? filterWorkspaceFilesForMention(workspaceFileIndex, mention.query)
+        : [],
+    [mention, workspaceFileIndex],
+  )
+  const showMentionList =
+    mention != null &&
+    !mentionMenuSuppressed &&
+    isTauriRuntime &&
+    !!activeWorkspace?.rootPath
+
+  const appendDraftMentions = useCallback(
+    (tags: string[]) => {
+      if (tags.length === 0) return
+      const snap = getThreadSnapshot(sessionKey)
+      const sep =
+        snap.draft.length > 0 && !/\s$/.test(snap.draft) ? ' ' : ''
+      setChatDraft(
+        sessionKey,
+        `${snap.draft}${sep}${tags.join(' ')} `,
+      )
+    },
+    [sessionKey, setChatDraft],
+  )
+
+  const attachAbsolutePaths = useCallback(
+    async (paths: string[]): Promise<string[]> => {
+      const mentionTags: string[] = []
+      if (!isTauriRuntime || !activeWorkspace?.rootPath) return mentionTags
+      for (const abs of paths) {
+        try {
+          if (isPathUnderRoot(abs, activeWorkspace.rootPath)) {
+            const rel = relativePathFromRoot(abs, activeWorkspace.rootPath)
+            const name =
+              abs.replace(/[/\\]/g, '/').split('/').pop() ?? rel
+            addContextFileEntry(sessionKey, {
+              relativePath: rel,
+              displayName: name,
+            })
+            mentionTags.push(`@${name}`)
+          } else {
+            const { relativePath, displayName } = await workspaceImportFile(
+              activeWorkspaceId,
+              abs,
+            )
+            addContextFileEntry(sessionKey, { relativePath, displayName })
+            mentionTags.push(`@${displayName}`)
+          }
+        } catch (e) {
+          console.error('[braian] attach file', e)
+        }
+      }
+      return mentionTags
+    },
+    [
+      activeWorkspace?.rootPath,
+      activeWorkspaceId,
+      addContextFileEntry,
+      isTauriRuntime,
+      sessionKey,
+    ],
+  )
 
   const onAttachFiles = useCallback(async () => {
     if (!isTauriRuntime || !activeWorkspace?.rootPath) return
@@ -170,35 +262,132 @@ export function ChatWorkbench({
     })
     if (picked == null) return
     const paths = Array.isArray(picked) ? picked : [picked]
-    for (const abs of paths) {
-      try {
-        if (isPathUnderRoot(abs, activeWorkspace.rootPath)) {
-          const rel = relativePathFromRoot(abs, activeWorkspace.rootPath)
-          const name = abs.replace(/[/\\]/g, '/').split('/').pop() ?? rel
-          addContextFileEntry(sessionKey, {
-            relativePath: rel,
-            displayName: name,
-          })
-        } else {
-          const { relativePath, displayName } = await workspaceImportFile(
-            activeWorkspaceId,
-            conversationId,
-            abs,
-          )
-          addContextFileEntry(sessionKey, { relativePath, displayName })
-        }
-      } catch (e) {
-        console.error('[braian] attach file', e)
-      }
+    await attachAbsolutePaths(paths)
+  }, [activeWorkspace?.rootPath, attachAbsolutePaths, isTauriRuntime])
+
+  const onNativeFileDrop = useCallback(
+    async (paths: string[]) => {
+      const tags = await attachAbsolutePaths(paths)
+      appendDraftMentions(tags)
+    },
+    [appendDraftMentions, attachAbsolutePaths],
+  )
+
+  useEffect(() => {
+    setMentionHighlight(0)
+  }, [mention?.start, mention?.query])
+
+  useEffect(() => {
+    if (mention == null) setMentionMenuSuppressed(false)
+  }, [mention])
+
+  useEffect(() => {
+    setMentionMenuSuppressed(false)
+  }, [mention?.start])
+
+  useEffect(() => {
+    if (!isTauriRuntime || !activeWorkspaceId) {
+      setWorkspaceFileIndex([])
+      return
     }
-  }, [
-    activeWorkspace?.rootPath,
-    activeWorkspaceId,
-    addContextFileEntry,
-    conversationId,
-    isTauriRuntime,
-    sessionKey,
-  ])
+    let cancelled = false
+    void workspaceListAllFiles(activeWorkspaceId)
+      .then((rows) => {
+        if (!cancelled) setWorkspaceFileIndex(rows)
+      })
+      .catch((e) => console.error('[braian] workspace file index', e))
+    return () => {
+      cancelled = true
+    }
+  }, [isTauriRuntime, activeWorkspaceId])
+
+  useEffect(() => {
+    if (!isTauriRuntime) return
+    let unlisten: (() => void) | undefined
+    let alive = true
+    void (async () => {
+      const [{ getCurrentWebview }, { getCurrentWindow }, { PhysicalPosition }] =
+        await Promise.all([
+          import('@tauri-apps/api/webview'),
+          import('@tauri-apps/api/window'),
+          import('@tauri-apps/api/dpi'),
+        ])
+      if (!alive) return
+      unlisten = await getCurrentWebview().onDragDropEvent(async (e) => {
+        const el = composerDropZoneRef.current
+        if (!el) return
+        const factor = await getCurrentWindow().scaleFactor()
+        const posRaw = e.payload as { position?: { x: number; y: number } }
+        if (e.payload.type === 'leave') {
+          dragHasFilesRef.current = false
+          setFileDragHighlight(false)
+          return
+        }
+        if (e.payload.type === 'enter' && 'paths' in e.payload) {
+          dragHasFilesRef.current = e.payload.paths.length > 0
+        }
+        const p = posRaw.position
+        if (!p) return
+        const logical = new PhysicalPosition(p.x, p.y).toLogical(factor)
+        const r = el.getBoundingClientRect()
+        const inside =
+          logical.x >= r.left &&
+          logical.x <= r.right &&
+          logical.y >= r.top &&
+          logical.y <= r.bottom
+        if (e.payload.type === 'enter' || e.payload.type === 'over') {
+          setFileDragHighlight(inside && dragHasFilesRef.current)
+        }
+        if (e.payload.type === 'drop') {
+          dragHasFilesRef.current = false
+          setFileDragHighlight(false)
+          if (inside && 'paths' in e.payload && e.payload.paths.length > 0) {
+            await onNativeFileDrop(e.payload.paths)
+          }
+        }
+      })
+    })()
+    return () => {
+      alive = false
+      unlisten?.()
+    }
+  }, [isTauriRuntime, onNativeFileDrop])
+
+  const pickMention = useCallback(
+    (pick: WorkspaceFileIndexEntry) => {
+      const ta = textareaRef.current
+      const caret = ta?.selectionStart ?? caretPos
+      const m = getMentionQuery(draft, caret)
+      if (!m) return
+      const { nextDraft, nextCaret } = applyMentionToDraft(
+        draft,
+        caret,
+        m.start,
+        pick,
+      )
+      setChatDraft(sessionKey, nextDraft)
+      addContextFileEntry(sessionKey, {
+        relativePath: pick.relativePath,
+        displayName: pick.name,
+      })
+      setMentionMenuSuppressed(true)
+      requestAnimationFrame(() => {
+        const t = textareaRef.current
+        if (t) {
+          t.focus()
+          t.setSelectionRange(nextCaret, nextCaret)
+          setCaretPos(nextCaret)
+        }
+      })
+    },
+    [
+      addContextFileEntry,
+      caretPos,
+      draft,
+      sessionKey,
+      setChatDraft,
+    ],
+  )
 
   useLayoutEffect(() => {
     if (conversationId == null || !metaForSave) return
@@ -263,10 +452,46 @@ export function ChatWorkbench({
   }, [draft, sendChatTurn, sessionKey])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showMentionList && mentionOptions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionHighlight((i) => (i + 1) % mentionOptions.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionHighlight(
+          (i) => (i - 1 + mentionOptions.length) % mentionOptions.length,
+        )
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        const pick = mentionOptions[mentionHighlight]
+        if (pick) pickMention(pick)
+        return
+      }
+      if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault()
+        const pick = mentionOptions[mentionHighlight]
+        if (pick) pickMention(pick)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setMentionMenuSuppressed(true)
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
     }
+  }
+
+  const syncCaretFromTextarea = () => {
+    const t = textareaRef.current
+    if (t) setCaretPos(t.selectionStart)
   }
 
   const copyMessageText = useCallback(async (messageId: string, text: string) => {
@@ -281,9 +506,40 @@ export function ChatWorkbench({
     }
   }, [])
 
-  const helperSubtitle = artifactOpen
-    ? 'Workspace canvas is open · resize the split or keep typing below.'
-    : 'Primary assistant replies stream here. Configure your API key under Settings. Dev mock: localStorage braian.mockAi = 1.'
+  const onUpdateMemoryNow = useCallback(() => {
+    if (!conversationId || !activeWorkspaceId || memoryUpdateBusy) return
+    setMemoryUpdateBusy(true)
+    setMemoryUpdateHint(null)
+    void import('@/lib/memory/scheduler')
+      .then((m) => m.runMemoryReviewNow(activeWorkspaceId, conversationId))
+      .then((r) => {
+        if (r.ok && r.skipped) {
+          setMemoryUpdateHint(r.reason)
+        } else if (!r.ok) {
+          setMemoryUpdateHint(r.error)
+        } else {
+          setMemoryUpdateHint('Memory file updated (.braian/MEMORY.md).')
+        }
+      })
+      .catch((e) => {
+        setMemoryUpdateHint(
+          e instanceof Error ? e.message : 'Memory update failed.',
+        )
+      })
+      .finally(() => {
+        setMemoryUpdateBusy(false)
+        window.setTimeout(() => setMemoryUpdateHint(null), 6000)
+      })
+  }, [activeWorkspaceId, conversationId, memoryUpdateBusy])
+
+  const helperSubtitle =
+    agentMode === 'code'
+      ? isTauriRuntime
+        ? 'Workspace scripts and file tools are active — programs and writes stay under this workspace (same trust as a local CLI).'
+        : 'File and command tools need the desktop app.'
+      : artifactOpen
+        ? 'Workspace canvas is open · resize the split or keep typing below.'
+        : 'Primary assistant replies stream here. Configure your API key under Settings. Dev mock: localStorage braian.mockAi = 1.'
   const filesPrivacyNote =
     contextFiles.length > 0
       ? 'Attached file contents are sent to your configured LLM provider when you send a message.'
@@ -334,9 +590,57 @@ export function ChatWorkbench({
                     Stop
                   </Button>
                 ) : null}
+                {!generating &&
+                conversationId &&
+                isTauriRuntime ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-text-2 border-border h-7 gap-1.5 px-2 text-xs"
+                    disabled={memoryUpdateBusy}
+                    onClick={onUpdateMemoryNow}
+                  >
+                    {memoryUpdateBusy ? (
+                      <Loader2
+                        className="size-3.5 shrink-0 animate-spin"
+                        aria-hidden
+                      />
+                    ) : (
+                      <Brain className="size-3.5 shrink-0" aria-hidden />
+                    )}
+                    Update memory
+                  </Button>
+                ) : null}
               </div>
+              {memoryUpdateHint ? (
+                <p className="text-text-3 mt-1 text-xs">{memoryUpdateHint}</p>
+              ) : null}
               <p className="text-text-3 mt-1 text-xs leading-relaxed">
                 {helperSubtitle}
+              </p>
+              <p className="text-text-3 mt-2 inline-flex flex-wrap items-center gap-1.5 text-xs leading-relaxed">
+                {agentMode === 'code' ? (
+                  <>
+                    <Terminal
+                      className="text-text-3 size-3.5 shrink-0 opacity-80"
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="text-text-2 font-medium">
+                        Workspace tools:
+                      </span>{' '}
+                      canvas plus scripts and files (assistant enabled this
+                      automatically when needed).
+                    </span>
+                  </>
+                ) : (
+                  <span>
+                    <span className="text-text-2 font-medium">Workspace:</span>{' '}
+                    canvas-first; scripts and file tools turn on automatically
+                    when the task requires them.
+                  </span>
+                )}
               </p>
               {contextFiles.length > 0 ? (
                 <p className="text-text-3 mt-1 text-xs leading-relaxed">
@@ -373,7 +677,8 @@ export function ChatWorkbench({
                   >
                     <div
                       className={cn(
-                        'group/message relative max-w-[min(100%,42rem)]',
+                        'group/message relative max-w-[min(100%,40rem)] sm:max-w-[min(100%,44rem)] md:max-w-[min(100%,52rem)] lg:max-w-[min(100%,64rem)] xl:max-w-[min(100%,min(90vw,76rem))] 2xl:max-w-[min(100%,min(92vw,88rem))]',
+                        !isUser && 'w-full',
                       )}
                     >
                       {canCopy ? (
@@ -414,7 +719,17 @@ export function ChatWorkbench({
                         {isUser ? (
                           <ChatUserMessageBody content={m.content} />
                         ) : (
-                          <ChatAssistantMessageBody message={m} />
+                          <ChatAssistantMessageBody
+                            message={m}
+                            workspaceFileContext={
+                              isTauriRuntime && activeWorkspace?.rootPath
+                                ? {
+                                    isDesktop: true,
+                                    workspaceRootPath: activeWorkspace.rootPath,
+                                  }
+                                : null
+                            }
+                          />
                         )}
                       </div>
                     </div>
@@ -425,7 +740,26 @@ export function ChatWorkbench({
           )}
         </div>
       </ScrollArea>
-      <div className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t p-3 backdrop-blur-md md:p-4">
+      <div
+        ref={composerDropZoneRef}
+        className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t p-3 backdrop-blur-md md:p-4"
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          const dropped = Array.from(e.dataTransfer.files)
+          const paths: string[] = []
+          for (const f of dropped) {
+            const path = (f as File & { path?: string }).path
+            if (typeof path === 'string' && path.length > 0) {
+              paths.push(path)
+            }
+          }
+          if (paths.length > 0) void onNativeFileDrop(paths)
+        }}
+      >
         {isTauriRuntime && activeWorkspace?.rootPath ? (
           <WorkspaceFilesPanel
             className="mb-2"
@@ -462,12 +796,68 @@ export function ChatWorkbench({
             ))}
           </div>
         ) : null}
-        <div className="bg-card border-border focus-within:ring-ring/40 relative rounded-xl border shadow-sm focus-within:ring-2">
+        <div
+          className={cn(
+            'bg-card border-border focus-within:ring-ring/40 relative rounded-xl border shadow-sm focus-within:ring-2',
+            fileDragHighlight &&
+              'ring-accent-500/50 border-accent-500/60 ring-2',
+          )}
+        >
+          {showMentionList ? (
+            <div
+              className="border-border bg-popover text-popover-foreground absolute bottom-full left-2 right-2 z-20 mb-1 max-h-52 overflow-hidden rounded-lg border shadow-md"
+              role="listbox"
+              aria-label="Attach workspace file"
+            >
+              <ScrollArea className="max-h-52">
+                <ul className="py-1">
+                  {mentionOptions.length === 0 ? (
+                    <li className="text-text-3 px-3 py-2 text-xs">
+                      No matching files
+                    </li>
+                  ) : (
+                    mentionOptions.map((opt, idx) => (
+                      <li key={opt.relativePath}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={idx === mentionHighlight}
+                          className={cn(
+                            'hover:bg-muted/80 flex w-full flex-col gap-0.5 px-3 py-2 text-left text-xs',
+                            idx === mentionHighlight && 'bg-muted',
+                          )}
+                          onMouseEnter={() => setMentionHighlight(idx)}
+                          onMouseDown={(ev) => {
+                            ev.preventDefault()
+                            pickMention(opt)
+                          }}
+                        >
+                          <span className="text-text-1 font-medium">
+                            {opt.name}
+                          </span>
+                          <span className="text-text-3 truncate">
+                            {opt.relativePath}
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </ScrollArea>
+            </div>
+          ) : null}
           <Textarea
-            placeholder="Message Braian…"
+            ref={textareaRef}
+            placeholder="Message Braian… (drop files here, or @ to attach)"
             value={draft}
-            onChange={(e) => setChatDraft(sessionKey, e.target.value)}
+            onChange={(e) => {
+              setChatDraft(sessionKey, e.target.value)
+              setCaretPos(e.target.selectionStart)
+            }}
             onKeyDown={onKeyDown}
+            onKeyUp={syncCaretFromTextarea}
+            onClick={syncCaretFromTextarea}
+            onSelect={syncCaretFromTextarea}
             className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 text-sm shadow-none focus-visible:ring-0"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">

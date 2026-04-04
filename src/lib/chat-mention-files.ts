@@ -2,6 +2,12 @@ import type { WorkspaceFileIndexEntry } from '@/lib/workspace-api'
 
 const MENTION_MAX_RESULTS = 48
 
+/** Workspace-internal store (conversations, artifacts, etc.) — never offer in @file mentions. */
+function isInternalBraianPath(relativePath: string): boolean {
+  const p = relativePath.replace(/\\/g, '/')
+  return p === '.braian' || p.startsWith('.braian/')
+}
+
 /** Active @… mention at caret: `start` is index of `@`, `query` is text after `@`. */
 export function getMentionQuery(
   draft: string,
@@ -27,10 +33,11 @@ export function filterWorkspaceFilesForMention(
   query: string,
 ): WorkspaceFileIndexEntry[] {
   const q = query.trim().toLowerCase()
+  const visible = files.filter((f) => !isInternalBraianPath(f.relativePath))
   const filtered =
     q === ''
-      ? files
-      : files.filter(
+      ? visible
+      : visible.filter(
           (f) =>
             f.name.toLowerCase().includes(q) ||
             f.relativePath.toLowerCase().includes(q),

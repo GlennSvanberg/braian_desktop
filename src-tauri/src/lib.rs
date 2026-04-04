@@ -2,6 +2,7 @@ mod ai_settings;
 mod braian_store;
 mod db;
 mod workspace;
+mod workspace_agent;
 mod workspace_files;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,14 +36,17 @@ pub fn run() {
       workspace::workspace_remove,
       workspace::workspace_rename,
       workspace_files::workspace_read_text_file,
+      workspace_files::workspace_write_text_file,
       workspace_files::workspace_import_file,
       workspace_files::workspace_list_dir,
       workspace_files::workspace_list_all_files,
+      workspace_agent::workspace_run_command,
       braian_store::conversation_list,
       braian_store::conversation_create,
       braian_store::conversation_open,
       braian_store::conversation_save,
       braian_store::conversation_set_title,
+      braian_store::conversation_delete,
       braian_store::canvas_document_write,
       ai_settings::ai_settings_get,
       ai_settings::ai_settings_set,
