@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import {
   Children,
   isValidElement,
@@ -205,12 +205,51 @@ function ChatMarkdownBlock({
 }
 
 const toolCallPreBase =
-  'rounded-md border p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words'
+  'rounded-md border border-border/40 bg-muted/25 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words'
 
 const toolCallPreVariants = {
-  args: 'border-border/50 bg-muted/20 text-text-3',
-  result: 'border-accent-500/25 bg-bg-2/90 text-text-2 ring-1 ring-inset ring-border/40',
+  args: 'text-text-3',
+  result: 'text-text-2',
 } as const
+
+/** Pretty-print when the payload is a JSON object or array; otherwise return unchanged. */
+function formatToolPayloadText(raw: string): string {
+  const t = raw.trim()
+  if (t.length === 0) return raw
+  const c = t[0]
+  if (c !== '{' && c !== '[') return raw
+  try {
+    return JSON.stringify(JSON.parse(t), null, 2)
+  } catch {
+    return raw
+  }
+}
+
+function ToolRowStatus({ streaming }: { streaming: boolean }) {
+  if (streaming) {
+    return (
+      <span
+        className="flex size-7 shrink-0 items-center justify-center"
+        title="Running"
+      >
+        <Loader2
+          className="text-text-1 size-4 shrink-0 animate-spin"
+          aria-hidden
+        />
+        <span className="sr-only">Running</span>
+      </span>
+    )
+  }
+  return (
+    <span
+      className="border-accent-500/40 bg-accent-500/10 flex size-7 shrink-0 items-center justify-center rounded-full border"
+      title="Done"
+    >
+      <Check className="text-accent-500 size-3.5 shrink-0" aria-hidden />
+      <span className="sr-only">Done</span>
+    </span>
+  )
+}
 
 function ThinkingPartCard({ part }: { part: AssistantThinkingPart }) {
   const streaming = part.status === 'streaming'
@@ -223,46 +262,38 @@ function ThinkingPartCard({ part }: { part: AssistantThinkingPart }) {
   const hasBody = part.text.trim().length > 0
 
   return (
-    <div
-      className={cn(
-        'border-border/80 bg-muted/15 rounded-lg border',
-        'text-text-3 px-2.5 py-2 text-xs leading-relaxed',
-      )}
-    >
+    <div className="chat-tool-call text-text-3 text-xs leading-relaxed">
       <button
         type="button"
         className={cn(
-          'group flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left',
+          'group flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left',
           'text-text-2 font-medium tracking-tight',
           'hover:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
         )}
         onClick={() => setExpanded((e) => !e)}
         aria-expanded={expanded}
       >
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            'text-text-3 size-3.5 shrink-0 transition-transform',
-            expanded && 'rotate-180',
-          )}
-        />
+        {expanded ? (
+          <ChevronUp
+            aria-hidden
+            className="text-text-3 size-3.5 shrink-0"
+          />
+        ) : (
+          <ChevronDown
+            aria-hidden
+            className="text-text-3 size-3.5 shrink-0"
+          />
+        )}
         <span className="min-w-0 truncate">Thinking</span>
-        <span
-          className={cn(
-            'ml-auto shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold',
-            streaming
-              ? 'bg-warning/15 text-warning'
-              : 'bg-muted/40 text-text-3',
-          )}
-        >
-          {streaming ? '…' : 'Done'}
+        <span className="ml-auto shrink-0">
+          <ToolRowStatus streaming={streaming} />
         </span>
       </button>
       {expanded && hasBody ? (
         <pre
           className={cn(
             toolCallPreBase,
-            'border-border/50 bg-background/80 text-text-2 mt-2 max-h-64 overflow-auto',
+            'text-text-2 mt-2 max-h-64 overflow-auto',
           )}
         >
           {part.text}
@@ -297,6 +328,7 @@ function ToolCallExpandablePre({
   const [expanded, setExpanded] = useState(false)
   const [hasOverflow, setHasOverflow] = useState(false)
   const preRef = useRef<HTMLPreElement>(null)
+  const displayText = useMemo(() => formatToolPayloadText(text), [text])
 
   useLayoutEffect(() => {
     const el = preRef.current
@@ -307,7 +339,7 @@ function ToolCallExpandablePre({
     }
     const id = requestAnimationFrame(measure)
     return () => cancelAnimationFrame(id)
-  }, [text, expanded])
+  }, [displayText, expanded])
 
   const showToggle = hasOverflow || expanded
 
@@ -318,24 +350,25 @@ function ToolCallExpandablePre({
         className={cn(
           toolCallPreBase,
           toolCallPreVariants[variant],
-          !expanded && 'line-clamp-2 overflow-hidden',
+          !expanded && 'line-clamp-3 overflow-hidden',
         )}
       >
-        {text}
+        {displayText}
       </pre>
       {showToggle ? (
         <button
           type="button"
           aria-expanded={expanded}
-          className={cn(
-            'mt-1.5 text-xs font-medium underline-offset-2 hover:underline',
-            variant === 'args'
-              ? 'text-text-3 hover:text-accent-600'
-              : 'text-accent-600/90 hover:text-accent-500',
-          )}
+          aria-label={expanded ? 'Show less' : 'Show more'}
+          title={expanded ? 'Show less' : 'Show more'}
+          className="text-text-3 hover:text-text-1 mt-1.5 inline-flex items-center rounded-md p-0.5 transition-colors hover:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
           onClick={() => setExpanded((e) => !e)}
         >
-          {expanded ? 'Show less' : 'Show more'}
+          {expanded ? (
+            <ChevronUp className="size-4" aria-hidden />
+          ) : (
+            <ChevronDown className="size-4" aria-hidden />
+          )}
         </button>
       ) : null}
     </div>
@@ -352,51 +385,41 @@ function ToolCallCard({ part }: { part: AssistantToolPart }) {
     streaming
 
   return (
-    <div
-      className={cn(
-        'chat-tool-call bg-muted/25 rounded-lg border border-border border-l-2 border-l-accent-500/55 px-2.5 py-2 shadow-sm',
-        streaming && 'border-accent-500/35',
-      )}
-    >
+    <div className="chat-tool-call rounded-md">
       <div className="flex items-center justify-between gap-2">
         {hasDetails ? (
           <button
             type="button"
             aria-expanded={expanded}
             className={cn(
-              'group flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-0.5 text-left',
-              'text-accent-500 font-mono text-xs font-semibold tracking-tight',
+              'group flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left',
+              'text-text-3 font-mono text-xs font-medium tracking-tight',
               'hover:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
             )}
             onClick={() => setExpanded((e) => !e)}
           >
-            <ChevronDown
-              aria-hidden
-              className={cn(
-                'text-text-3 size-3.5 shrink-0 transition-transform',
-                expanded && 'rotate-180',
-              )}
-            />
+            {expanded ? (
+              <ChevronUp
+                aria-hidden
+                className="text-text-3 size-3.5 shrink-0"
+              />
+            ) : (
+              <ChevronDown
+                aria-hidden
+                className="text-text-3 size-3.5 shrink-0"
+              />
+            )}
             <span className="min-w-0 truncate">{part.toolName}</span>
           </button>
         ) : (
-          <span className="text-accent-500 min-w-0 flex-1 truncate font-mono text-xs font-semibold tracking-tight">
+          <span className="text-text-3 min-w-0 flex-1 truncate px-2 py-1.5 font-mono text-xs font-medium tracking-tight">
             {part.toolName}
           </span>
         )}
-        <span
-          className={cn(
-            'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold',
-            streaming
-              ? 'bg-warning/15 text-warning'
-              : 'bg-accent-500/12 text-accent-600',
-          )}
-        >
-          {streaming ? 'Running…' : 'Done'}
-        </span>
+        <ToolRowStatus streaming={streaming} />
       </div>
       {expanded ? (
-        <div className="border-border/70 mt-2 border-t pt-2">
+        <div className="mt-2 border-t border-border/40 pt-2">
           {part.argsText ? (
             <div>
               <ToolCallSectionLabel>Arguments</ToolCallSectionLabel>
@@ -408,7 +431,7 @@ function ToolCallCard({ part }: { part: AssistantToolPart }) {
           {part.result ? (
             <div
               className={cn(
-                part.argsText || streaming ? 'mt-2 border-border/60 border-t pt-2' : '',
+                part.argsText || streaming ? 'mt-2 border-t border-border/40 pt-2' : '',
               )}
             >
               <ToolCallSectionLabel>Result</ToolCallSectionLabel>
@@ -423,7 +446,7 @@ function ToolCallCard({ part }: { part: AssistantToolPart }) {
 
 export function ChatUserMessageBody({ content }: { content: string }) {
   return (
-    <p className="text-primary-foreground whitespace-pre-wrap break-words">
+    <p className="text-text-1 whitespace-pre-wrap break-words">
       {content}
     </p>
   )

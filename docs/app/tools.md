@@ -43,9 +43,9 @@ Paths are always **relative to the workspace root**. The shell tool provides ful
 
 In a **saved** workspace chat (desktop app), the header includes **Document** | **Code** | **App**:
 
-- **Code** — All workspace tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. The routing prompt includes a tool selection guide and guidelines for search-before-read, patch-over-rewrite, and shell usage.
-- **Document** — Default assistant behavior; workspace tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** and completes the tool-discovery step. The model is only told about that workflow when the switch tool is available in the current turn.
-- **App** — Keeps document-style behavior but **always** exposes the **workspace dashboard** tools (`read_workspace_dashboard`, `apply_workspace_dashboard`, `upsert_workspace_page`) so the model can edit `.braian/dashboard/board.json` and page JSON under `.braian/dashboard/pages/`. See [Dashboard & in-app pages](/docs/dashboard).
+- **Code** — All workspace **coding** tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. Dashboard tools stay **lazy** until the assistant uses **`switch_to_app_builder`** and discovery (same as Document). The routing prompt includes a tool selection guide for files and commands.
+- **Document** — Default assistant behavior; coding and dashboard tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** or **`switch_to_app_builder`** and completes the tool-discovery step. The model is only told about each workflow when the corresponding switch tool is available in the current turn.
+- **App** — **Full code mode** (eager coding tools) **plus** eager **workspace dashboard** tools (`read_workspace_dashboard`, `apply_workspace_dashboard`, `upsert_workspace_page`) and the **app-builder** instructions so the model can edit `.braian/dashboard/board.json` and page JSON under `.braian/dashboard/pages/`. The chat side panel shows a **live preview** of the dashboard. See [Dashboard & in-app pages](/docs/dashboard).
 
 You can switch modes yourself, or stay on **Document** and ask the assistant to enable dashboard or code capabilities through its tools when needed.
 

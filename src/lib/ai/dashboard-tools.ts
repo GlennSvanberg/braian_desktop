@@ -93,7 +93,8 @@ export function buildDashboardTools(
     return []
   }
 
-  const lazy = options?.lazy ?? context.appHarnessEnabled !== true
+  const lazy =
+    options?.lazy ?? (context?.agentMode ?? 'document') !== 'app'
 
   const workspaceId = context.workspaceId
   const lazyOpt = lazy ? ({ lazy: true } as const) : {}
@@ -187,6 +188,7 @@ export function buildDashboardTools(
           DASHBOARD_BOARD_RELATIVE_PATH,
           text,
         )
+        context?.onDashboardWorkspaceFilesChanged?.()
         return {
           ok: true as const,
           path: DASHBOARD_BOARD_RELATIVE_PATH,
@@ -214,6 +216,7 @@ export function buildDashboardTools(
       try {
         const text = serializeWorkspacePage(page)
         await workspaceWriteTextFile(workspaceId, rel, text)
+        context?.onDashboardWorkspaceFilesChanged?.()
         return {
           ok: true as const,
           path: rel,

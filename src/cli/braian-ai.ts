@@ -17,6 +17,7 @@ import {
 import { streamTanStackChatTurnHeadless } from '@/lib/ai/tanstack-chat-stream'
 import type { ChatTurnContext, PriorChatMessage } from '@/lib/ai/types'
 import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
+import { deriveAgentModeFromPersisted } from '@/lib/workspace-api'
 
 const PROVIDER_IDS = [
   'openai',
@@ -54,17 +55,26 @@ const documentCanvasSnapshotSchema = z
     revision: s.revision ?? 0,
   }))
 
-const chatTurnContextSchema = z.object({
-  workspaceId: z.string(),
-  conversationId: z.string().nullable(),
-  turnKind: z.enum(['default', 'profile']).optional(),
-  agentMode: z.enum(['document', 'code']).optional(),
-  appHarnessEnabled: z.boolean().optional(),
-  documentCanvasSnapshot: z
-    .union([documentCanvasSnapshotSchema, z.null()])
-    .optional(),
-  contextFiles: z.array(contextFileEntrySchema).optional(),
-})
+const chatTurnContextSchema = z
+  .object({
+    workspaceId: z.string(),
+    conversationId: z.string().nullable(),
+    turnKind: z.enum(['default', 'profile']).optional(),
+    agentMode: z.enum(['document', 'code', 'app']).optional(),
+    /** Legacy: merged into \`agentMode\` via deriveAgentModeFromPersisted. */
+    appHarnessEnabled: z.boolean().optional(),
+    documentCanvasSnapshot: z
+      .union([documentCanvasSnapshotSchema, z.null()])
+      .optional(),
+    contextFiles: z.array(contextFileEntrySchema).optional(),
+  })
+  .transform((d) => {
+    const { appHarnessEnabled: _h, ...rest } = d
+    return {
+      ...rest,
+      agentMode: deriveAgentModeFromPersisted(d.agentMode, d.appHarnessEnabled),
+    }
+  })
 
 const priorMessagesSchema = z.array(
   z.object({

@@ -21,6 +21,7 @@ import {
 
 import {
   APP_BUILDER_INSTRUCTIONS_FALLBACK,
+  APP_MODE_ROUTING_ADDENDUM,
   buildBraianRoutingPrompt,
   CODE_MODE_ROUTING_ADDENDUM,
   DOC_MODE_ROUTING_ADDENDUM,
@@ -439,12 +440,14 @@ export async function buildTanStackChatTurnArgs(
     }
   }
 
-  const isCodeMode = ctx?.agentMode === 'code'
+  const agentMode = ctx?.agentMode ?? 'document'
+  const isAppMode = agentMode === 'app'
+  const isCodeMode = agentMode === 'code' || isAppMode
 
   const canvasTools = buildCanvasTools(ctx)
   const codingTools = buildCodingTools(ctx, { lazy: !isCodeMode })
   const switchToCodeTool =
-    !isCodeMode ? buildSwitchToCodeAgentTool(ctx) : null
+    agentMode === 'document' ? buildSwitchToCodeAgentTool(ctx) : null
   const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
   const dashboardTools = buildDashboardTools(ctx)
   const skillTools = buildSkillTools(ctx)
@@ -505,12 +508,13 @@ export async function buildTanStackChatTurnArgs(
       mcpServerNames,
     }),
     isCodeMode ? CODE_MODE_ROUTING_ADDENDUM : DOC_MODE_ROUTING_ADDENDUM,
+    ...(isAppMode ? [APP_MODE_ROUTING_ADDENDUM] : []),
   ].join('\n\n')
 
   if (isCodeMode) {
     systemSections.push({
       id: 'routing-code',
-      label: 'Routing (code agent)',
+      label: isAppMode ? 'Routing (App agent)' : 'Routing (code agent)',
       source: SOURCE_ROUTING_CODE,
       text: routingText,
     })
@@ -579,8 +583,8 @@ export async function buildTanStackChatTurnArgs(
   }
 
   if (
-    ctx?.appHarnessEnabled === true &&
-    ctx.workspaceId != null &&
+    isAppMode &&
+    ctx?.workspaceId != null &&
     !isNonWorkspaceScopedSessionId(ctx.workspaceId)
   ) {
     const appBuilderText = await loadAppBuilderSkillMarkdown(
@@ -615,7 +619,9 @@ export async function buildTanStackChatTurnArgs(
     tools.length > 0
       ? (() => {
           let base = isCodeMode
-            ? 40
+            ? isAppMode
+              ? 44
+              : 40
             : dashboardTools.length > 0
               ? 28
               : 24

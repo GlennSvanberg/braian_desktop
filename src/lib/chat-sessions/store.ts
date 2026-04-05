@@ -19,7 +19,10 @@ import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
 import { workspaceMcpSessionsDisconnect } from '@/lib/mcp-runtime-api'
 import { isTauri } from '@/lib/tauri-env'
-import type { AgentMode } from '@/lib/workspace-api'
+import {
+  deriveAgentModeFromPersisted,
+  type AgentMode,
+} from '@/lib/workspace-api'
 
 import {
   isDetachedWorkspaceSessionId,
@@ -69,8 +72,12 @@ function hydrateUserProfileThreadOnce() {
       ...DEFAULT_CHAT_THREAD,
       messages,
       draft: typeof parsed.draft === 'string' ? parsed.draft : '',
-      agentMode: parsed.agentMode === 'code' ? 'code' : 'document',
-      appHarnessEnabled: false,
+      agentMode:
+        parsed.agentMode === 'code'
+          ? 'code'
+          : parsed.agentMode === 'app'
+            ? 'app'
+            : 'document',
       reasoningMode:
         (parsed as { reasoningMode?: string }).reasoningMode === 'thinking'
           ? 'thinking'
@@ -144,6 +151,18 @@ const threadListeners = new Set<() => void>()
 /** Separate from thread body updates so sidebar does not re-render on every token. */
 let generatingSnapshot: Record<string, boolean> = {}
 const generatingListeners = new Set<() => void>()
+
+const dashboardMutateListeners = new Set<(sessionKey: string) => void>()
+
+/** Subscribe to successful dashboard tool writes for a session (app preview refresh). */
+export function subscribeDashboardWorkspaceMutate(
+  cb: (sessionKey: string) => void,
+) {
+  dashboardMutateListeners.add(cb)
+  return () => {
+    dashboardMutateListeners.delete(cb)
+  }
+}
 
 function emitThreads() {
   for (const l of threadListeners) l()
@@ -362,8 +381,10 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
       pendingUserMessages: normalizePendingUserMessages(state.pendingUserMessages),
       contextFiles: state.contextFiles ?? [],
       contextConversations: state.contextConversations ?? [],
-      agentMode: state.agentMode ?? 'document',
-      appHarnessEnabled: state.appHarnessEnabled ?? false,
+      agentMode: deriveAgentModeFromPersisted(
+        state.agentMode as string | undefined,
+        (state as { appHarnessEnabled?: boolean }).appHarnessEnabled,
+      ),
       reasoningMode: state.reasoningMode === 'thinking' ? 'thinking' : 'fast',
     },
   }
@@ -405,23 +426,9 @@ export function stopChatGeneration(sessionKey: string) {
   abortBySession.get(sessionKey)?.abort()
 }
 
-export function setChatAgentMode(
-  sessionKey: string,
-  agentMode: 'document' | 'code',
-) {
+export function setChatAgentMode(sessionKey: string, agentMode: AgentMode) {
   patchThread(sessionKey, (prev) =>
     prev.agentMode === agentMode ? prev : { ...prev, agentMode },
-  )
-}
-
-export function setChatAppHarnessEnabled(
-  sessionKey: string,
-  appHarnessEnabled: boolean,
-) {
-  patchThread(sessionKey, (prev) =>
-    prev.appHarnessEnabled === appHarnessEnabled
-      ? prev
-      : { ...prev, appHarnessEnabled },
   )
 }
 
@@ -535,7 +542,6 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
       const threadNow = getThread(sessionKey)
       const agentMode = threadNow.agentMode ?? 'document'
-      const appHarnessEnabled = threadNow.appHarnessEnabled ?? false
       const ap = threadNow.artifactPayload
       const live = getDocumentCanvasLivePayload(sessionKey)
       const documentCanvasSnapshot =
@@ -642,17 +648,18 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           ? { turnKind: 'profile' as const }
           : {}),
         agentMode,
-        appHarnessEnabled,
         documentCanvasSnapshot,
         onAgentModeChange: (mode: AgentMode) => {
-          if (mode === 'code') {
-            setChatAgentMode(sessionKey, 'code')
-          }
+          setChatAgentMode(sessionKey, mode)
         },
-        onAppHarnessEnabledChange: (enabled: boolean) => {
-          if (enabled) {
-            setChatAppHarnessEnabled(sessionKey, true)
-          }
+        onDashboardWorkspaceFilesChanged: () => {
+          dashboardMutateListeners.forEach((fn) => {
+            try {
+              fn(sessionKey)
+            } catch (e) {
+              console.error('[braian] dashboardMutate listener', e)
+            }
+          })
         },
         ...(contextFiles != null && contextFiles.length > 0
           ? { contextFiles }
@@ -765,7 +772,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
               setChatAgentMode(sessionKey, 'code')
             }
             if (discoveryResultIncludesDashboardTools(chunk.result)) {
-              setChatAppHarnessEnabled(sessionKey, true)
+              setChatAgentMode(sessionKey, 'app')
             }
           }
           patchThread(sessionKey, (p) => ({
@@ -1051,7 +1058,6 @@ export function useChatThreadActions() {
     patchDocumentArtifactBody: patchDocBody,
     stopChatGeneration: stop,
     setChatAgentMode,
-    setChatAppHarnessEnabled,
     setChatReasoningMode: setReasoning,
     addContextFileEntry,
     removeContextFileEntry,

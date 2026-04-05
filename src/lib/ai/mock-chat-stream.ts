@@ -137,7 +137,8 @@ export async function* streamMockChatTurn(
     return
   }
 
-  const isCodeMode = context?.agentMode === 'code'
+  const isCodeMode =
+    context?.agentMode === 'code' || context?.agentMode === 'app'
   const hasPersistedConversation =
     context?.conversationId != null && context.conversationId !== ''
   const payload = getMockArtifactPayloadForChat(

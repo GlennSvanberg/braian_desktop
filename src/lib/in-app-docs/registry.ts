@@ -53,7 +53,7 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'dashboard',
     title: 'Dashboard & in-app pages',
     description:
-      'Workspace board.json, pages, tile types, and Document / Code / App chat modes.',
+      'Workspace board.json, pages, tile types, and Document / Code / App chat modes (App = full code + dashboard preview).',
     body: dashboardMd,
   },
   {

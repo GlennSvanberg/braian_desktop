@@ -218,7 +218,22 @@ export type ContextConversationEntryDto = {
   addedAtMs?: number
 }
 
-export type AgentMode = 'document' | 'code'
+export type AgentMode = 'document' | 'code' | 'app'
+
+/** Normalize persisted agent mode + legacy `appHarnessEnabled` into a single mode. */
+export function deriveAgentModeFromPersisted(
+  rawMode: string | undefined,
+  rawHarness: boolean | undefined,
+): AgentMode {
+  const harness = rawHarness === true
+  if (rawMode === 'app') return 'app'
+  if (rawMode === 'code') {
+    if (harness) return 'app'
+    return 'code'
+  }
+  if (harness) return 'app'
+  return 'document'
+}
 
 export type ConversationSavePayload = {
   id: string
@@ -269,12 +284,11 @@ type ConversationOpenInvoke = {
   }
 }
 
-function normalizeAgentMode(raw: string | undefined): AgentMode {
-  return raw === 'code' ? 'code' : 'document'
-}
-
-function normalizeAppHarnessEnabled(raw: boolean | undefined): boolean {
-  return raw === true
+function normalizeAgentMode(
+  rawMode: string | undefined,
+  rawHarness: boolean | undefined,
+): AgentMode {
+  return deriveAgentModeFromPersisted(rawMode, rawHarness)
 }
 
 function normalizeReasoningMode(raw: string | undefined): ReasoningMode {
@@ -308,8 +322,7 @@ function mapInvokeThreadToState(
     pendingUserMessages: [],
     contextFiles: thread.contextFiles ?? [],
     contextConversations: thread.contextConversations ?? [],
-    agentMode: normalizeAgentMode(thread.agentMode),
-    appHarnessEnabled: normalizeAppHarnessEnabled(thread.appHarnessEnabled),
+    agentMode: normalizeAgentMode(thread.agentMode, thread.appHarnessEnabled),
     reasoningMode: normalizeReasoningMode(thread.reasoningMode),
     lastModelRequestSnapshot: null,
   }
@@ -360,7 +373,6 @@ export async function conversationOpen(
         contextFiles: [],
         contextConversations: [],
         agentMode: 'document',
-        appHarnessEnabled: false,
         reasoningMode: 'fast',
         lastModelRequestSnapshot: null,
       }
@@ -376,7 +388,6 @@ export async function conversationOpen(
       contextFiles: [],
       contextConversations: [],
       agentMode: 'document',
-      appHarnessEnabled: false,
       reasoningMode: 'fast',
       lastModelRequestSnapshot: null,
     }
@@ -440,7 +451,7 @@ export function buildConversationSavePayload(
       ...(c.addedAtMs != null ? { addedAtMs: c.addedAtMs } : {}),
     })),
     agentMode: thread.agentMode ?? 'document',
-    appHarnessEnabled: thread.appHarnessEnabled ?? false,
+    appHarnessEnabled: (thread.agentMode ?? 'document') === 'app',
     reasoningMode: thread.reasoningMode === 'thinking' ? 'thinking' : 'fast',
   }
 }

@@ -24,14 +24,14 @@ export function buildSwitchToAppBuilderTool(context: ChatTurnContext | undefined
   if (
     !context?.workspaceId ||
     isNonWorkspaceScopedSessionId(context.workspaceId) ||
-    context.appHarnessEnabled === true
+    context.agentMode === 'app'
   ) {
     return null
   }
 
   return toolDefinition({
     name: 'switch_to_app_builder',
-    description: `Enable **workspace dashboard / in-app page** tools for this chat (Braian sidebar Dashboard and \`/dashboard/page/...\`). The user does not need to change App mode in the UI.
+    description: `Switch this chat to **App agent mode**: full workspace coding tools plus **workspace dashboard / in-app page** tools (Braian sidebar Dashboard and \`/dashboard/page/...\`). The user does not need to select App mode in the UI manually.
 
 **Required workflow after this tool returns successfully:** immediately call \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use read_workspace_dashboard, apply_workspace_dashboard, and upsert_workspace_page.
 
@@ -41,11 +41,11 @@ Call this when the user wants anything on the workspace overview dashboard, a pa
     inputSchema: switchInputSchema,
   }).server(async (args) => {
     switchInputSchema.parse(args)
-    context.onAppHarnessEnabledChange?.(true)
+    context.onAgentModeChange?.('app')
     return {
       ok: true as const,
       message:
-        'Workspace app builder is enabled for this conversation. Next: call __lazy__tool__discovery__ with the toolNames array below.',
+        'App agent mode is enabled for this conversation (full code + dashboard tools). Next: call __lazy__tool__discovery__ with the toolNames array below.',
       discoveryToolNames: [...DASHBOARD_TOOL_NAMES],
     }
   })

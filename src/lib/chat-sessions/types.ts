@@ -86,8 +86,6 @@ export type ChatThreadState = {
   contextConversations: ContextConversationEntry[]
   /** Persisted with the conversation when saved. */
   agentMode: AgentMode
-  /** When true, inject workspace dashboard builder instructions and tools for this chat. */
-  appHarnessEnabled: boolean
   /** Persisted: minimize vs enable provider-native chain-of-thought. */
   reasoningMode: ReasoningMode
   /** Payload assembled for the most recently started model turn (debug / context manager). */
@@ -104,7 +102,6 @@ export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   contextFiles: [],
   contextConversations: [],
   agentMode: 'document',
-  appHarnessEnabled: false,
   reasoningMode: 'fast',
   lastModelRequestSnapshot: null,
 }

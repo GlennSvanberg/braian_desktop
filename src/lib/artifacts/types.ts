@@ -2,7 +2,12 @@
  * Workspace canvas payloads — discriminated union the real LLM/tools should emit.
  * User-facing labels: Document, Data, Visual (avoid "artifact" in UI).
  */
-export type ArtifactKind = 'document' | 'tabular' | 'tabular-multi' | 'visual'
+export type ArtifactKind =
+  | 'document'
+  | 'tabular'
+  | 'tabular-multi'
+  | 'visual'
+  | 'app-preview'
 
 export type TabularColumn = {
   id: string
@@ -61,11 +66,17 @@ export type VisualArtifactPayload = {
   alt?: string
 }
 
+/** Live workspace dashboard preview (App agent mode); reads `.braian/dashboard` from disk. */
+export type AppPreviewArtifactPayload = {
+  kind: 'app-preview'
+}
+
 export type WorkspaceArtifactPayload =
   | DocumentArtifactPayload
   | TabularArtifactPayload
   | TabularMultiArtifactPayload
   | VisualArtifactPayload
+  | AppPreviewArtifactPayload
 
 export function isDocumentArtifact(
   p: WorkspaceArtifactPayload,
@@ -89,4 +100,10 @@ export function isVisualArtifact(
   p: WorkspaceArtifactPayload,
 ): p is VisualArtifactPayload {
   return p.kind === 'visual'
+}
+
+export function isAppPreviewArtifact(
+  p: WorkspaceArtifactPayload,
+): p is AppPreviewArtifactPayload {
+  return p.kind === 'app-preview'
 }

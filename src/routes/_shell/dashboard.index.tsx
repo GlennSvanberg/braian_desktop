@@ -126,8 +126,8 @@ function DashboardBoardPage() {
                   </h3>
                   <p className="text-text-2 text-sm leading-relaxed">
                     In a saved chat, select{' '}
-                    <strong className="text-text-1">App</strong> in the mode
-                    control and ask Braian to design your dashboard, or add{' '}
+                    <strong className="text-text-1">App</strong> for full code
+                    access plus dashboard tools (live preview in chat), or add{' '}
                     <code className="text-text-1">
                       .braian/dashboard/board.json
                     </code>{' '}

@@ -180,7 +180,6 @@ export function ChatWorkbench({
     patchDocumentArtifactBody,
     stopChatGeneration,
     setChatAgentMode,
-    setChatAppHarnessEnabled,
     setChatReasoningMode,
     addContextFileEntry,
     removeContextFileEntry,
@@ -303,11 +302,65 @@ export function ChatWorkbench({
     contextFiles,
     contextConversations,
     agentMode,
-    appHarnessEnabled,
     reasoningMode,
   } = thread
 
-  const showArtifactPanel = artifactOpen && !isProfileSession
+  const showArtifactPanel =
+    (artifactOpen || agentMode === 'app') && !isProfileSession
+
+  const chatScrollViewportRef = useRef<HTMLDivElement | null>(null)
+  const prevGeneratingForPinScrollRef = useRef<boolean | null>(null)
+  /** User message id for the turn we are pinning (set on generate start; avoids pinning on hydrate). */
+  const pinTurnUserIdRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    if (prevGeneratingForPinScrollRef.current === null) {
+      prevGeneratingForPinScrollRef.current = generating
+      return
+    }
+    const wasGenerating = prevGeneratingForPinScrollRef.current
+    prevGeneratingForPinScrollRef.current = generating
+
+    const n = messages.length
+    const last = n >= 1 ? messages[n - 1] : null
+    const secondLast = n >= 2 ? messages[n - 2] : null
+    const shouldPinTail =
+      generating &&
+      secondLast?.role === 'user' &&
+      last?.role === 'assistant' &&
+      last.status === 'streaming'
+
+    if (shouldPinTail && !wasGenerating) {
+      pinTurnUserIdRef.current = secondLast!.id
+    }
+    if (!generating || !shouldPinTail) {
+      pinTurnUserIdRef.current = null
+      return
+    }
+    if (pinTurnUserIdRef.current !== secondLast!.id) {
+      return
+    }
+
+    const userMessageId = secondLast!.id
+
+    const pinUserMessageToTop = () => {
+      const viewport = chatScrollViewportRef.current
+      const el = document.getElementById(`chat-message-${userMessageId}`)
+      if (!viewport || !el) return
+      // Radix ScrollArea: scroll the viewport. Use absolute scrollTop so clamping tracks as
+      // scrollHeight grows while the assistant streams (first frame often maxes out too low).
+      const topMarginPx = 16
+      const nextTop =
+        viewport.scrollTop +
+        (el.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top) -
+        topMarginPx
+      const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+      viewport.scrollTop = Math.min(Math.max(0, nextTop), maxScroll)
+    }
+
+    pinUserMessageToTop()
+    requestAnimationFrame(pinUserMessageToTop)
+  }, [generating, messages])
 
   const mention = useMemo(
     () => getMentionQuery(draft, caretPos),
@@ -819,28 +872,19 @@ export function ChatWorkbench({
       })
   }, [activeWorkspaceId, conversationId, memoryUpdateBusy])
 
-  const desktopToolsUnavailable = agentMode === 'code' && !isTauriRuntime
+  const desktopToolsUnavailable =
+    (agentMode === 'code' || agentMode === 'app') && !isTauriRuntime
 
   const queuedCount = pendingUserMessages.length
 
-  /** Single visible mode: code wins over document; app = document + dashboard harness. */
   const activeAgentSegment: 'document' | 'code' | 'app' =
-    agentMode === 'code'
-      ? 'code'
-      : appHarnessEnabled
-        ? 'app'
-        : 'document'
+    agentMode === 'app' ? 'app' : agentMode === 'code' ? 'code' : 'document'
 
   const onSelectAgentSegment = useCallback(
     (next: 'document' | 'code' | 'app') => {
-      if (next === 'code') {
-        setChatAgentMode(sessionKey, 'code')
-        return
-      }
-      setChatAgentMode(sessionKey, 'document')
-      setChatAppHarnessEnabled(sessionKey, next === 'app')
+      setChatAgentMode(sessionKey, next)
     },
-    [sessionKey, setChatAgentMode, setChatAppHarnessEnabled],
+    [sessionKey, setChatAgentMode],
   )
 
   const isThinking = reasoningMode === 'thinking'
@@ -892,8 +936,8 @@ export function ChatWorkbench({
             seg.id === 'document'
               ? 'Document assistant: canvas, lazy file tools'
               : seg.id === 'code'
-                ? 'Code assistant: eager read/write/run in workspace'
-                : 'App builder: dashboard & in-app pages tools'
+                ? 'Code assistant: eager read/write/run in workspace (no dashboard harness)'
+                : 'App agent: full code + dashboard tools; live preview in the side panel'
           }
           onClick={() => onSelectAgentSegment(seg.id)}
         >
@@ -913,8 +957,11 @@ export function ChatWorkbench({
         !showArtifactPanel && 'md:rounded-xl md:border md:border-border',
       )}
     >
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-6 px-4 py-5 md:px-5">
+      <ScrollArea
+        className="min-h-0 flex-1"
+        viewportRef={chatScrollViewportRef}
+      >
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 md:px-6">
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -1103,18 +1150,11 @@ export function ChatWorkbench({
 
                 return (
                   <div
+                    id={`chat-message-${m.id}`}
                     key={m.id}
-                    className={cn(
-                      'flex',
-                      isUser ? 'justify-end' : 'justify-start',
-                    )}
+                    className="scroll-mt-4 flex w-full justify-center"
                   >
-                    <div
-                      className={cn(
-                        'group/message relative max-w-[min(100%,40rem)] sm:max-w-[min(100%,44rem)] md:max-w-[min(100%,52rem)] lg:max-w-[min(100%,64rem)] xl:max-w-[min(100%,min(90vw,76rem))] 2xl:max-w-[min(100%,min(92vw,88rem))]',
-                        !isUser && 'w-full',
-                      )}
-                    >
+                    <div className="group/message relative w-full">
                       {canCopy ? (
                         <Button
                           type="button"
@@ -1139,10 +1179,10 @@ export function ChatWorkbench({
                       ) : null}
                       <div
                         className={cn(
-                          'px-4 py-3 text-[15px] leading-relaxed',
+                          'text-[15px] leading-relaxed',
                           isUser
-                            ? 'bg-primary text-primary-foreground rounded-[20px] rounded-tr-[4px] pr-10'
-                            : 'bg-muted/30 text-text-2 rounded-[20px] rounded-tl-[4px] border border-border/40 pr-10',
+                            ? 'bg-muted/40 text-text-1 rounded-xl px-4 py-3 pr-10'
+                            : 'text-text-2 py-1 pr-10',
                           m.role === 'assistant' &&
                             m.status === 'streaming' &&
                             !m.content &&
@@ -1179,7 +1219,7 @@ export function ChatWorkbench({
       </ScrollArea>
       <div
         ref={composerDropZoneRef}
-        className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t p-3 backdrop-blur-md md:p-4"
+        className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t py-3 backdrop-blur-md md:py-4"
         onDragOver={(e) => {
           e.preventDefault()
           e.dataTransfer.dropEffect = 'copy'
@@ -1198,6 +1238,7 @@ export function ChatWorkbench({
           if (paths.length > 0) void onNativeFileDrop(paths)
         }}
       >
+        <div className="mx-auto w-full max-w-5xl px-4 md:px-6">
         {contextFiles.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {contextFiles.map((f) => (
@@ -1419,6 +1460,7 @@ export function ChatWorkbench({
             </div>
           </div>
         </div>
+        </div>
       </div>
     </div>
   )
@@ -1522,6 +1564,17 @@ export function ChatWorkbench({
             >
               <ArtifactPanel
                 payload={artifactPayload}
+                agentMode={agentMode}
+                appPreviewWorkspaceId={
+                  isProfileSession || isDetachedSession
+                    ? null
+                    : threadWorkspaceId
+                }
+                appPreviewSessionKey={
+                  isProfileSession || isDetachedSession ? null : sessionKey
+                }
+                appPreviewGenerating={generating}
+                isTauriRuntime={isTauriRuntime}
                 documentLiveSessionKey={
                   isProfileSession || isDetachedSession ? undefined : sessionKey
                 }

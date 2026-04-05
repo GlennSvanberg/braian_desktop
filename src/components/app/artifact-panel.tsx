@@ -1,5 +1,6 @@
 import { ImageIcon } from 'lucide-react'
 
+import { WorkspaceAppPreview } from '@/components/app/workspace-app-preview'
 import {
   MarkdownDocumentCanvas,
   type CanvasSelectionSubmitPayload,
@@ -8,15 +9,23 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { TabularSection } from '@/lib/artifacts/types'
 import {
+  isAppPreviewArtifact,
   isDocumentArtifact,
   isTabularArtifact,
   isTabularMultiArtifact,
   isVisualArtifact,
 } from '@/lib/artifacts/types'
+import type { AgentMode } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
 
 type ArtifactPanelProps = {
   payload: WorkspaceArtifactPayload | null
+  /** When `app`, the panel shows the live workspace dashboard preview when workspace + session are set. */
+  agentMode?: AgentMode
+  appPreviewWorkspaceId?: string | null
+  appPreviewSessionKey?: string | null
+  appPreviewGenerating?: boolean
+  isTauriRuntime?: boolean
   onDocumentBodyChange?: (body: string) => void
   /** Registers fresh markdown for AI context (session key from chat workbench). */
   documentLiveSessionKey?: string
@@ -173,15 +182,53 @@ function VisualCanvas({
 
 export function ArtifactPanel({
   payload,
+  agentMode = 'document',
+  appPreviewWorkspaceId = null,
+  appPreviewSessionKey = null,
+  appPreviewGenerating = false,
+  isTauriRuntime = false,
   onDocumentBodyChange,
   documentLiveSessionKey,
   onCanvasSelectionAsk,
 }: ArtifactPanelProps) {
+  const showAppPreviewFromMode =
+    agentMode === 'app' &&
+    appPreviewWorkspaceId != null &&
+    appPreviewSessionKey != null
+
+  if (showAppPreviewFromMode) {
+    return (
+      <WorkspaceAppPreview
+        workspaceId={appPreviewWorkspaceId}
+        sessionKey={appPreviewSessionKey}
+        generating={appPreviewGenerating}
+        isTauriRuntime={isTauriRuntime}
+        className="h-full min-h-0"
+      />
+    )
+  }
+
   if (!payload) {
     return (
       <div className="bg-card border-border flex h-full min-h-0 flex-col items-center justify-center rounded-xl border p-8 text-center shadow-sm">
         <p className="text-text-3 text-sm">Send a message to show content here.</p>
       </div>
+    )
+  }
+
+  if (
+    isAppPreviewArtifact(payload) &&
+    appPreviewWorkspaceId != null &&
+    appPreviewSessionKey != null
+  ) {
+    return (
+      <WorkspaceAppPreview
+        workspaceId={appPreviewWorkspaceId}
+        sessionKey={appPreviewSessionKey}
+        generating={appPreviewGenerating}
+        isTauriRuntime={isTauriRuntime}
+        className="h-full min-h-0"
+      />
     )
   }
 

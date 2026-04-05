@@ -1,4 +1,5 @@
 export type {
+  AppPreviewArtifactPayload,
   ArtifactKind,
   DocumentArtifactPayload,
   TabularArtifactPayload,
@@ -10,6 +11,7 @@ export type {
   WorkspaceArtifactPayload,
 } from './types'
 export {
+  isAppPreviewArtifact,
   isDocumentArtifact,
   isTabularArtifact,
   isTabularMultiArtifact,

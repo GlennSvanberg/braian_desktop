@@ -17,6 +17,9 @@ import { isTauri } from '@/lib/tauri-env'
 import { cn } from '@/lib/utils'
 import { openUrl } from '@tauri-apps/plugin-opener'
 
+/** When set (e.g. chat App preview), page links call this instead of router navigation. */
+export type DashboardPageNavigateHandler = (pageId: string) => void
+
 function KpiTileCard({ tile }: { tile: KpiTile }) {
   return (
     <div className="border-border bg-card/80 flex flex-col gap-2 rounded-xl border p-4 shadow-sm">
@@ -58,7 +61,37 @@ async function openExternal(href: string) {
   }
 }
 
-function PageLinkButton({ tile }: { tile: PageLinkTile }) {
+function PageLinkButton({
+  tile,
+  onPageNavigate,
+}: {
+  tile: PageLinkTile
+  onPageNavigate?: DashboardPageNavigateHandler
+}) {
+  const inner = (
+    <>
+      <span className="text-text-1 font-medium">{tile.label}</span>
+      {tile.description ? (
+        <span className="text-text-3 text-xs font-normal">
+          {tile.description}
+        </span>
+      ) : null}
+    </>
+  )
+  if (onPageNavigate) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        className="border-border text-text-2 h-auto min-h-11 w-full justify-start py-2 whitespace-normal"
+        onClick={() => onPageNavigate(tile.pageId)}
+      >
+        <span className="flex w-full flex-col items-start gap-1 text-left">
+          {inner}
+        </span>
+      </Button>
+    )
+  }
   return (
     <Button
       variant="outline"
@@ -70,12 +103,7 @@ function PageLinkButton({ tile }: { tile: PageLinkTile }) {
         params={{ pageId: tile.pageId }}
         className="flex w-full flex-col items-start gap-1"
       >
-        <span className="text-text-1 font-medium">{tile.label}</span>
-        {tile.description ? (
-          <span className="text-text-3 text-xs font-normal">
-            {tile.description}
-          </span>
-        ) : null}
+        {inner}
       </Link>
     </Button>
   )
@@ -97,14 +125,26 @@ function ExternalLinkButton({ tile }: { tile: ExternalLinkTile }) {
   )
 }
 
-function LinkTileItem({ tile }: { tile: LinkRegionTile }) {
+function LinkTileItem({
+  tile,
+  onPageNavigate,
+}: {
+  tile: LinkRegionTile
+  onPageNavigate?: DashboardPageNavigateHandler
+}) {
   if (tile.kind === 'page_link') {
-    return <PageLinkButton tile={tile} />
+    return <PageLinkButton tile={tile} onPageNavigate={onPageNavigate} />
   }
   return <ExternalLinkButton tile={tile} />
 }
 
-function MainTileItem({ tile }: { tile: MainTile }) {
+function MainTileItem({
+  tile,
+  onPageNavigate,
+}: {
+  tile: MainTile
+  onPageNavigate?: DashboardPageNavigateHandler
+}) {
   switch (tile.kind) {
     case 'kpi':
       return <KpiTileCard tile={tile} />
@@ -113,7 +153,7 @@ function MainTileItem({ tile }: { tile: MainTile }) {
     case 'page_link':
       return (
         <div className="border-border bg-card rounded-xl border p-5 shadow-sm">
-          <PageLinkButton tile={tile} />
+          <PageLinkButton tile={tile} onPageNavigate={onPageNavigate} />
         </div>
       )
     default:
@@ -124,11 +164,13 @@ function MainTileItem({ tile }: { tile: MainTile }) {
 export type WorkspaceDashboardViewProps = {
   manifest: DashboardManifest
   className?: string
+  onPageNavigate?: DashboardPageNavigateHandler
 }
 
 export function WorkspaceDashboardView({
   manifest,
   className,
+  onPageNavigate,
 }: WorkspaceDashboardViewProps) {
   const { insights, links, main } = manifest.regions
 
@@ -160,7 +202,11 @@ export function WorkspaceDashboardView({
           </h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {links.map((t) => (
-              <LinkTileItem key={t.id} tile={t} />
+              <LinkTileItem
+                key={t.id}
+                tile={t}
+                onPageNavigate={onPageNavigate}
+              />
             ))}
           </div>
         </section>
@@ -173,7 +219,11 @@ export function WorkspaceDashboardView({
           </h3>
           <div className="flex flex-col gap-4">
             {main.map((t) => (
-              <MainTileItem key={t.id} tile={t} />
+              <MainTileItem
+                key={t.id}
+                tile={t}
+                onPageNavigate={onPageNavigate}
+              />
             ))}
           </div>
         </section>
@@ -182,7 +232,13 @@ export function WorkspaceDashboardView({
   )
 }
 
-export function WorkspacePageView({ page }: { page: WorkspacePage }) {
+export function WorkspacePageView({
+  page,
+  onPageNavigate,
+}: {
+  page: WorkspacePage
+  onPageNavigate?: DashboardPageNavigateHandler
+}) {
   return (
     <div className="flex flex-col gap-8">
       <header className="space-y-2">
@@ -197,7 +253,11 @@ export function WorkspacePageView({ page }: { page: WorkspacePage }) {
       </header>
       <div className="flex flex-col gap-4">
         {page.tiles.map((t) => (
-          <MainTileItem key={t.id} tile={t} />
+          <MainTileItem
+            key={t.id}
+            tile={t}
+            onPageNavigate={onPageNavigate}
+          />
         ))}
       </div>
     </div>

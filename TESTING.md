@@ -95,9 +95,9 @@ The file is validated against a small schema in the CLI. Typical fields (see [`C
 |-------|------|--------|
 | `workspaceId` | string | Required. Use `__braian_detached__` for “no workspace folder” behavior; real ids for workspace-scoped prompts |
 | `conversationId` | string \| null | `null` = unsaved chat → **no** document canvas tools |
-| `agentMode` | `"document"` \| `"code"` | Document = triage + lazy code tools; code = eager workspace tools |
+| `agentMode` | `"document"` \| `"code"` \| `"app"` | Document = triage + lazy code/dashboard tools; code = eager coding tools, lazy dashboard; app = eager coding + eager dashboard + app-builder instructions |
 | `turnKind` | `"profile"` | Optional; profile coach turn (sidebar → You) |
-| `appHarnessEnabled` | boolean | Optional; dashboard / app-builder tooling |
+| `appHarnessEnabled` | boolean | Optional **legacy**; merged into `agentMode` (`true` → treat as App when paired with document/code) — prefer setting `agentMode` to `"app"` |
 | `documentCanvasSnapshot` | `{ body, title?, revision?, selection? }` \| null | Optional; `revision` defaults to `0` in CLI if omitted |
 | `contextFiles` | array | Optional; `{ relativePath, text, displayName?, fileTruncated? }` — same idea as file attachments in the UI |
 

@@ -288,14 +288,13 @@ describe('buildTanStackChatTurnArgs', () => {
     ])
   })
 
-  it('uses lazy dashboard tools and switch_to_app_builder when harness is off', async () => {
+  it('uses lazy dashboard tools and switch_to_app_builder in document mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
         workspaceId: 'ws',
         conversationId: 'c1',
         agentMode: 'document',
-        appHarnessEnabled: false,
       },
       priorMessages: [],
       skipSettingsValidation: true,
@@ -311,14 +310,13 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.text).toContain('switch_to_app_builder')
   })
 
-  it('includes eager dashboard tools, app-builder section, no switch when harness on', async () => {
+  it('app mode: eager coding + eager dashboard, app-builder section, no switch tools', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
         workspaceId: 'ws',
         conversationId: 'c1',
-        agentMode: 'document',
-        appHarnessEnabled: true,
+        agentMode: 'app',
       },
       priorMessages: [],
       skipSettingsValidation: true,
@@ -327,6 +325,8 @@ describe('buildTanStackChatTurnArgs', () => {
       (t) => t.name === 'read_workspace_dashboard',
     )
     expect(dashRead?.lazy).toBeUndefined()
+    const readFile = r.toolsDisplay.find((t) => t.name === 'read_workspace_file')
+    expect(readFile?.lazy).toBeUndefined()
     expect(
       r.toolsDisplay.some((t) => t.name === 'apply_workspace_dashboard'),
     ).toBe(true)
@@ -336,8 +336,36 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'switch_to_code_agent'),
+    ).toBe(false)
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(true)
-    expect(r.systemSections[0]?.text).not.toContain('switch_to_app_builder')
+    expect(r.systemSections[0]?.id).toBe('routing-code')
+    expect(r.systemSections[0]?.label).toBe('Routing (App agent)')
+    expect(r.systemSections[0]?.text).toContain('live preview')
+    expect(r.isCodeMode).toBe(true)
+    expect(r.maxIterations).toBe(44)
+  })
+
+  it('code mode keeps dashboard tools lazy', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'code',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const dashRead = r.toolsDisplay.find(
+      (t) => t.name === 'read_workspace_dashboard',
+    )
+    expect(dashRead?.lazy).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
+    ).toBe(true)
+    expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
   })
 
   it('includes user-context section with ISO time on default turns', async () => {
@@ -406,14 +434,13 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.maxIterations).toBe(16)
   })
 
-  it('omits dashboard tools when workspace is detached even if harness on', async () => {
+  it('omits dashboard tools when workspace is detached even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
         workspaceId: '__braian_detached__',
         conversationId: 'c1',
-        agentMode: 'document',
-        appHarnessEnabled: true,
+        agentMode: 'app',
       },
       priorMessages: [],
       skipSettingsValidation: true,
@@ -462,14 +489,13 @@ describe('buildTanStackChatTurnArgs', () => {
     vi.mocked(workspaceReadTextFile).mockRejectedValue(new Error('no file'))
   })
 
-  it('omits dashboard tools for user profile workspace id even if harness on', async () => {
+  it('omits dashboard tools for user profile workspace id even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
         workspaceId: USER_PROFILE_WORKSPACE_SESSION_ID,
         conversationId: 'c1',
-        agentMode: 'document',
-        appHarnessEnabled: true,
+        agentMode: 'app',
       },
       priorMessages: [],
       skipSettingsValidation: true,
