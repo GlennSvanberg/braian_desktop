@@ -106,6 +106,25 @@ const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM
 const SOURCE_PROFILE_STATE =
   'src/lib/user-profile-api.ts (formatUserProfileForPrompt)'
 
+function nowMs(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+
+function isChatPerfLoggingEnabled(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  try {
+    return localStorage.getItem('braian.chatPerf') === '1'
+  } catch {
+    return false
+  }
+}
+
+function logChatPerf(stage: string, startAt: number) {
+  if (!isChatPerfLoggingEnabled()) return
+  const elapsed = (nowMs() - startAt).toFixed(1)
+  console.info(`[braian][chat-perf] ${stage} +${elapsed}ms`)
+}
+
 const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   open_document_canvas: 'src/lib/ai/canvas-tools.ts',
   read_workspace_file: 'src/lib/ai/coding-tools.ts',
@@ -270,6 +289,7 @@ export type BuildTanStackChatTurnArgsResult = {
 export async function buildTanStackChatTurnArgs(
   options: BuildTanStackChatTurnArgsOptions,
 ): Promise<BuildTanStackChatTurnArgsResult> {
+  const buildStartAt = nowMs()
   const settings =
     options.settings ?? (await aiSettingsGet())
 
@@ -341,7 +361,9 @@ export async function buildTanStackChatTurnArgs(
   const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
   const dashboardTools = buildDashboardTools(ctx)
   const skillTools = buildSkillTools(ctx)
+  const mcpToolsStart = nowMs()
   const { tools: mcpTools, warnings: mcpWarnings } = await buildMcpTools(ctx)
+  logChatPerf('buildMcpTools', mcpToolsStart)
   for (const w of mcpWarnings) {
     settingsWarnings.push(w)
   }
@@ -355,10 +377,14 @@ export async function buildTanStackChatTurnArgs(
     ...mcpTools,
   ]
 
+  const memoryBlockStart = nowMs()
   const memoryBlock =
     ctx?.workspaceId != null
       ? await loadWorkspaceMemorySystemBlock(ctx.workspaceId)
       : ''
+  if (ctx?.workspaceId != null) {
+    logChatPerf('loadWorkspaceMemorySystemBlock', memoryBlockStart)
+  }
   const cf =
     ctx?.contextFiles != null && ctx.contextFiles.length > 0
       ? contextFilesSystemPrompt(ctx.contextFiles)
@@ -488,6 +514,8 @@ export async function buildTanStackChatTurnArgs(
           return base
         })()
       : null
+
+  logChatPerf('buildTanStackChatTurnArgs total', buildStartAt)
 
   return {
     systemSections,

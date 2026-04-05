@@ -9,7 +9,6 @@ import {
   PanelLeftIcon,
   Pin,
   Plus,
-  Plug,
   Settings,
   Trash2,
   UserRound,
@@ -167,7 +166,13 @@ function ConversationSidebarItem({
   }
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem
+      className={cn(
+        'rounded-md transition-colors',
+        'hover:bg-sidebar-accent focus-within:bg-sidebar-accent',
+        'has-[[data-slot=sidebar-menu-button][data-active=true]]:bg-sidebar-accent',
+      )}
+    >
       <SidebarMenuAction
         showOnHover={!conversation.pinned}
         className="left-2 right-auto z-10"
@@ -192,12 +197,19 @@ function ConversationSidebarItem({
       <SidebarMenuButton
         asChild
         isActive={active}
-        className="pr-14"
+        className={cn(
+          'group-has-data-[sidebar=menu-action]/menu-item:!pr-2',
+          // Row fill is painted on SidebarMenuItem (hover / active / focus-within) so it covers actions.
+          '!bg-transparent',
+          // Override CVA [&>span:last-child]:truncate (ellipsis); clip overflow only (no …).
+          '[&>span:last-child]:!min-w-0 [&>span:last-child]:!overflow-hidden [&>span:last-child]:!whitespace-nowrap [&>span:last-child]:!text-clip',
+        )}
         tooltip={`${conversation.title} · ${conversation.updatedLabel}`}
       >
         <Link
           to="/chat/$conversationId"
           params={{ conversationId: conversation.id }}
+          className="flex min-w-0 w-full max-w-full items-center gap-2"
           onClick={() => {
             if (workspaceId !== activeWorkspaceId) {
               setActiveWorkspaceId(workspaceId)
@@ -214,8 +226,10 @@ function ConversationSidebarItem({
               <span className="bg-sidebar-foreground/35 size-1.5 rounded-full" />
             </span>
           )}
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate">{conversation.title}</span>
+          <span className="flex min-w-0 min-h-0 flex-1 items-center gap-2 overflow-hidden">
+            <span className="min-w-0 flex-1 whitespace-nowrap">
+              {conversation.title}
+            </span>
             {generating ? (
               <Loader2
                 className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
@@ -230,10 +244,25 @@ function ConversationSidebarItem({
           </span>
         </Link>
       </SidebarMenuButton>
+      {/*
+        On hover/focus, same surface as the row hover (sidebar-accent) sits above the label so actions
+        read cleanly; default state uses full row width for text (no reserved action gutter).
+      */}
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-y-0 right-0 z-[15] w-[5.5rem]',
+          // Feather into the label (no hard vertical edge); solid under the icons on the right.
+          'bg-gradient-to-r from-transparent via-sidebar-accent to-sidebar-accent',
+          'transition-opacity duration-150',
+          'max-md:opacity-100',
+          'md:opacity-0 md:group-hover/menu-item:opacity-100 md:group-focus-within/menu-item:opacity-100',
+        )}
+      />
       <SidebarMenuAction
         showOnHover
         disabled={deletePending}
-        className="text-sidebar-foreground/80 hover:text-destructive right-7"
+        className="text-sidebar-foreground/80 hover:text-destructive right-9 z-20"
         aria-label={`Delete ${conversation.title}`}
         title="Delete chat"
         onClick={(e) => {
@@ -252,7 +281,7 @@ function ConversationSidebarItem({
         <DropdownMenuTrigger asChild>
           <SidebarMenuAction
             showOnHover
-            className="right-1"
+            className="right-3 z-20"
             aria-label={`Actions for ${conversation.title}`}
             onClick={(e) => {
               e.preventDefault()
@@ -361,71 +390,91 @@ function WorkspaceConversationGroup({
   }
 
   return (
-    <li
-      data-slot="sidebar-menu-item"
-      data-sidebar="menu-item"
-      className="group/workspace-row relative list-none p-0"
+    <Collapsible
+      asChild
+      defaultOpen={workspace.id === activeWorkspaceId}
+      className="group/collapsible"
     >
-      <Collapsible
-        defaultOpen={workspace.id === activeWorkspaceId}
-        className="group/collapsible w-full min-w-0"
-      >
-        <div className="flex w-full min-w-0 items-center gap-0.5 pe-0.5">
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-sidebar-foreground/75 size-7 shrink-0 data-[state=open]:bg-sidebar-accent/35"
-              aria-label={
-                chatsExpanded ? 'Collapse workspace' : 'Expand workspace'
-              }
-            >
-              <ChevronDown
-                className="size-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-0 group-data-[state=closed]/collapsible:-rotate-90"
-                aria-hidden
-              />
-            </Button>
-          </CollapsibleTrigger>
-          <SidebarMenuButton
-            type="button"
-            isActive={
-              workspace.id === activeWorkspaceId &&
-              pathname.startsWith('/dashboard')
-            }
-            tooltip={workspace.name}
-            className="text-sidebar-foreground/75 h-8 min-w-0 w-auto max-w-full flex-1 gap-1.5 pr-1 text-xs font-medium"
-            onClick={() => {
-              setActiveWorkspaceId(workspace.id)
-              navigate({ to: '/dashboard' })
-            }}
+      <li className="group/workspace-row relative min-w-0 list-none">
+        <CollapsibleTrigger asChild>
+          <SidebarMenuAction
+            className="text-sidebar-foreground/75 left-1.5 right-auto z-20 size-7 bg-transparent hover:bg-sidebar-accent/35 data-[state=open]:bg-sidebar-accent/35"
+            aria-label="Show or hide workspace pages and chats"
           >
-            <span className="truncate">{workspace.name}</span>
-          </SidebarMenuButton>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-sidebar-foreground/70 size-7 shrink-0"
-                disabled={newPending}
-                aria-label={`New chat in ${workspace.name}`}
-                onClick={onNewInWorkspace}
-              >
-                {newPending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <Plus className="size-4" aria-hidden />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              New chat in {workspace.name}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <CollapsibleContent>
+            <ChevronDown
+              className="size-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-0 group-data-[state=closed]/collapsible:-rotate-90"
+              aria-hidden
+            />
+          </SidebarMenuAction>
+        </CollapsibleTrigger>
+
+        <SidebarMenuButton
+          type="button"
+          isActive={
+            workspace.id === activeWorkspaceId &&
+            pathname.startsWith('/dashboard')
+          }
+          tooltip={workspace.name}
+          className={cn(
+            'text-sidebar-foreground/75 h-8 min-w-0 gap-1.5 pl-8 text-xs font-medium',
+            'group-has-data-[sidebar=menu-action]/menu-item:!pr-2',
+          )}
+          onClick={() => {
+            setActiveWorkspaceId(workspace.id)
+            navigate({ to: '/dashboard' })
+          }}
+        >
+          <span className="min-w-0 flex-1 overflow-hidden text-clip whitespace-nowrap">
+            {workspace.name}
+          </span>
+          <span
+            className="pointer-events-none shrink-0 self-stretch w-[3.5rem]"
+            aria-hidden
+          />
+        </SidebarMenuButton>
+
+        <SidebarMenuAction
+          className="text-sidebar-foreground/80 right-9 z-30 size-7 [&>svg]:size-4"
+          aria-label={`Workspace settings for ${workspace.name}`}
+          title="Workspace settings (Connections)"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setActiveWorkspaceId(workspace.id)
+            navigate({
+              to: '/workspace/$workspaceId/settings',
+              params: { workspaceId: workspace.id },
+            })
+          }}
+        >
+          <Settings
+            className={cn(
+              pathname === `/workspace/${workspace.id}/settings` &&
+                'text-sidebar-accent-foreground',
+            )}
+            aria-hidden
+          />
+        </SidebarMenuAction>
+
+        <SidebarMenuAction
+          className="text-sidebar-foreground/80 right-3 z-30 size-7 [&>svg]:size-4"
+          disabled={newPending}
+          aria-label={`New chat in ${workspace.name}`}
+          title={`New chat in ${workspace.name}`}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onNewInWorkspace(e)
+          }}
+        >
+          {newPending ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Plus className="size-4" aria-hidden />
+          )}
+        </SidebarMenuAction>
+
+        <CollapsibleContent asChild>
           <SidebarMenu className="border-sidebar-border mx-1 ml-2.5 mt-0.5 border-l pl-2">
             {dashboardPageIds.map((pageId) => (
               <SidebarMenuItem key={`page-${pageId}`}>
@@ -491,8 +540,8 @@ function WorkspaceConversationGroup({
             )}
           </SidebarMenu>
         </CollapsibleContent>
-      </Collapsible>
-    </li>
+      </li>
+    </Collapsible>
   )
 }
 
@@ -590,6 +639,56 @@ export function AppSidebar() {
     })()
   }
 
+  const workspacesMenu = (
+    <SidebarMenu>
+      <NewAgentSidebarItem pathname={pathname} />
+      {workspaces.length === 0 ? (
+        <p className="text-sidebar-foreground/60 px-2 py-3 text-xs leading-relaxed">
+          Use <span className="font-medium">Manage workspaces</span> below to add
+          a folder and list chats here.
+        </p>
+      ) : (
+        <>
+          {visibleWorkspaces.map((ws) => (
+            <WorkspaceConversationGroup
+              key={ws.id}
+              workspace={ws}
+              conversations={conversationsByWorkspace[ws.id] ?? []}
+              pathname={pathname}
+              activeWorkspaceId={activeWorkspaceId}
+              expandedChats={expandedChatsByWs[ws.id] ?? false}
+              onExpandChats={() =>
+                setExpandedChatsByWs((prev) => ({
+                  ...prev,
+                  [ws.id]: true,
+                }))
+              }
+              onRename={openRename}
+              onDelete={confirmDelete}
+              deleteTargetId={deleteTargetId}
+              isTauriRuntime={isTauriRuntime}
+              navigate={navigate}
+              createConversationInWorkspace={createConversationInWorkspace}
+              setActiveWorkspaceId={setActiveWorkspaceId}
+            />
+          ))}
+          {hasMoreWorkspaces && !showAllWorkspaces ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                type="button"
+                className="text-sidebar-foreground/65 h-8 text-xs"
+                onClick={() => setShowAllWorkspaces(true)}
+              >
+                <MoreHorizontal className="size-4 shrink-0" aria-hidden />
+                <span>More workspaces</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+        </>
+      )}
+    </SidebarMenu>
+  )
+
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
       <SidebarHeader
@@ -652,75 +751,26 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === '/connections'}
-                  tooltip="Workspace connections"
-                >
-                  <Link to="/connections">
-                    <Plug />
-                    <span>Connections</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
           <SidebarGroupContent className="min-h-0">
-            <ScrollArea className="h-[min(320px,calc(100vh-320px))] pr-2 md:h-[min(420px,calc(100svh-280px))]">
-              <SidebarMenu>
-                <NewAgentSidebarItem pathname={pathname} />
-                {workspaces.length === 0 ? (
-                  <p className="text-sidebar-foreground/60 px-2 py-3 text-xs leading-relaxed">
-                    Use <span className="font-medium">Manage workspaces</span>{' '}
-                    below to add a folder and list chats here.
-                  </p>
-                ) : (
-                  <>
-                    {visibleWorkspaces.map((ws) => (
-                      <WorkspaceConversationGroup
-                        key={ws.id}
-                        workspace={ws}
-                        conversations={conversationsByWorkspace[ws.id] ?? []}
-                        pathname={pathname}
-                        activeWorkspaceId={activeWorkspaceId}
-                        expandedChats={expandedChatsByWs[ws.id] ?? false}
-                        onExpandChats={() =>
-                          setExpandedChatsByWs((prev) => ({
-                            ...prev,
-                            [ws.id]: true,
-                          }))
-                        }
-                        onRename={openRename}
-                        onDelete={confirmDelete}
-                        deleteTargetId={deleteTargetId}
-                        isTauriRuntime={isTauriRuntime}
-                        navigate={navigate}
-                        createConversationInWorkspace={
-                          createConversationInWorkspace
-                        }
-                        setActiveWorkspaceId={setActiveWorkspaceId}
-                      />
-                    ))}
-                    {hasMoreWorkspaces && !showAllWorkspaces ? (
-                      <SidebarMenuItem>
-                        <SidebarMenuButton
-                          type="button"
-                          className="text-sidebar-foreground/65 h-8 text-xs"
-                          onClick={() => setShowAllWorkspaces(true)}
-                        >
-                          <MoreHorizontal className="size-4 shrink-0" aria-hidden />
-                          <span>More workspaces</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ) : null}
-                  </>
-                )}
-              </SidebarMenu>
-            </ScrollArea>
+            {/*
+              Radix ScrollArea forces overflow-x: hidden on the viewport, which clips
+              right-aligned SidebarMenuAction controls in Tauri/WebView2. Native overflow-y
+              avoids that while keeping vertical scroll.
+            */}
+            {isTauriRuntime ? (
+              <div className="h-[min(320px,calc(100vh-320px))] overflow-y-auto overscroll-contain pr-2 md:h-[min(420px,calc(100svh-280px))]">
+                {workspacesMenu}
+              </div>
+            ) : (
+              <ScrollArea className="h-[min(320px,calc(100vh-320px))] pr-4 md:h-[min(420px,calc(100svh-280px))]">
+                {workspacesMenu}
+              </ScrollArea>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

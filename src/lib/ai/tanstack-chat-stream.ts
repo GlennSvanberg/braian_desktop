@@ -45,9 +45,32 @@ function mergeAbortParent(signal: AbortSignal | undefined): AbortController {
   return ac
 }
 
+function isChatPerfLoggingEnabled(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  try {
+    return localStorage.getItem('braian.chatPerf') === '1'
+  } catch {
+    return false
+  }
+}
+
+function nowMs(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+
+function logChatPerf(stage: string, startAt: number) {
+  if (!isChatPerfLoggingEnabled()) return
+  const elapsed = (nowMs() - startAt).toFixed(1)
+  console.info(`[braian][chat-perf] ${stage} +${elapsed}ms`)
+}
+
 export type IterateTanStackFromArgsOptions = {
   /** Omit tools and agent loop (Node CLI / evaluation without Tauri tool execution). */
   stripTools?: boolean
+}
+
+export type StreamTanStackChatTurnOptions = {
+  prebuiltArgs?: BuildTanStackChatTurnArgsResult
 }
 
 /**
@@ -147,6 +170,7 @@ export async function* streamTanStackChatTurn(
   signal: AbortSignal | undefined,
   context: ChatTurnContext | undefined,
   priorMessages: PriorChatMessage[] | undefined,
+  options?: StreamTanStackChatTurnOptions,
 ): AsyncGenerator<ChatStreamChunk> {
   if (!isTauri()) {
     throw new Error(
@@ -156,12 +180,19 @@ export async function* streamTanStackChatTurn(
 
   const ac = mergeAbortParent(signal)
 
-  const args = await buildTanStackChatTurnArgs({
-    userText,
-    context,
-    priorMessages,
-    skipSettingsValidation: false,
-  })
+  const argsBuildStart = nowMs()
+  const args =
+    options?.prebuiltArgs ??
+    (await buildTanStackChatTurnArgs({
+      userText,
+      context,
+      priorMessages,
+      skipSettingsValidation: false,
+    }))
+  logChatPerf(
+    options?.prebuiltArgs ? 'reuse prebuilt turn args' : 'build turn args',
+    argsBuildStart,
+  )
 
   yield* iterateTanStackFromArgs(args, ac)
 }

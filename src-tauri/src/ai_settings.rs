@@ -16,7 +16,7 @@ fn default_settings() -> AiSettingsRecord {
   AiSettingsRecord {
     provider: "openai".to_string(),
     api_key: String::new(),
-    model_id: "gpt-4o".to_string(),
+    model_id: "gpt-5.4".to_string(),
     base_url: None,
   }
 }

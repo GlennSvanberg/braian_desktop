@@ -247,6 +247,12 @@ export function ChatContextManagerDialog({
       setNextError(null)
       return
     }
+    if (thread.generating) {
+      // Avoid rebuilding the full request preview on every streamed token.
+      setNextLoading(false)
+      setNextError(null)
+      return
+    }
 
     let cancelled = false
     setNextLoading(true)
@@ -352,6 +358,7 @@ export function ChatContextManagerDialog({
     thread.appHarnessEnabled,
     thread.artifactPayload,
     thread.contextFiles,
+    thread.generating,
     isTauriRuntime,
   ])
 

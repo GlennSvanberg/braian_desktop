@@ -140,7 +140,7 @@ These cases describe what Braian Desktop’s chat **should** do given the featur
 
 ## Automated alignment (headless CLI)
 
-`npm run test` includes subprocess checks that run `tsx src/cli/braian-ai.ts dump-request` against JSON contexts matching §§1–5 (tool lists and system sections only — no provider calls). See [`src/cli/braian-ai.testcases.integration.test.ts`](src/cli/braian-ai.testcases.integration.test.ts). **§5** full behavior (real `MEMORY.md` on disk) is additionally covered with a mocked file read in [`src/lib/ai/chat-turn-args.test.ts`](src/lib/ai/chat-turn-args.test.ts) (`testcases.md §5`).
+`npm run test` includes subprocess checks that run `tsx src/cli/braian-ai.ts dump-request` against JSON contexts matching §§1–5 (tool lists and system sections only — no provider calls), plus **workspace skills** sections and tools when `workspaceId` is workspace-scoped (catalog text reflects Node’s non-Tauri load). See [`src/cli/braian-ai.testcases.integration.test.ts`](src/cli/braian-ai.testcases.integration.test.ts). **§5** full behavior (real `MEMORY.md` on disk) is additionally covered with a mocked file read in [`src/lib/ai/chat-turn-args.test.ts`](src/lib/ai/chat-turn-args.test.ts) (`testcases.md §5`).
 
 ---
 

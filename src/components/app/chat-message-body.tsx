@@ -113,19 +113,60 @@ function createWorkspaceFileMarkdownComponents(
   }
 }
 
-const MARKDOWN_DEBOUNCE_MS = 80
+const STREAM_MARKDOWN_THROTTLE_MS = 80
+const STREAM_MARKDOWN_THROTTLE_AFTER_CHARS = 280
 
-function useDebouncedText(text: string, enabled: boolean) {
+function useStreamText(text: string, streaming: boolean) {
   const [out, setOut] = useState(text)
+  const timeoutRef = useRef<number | null>(null)
+  const lastFlushAtRef = useRef(0)
+
   useEffect(() => {
-    if (!enabled) {
+    if (timeoutRef.current != null) {
+      window.clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    if (!streaming) {
       setOut(text)
+      lastFlushAtRef.current = 0
       return
     }
-    const t = window.setTimeout(() => setOut(text), MARKDOWN_DEBOUNCE_MS)
-    return () => window.clearTimeout(t)
-  }, [text, enabled])
-  return enabled ? out : text
+
+    const throttleMs =
+      text.length >= STREAM_MARKDOWN_THROTTLE_AFTER_CHARS
+        ? STREAM_MARKDOWN_THROTTLE_MS
+        : 0
+    if (throttleMs === 0) {
+      setOut(text)
+      lastFlushAtRef.current = performance.now()
+      return
+    }
+
+    const now = performance.now()
+    const elapsed = now - lastFlushAtRef.current
+    if (elapsed >= throttleMs || lastFlushAtRef.current === 0) {
+      setOut(text)
+      lastFlushAtRef.current = now
+      return
+    }
+
+    const waitFor = throttleMs - elapsed
+    timeoutRef.current = window.setTimeout(() => {
+      setOut(text)
+      lastFlushAtRef.current = performance.now()
+      timeoutRef.current = null
+    }, waitFor)
+
+    return () => {
+      if (timeoutRef.current != null) {
+        window.clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [text, streaming])
+
+  return streaming ? out : text
 }
 
 function lastTextPartIndex(parts: AssistantPart[]): number {
@@ -144,7 +185,7 @@ function ChatMarkdownBlock({
   debounce: boolean
   workspaceFileContext?: ChatWorkspaceFileMarkdownContext
 }) {
-  const display = useDebouncedText(text, debounce)
+  const display = useStreamText(text, debounce)
   const components = useMemo(
     () => createWorkspaceFileMarkdownComponents(workspaceFileContext),
     [workspaceFileContext],

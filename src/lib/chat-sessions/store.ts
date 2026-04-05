@@ -125,6 +125,25 @@ function createId() {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function nowMs(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+
+function isChatPerfLoggingEnabled(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  try {
+    return localStorage.getItem('braian.chatPerf') === '1'
+  } catch {
+    return false
+  }
+}
+
+function logChatPerf(sessionKey: string, stage: string, startAt: number) {
+  if (!isChatPerfLoggingEnabled()) return
+  const elapsed = (nowMs() - startAt).toFixed(1)
+  console.info(`[braian][chat-perf] ${sessionKey} ${stage} +${elapsed}ms`)
+}
+
 let threads: Record<string, ChatThreadState> = {}
 const threadListeners = new Set<() => void>()
 
@@ -248,15 +267,25 @@ function finalizeToolPart(
   )
 }
 
-function mapAssistant(
+function updateAssistantMessage(
   messages: ChatMessage[],
   assistantId: string,
   fn: (m: AssistantChatMessage) => AssistantChatMessage,
 ): ChatMessage[] {
-  return messages.map((m) => {
-    if (m.role !== 'assistant' || m.id !== assistantId) return m
-    return fn(m)
-  })
+  let idx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg?.role === 'assistant' && msg.id === assistantId) {
+      idx = i
+      break
+    }
+  }
+  if (idx < 0) return messages
+  const next = fn(messages[idx] as AssistantChatMessage)
+  if (next === messages[idx]) return messages
+  const out = [...messages]
+  out[idx] = next
+  return out
 }
 
 export function subscribeThreads(cb: () => void) {
@@ -427,6 +456,8 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
 
   void (async () => {
     let streamCompletedOk = false
+    const turnStartAt = nowMs()
+    let firstChunkSeen = false
     try {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
       const threadNow = getThread(sessionKey)
@@ -465,10 +496,18 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           }))
         } else {
           try {
+            const contextFilesStart = nowMs()
             contextFiles = await loadContextFilesForModel(
               workspaceId,
               prev.contextFiles,
             )
+            if (contextFiles?.length) {
+              logChatPerf(
+                sessionKey,
+                `context-files loaded (${contextFiles.length})`,
+                contextFilesStart,
+              )
+            }
           } catch (e) {
             console.error('[braian] load context files', e)
             contextFiles = undefined
@@ -500,30 +539,36 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           : {}),
       }
 
-      try {
-        const args = await buildTanStackChatTurnArgs({
-          userText: trimmed,
-          context: chatTurnContext,
-          priorMessages,
-          skipSettingsValidation: true,
-        })
-        patchThread(sessionKey, {
-          lastModelRequestSnapshot: tanStackTurnArgsToSnapshot(args, trimmed),
-        })
-      } catch (e) {
-        console.error('[braian] model request snapshot', e)
-      }
+      const argsBuildStart = nowMs()
+      const streamArgs = await buildTanStackChatTurnArgs({
+        userText: trimmed,
+        context: chatTurnContext,
+        priorMessages,
+        skipSettingsValidation: false,
+      })
+      logChatPerf(sessionKey, 'turn args built', argsBuildStart)
+      patchThread(sessionKey, {
+        lastModelRequestSnapshot: tanStackTurnArgsToSnapshot(streamArgs, trimmed),
+      })
+      logChatPerf(sessionKey, 'snapshot ready', turnStartAt)
 
       for await (const chunk of streamChatTurn(
         trimmed,
         ac.signal,
         chatTurnContext,
         priorMessages,
+        {
+          prebuiltTanStackArgs: streamArgs,
+        },
       )) {
+        if (!firstChunkSeen) {
+          firstChunkSeen = true
+          logChatPerf(sessionKey, `first chunk (${chunk.type})`, turnStartAt)
+        }
         if (chunk.type === 'text-delta') {
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: mapAssistant(p.messages, assistantId, (m) => ({
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
               ...m,
               content: m.content + chunk.text,
               parts: appendAssistantTextDelta(m.parts, chunk.text),
@@ -538,7 +583,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         } else if (chunk.type === 'tool-start') {
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: mapAssistant(p.messages, assistantId, (m) => ({
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
               ...m,
               parts: appendToolStart(
                 m.parts,
@@ -550,7 +595,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         } else if (chunk.type === 'tool-args-delta') {
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: mapAssistant(p.messages, assistantId, (m) => ({
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
               ...m,
               parts: appendToolArgs(m.parts, chunk.toolCallId, chunk.delta),
             })),
@@ -566,7 +611,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           }
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: mapAssistant(p.messages, assistantId, (m) => ({
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
               ...m,
               parts: finalizeToolPart(m.parts, chunk),
             })),
@@ -574,13 +619,14 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         } else if (chunk.type === 'done') {
           patchThread(sessionKey, (p) => ({
             ...p,
-            messages: mapAssistant(p.messages, assistantId, (m) => ({
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
               ...m,
               status: 'complete' as const,
             })),
           }))
         }
       }
+      logChatPerf(sessionKey, 'stream completed', turnStartAt)
       streamCompletedOk = true
     } catch (err) {
       const aborted =
@@ -599,7 +645,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           detail.length > 600 ? `${detail.slice(0, 600)}…` : detail
         patchThread(sessionKey, (p) => ({
           ...p,
-          messages: mapAssistant(p.messages, assistantId, (m) => ({
+          messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
             ...m,
             content:
               m.content ||
@@ -628,7 +674,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       patchThread(sessionKey, (p) => ({
         ...p,
         generating: false,
-        messages: mapAssistant(p.messages, assistantId, (m) =>
+        messages: updateAssistantMessage(p.messages, assistantId, (m) =>
           m.status === 'streaming'
             ? { ...m, status: 'complete' as const }
             : m,

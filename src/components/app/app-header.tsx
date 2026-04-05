@@ -14,7 +14,8 @@ type ChatRouteContext = { conversation: ConversationDto }
 export function AppHeader() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const matches = useMatches()
-  const { activeWorkspace, conversationsByWorkspace } = useWorkspace()
+  const { activeWorkspace, conversationsByWorkspace, workspaces } =
+    useWorkspace()
 
   const chatMatch = matches.find(
     (m) => m.routeId === '/_shell/chat/$conversationId',
@@ -33,13 +34,16 @@ export function AppHeader() {
   const isDashboard = pathname.startsWith('/dashboard')
   const isHome = pathname === '/'
   const isSettings = pathname === '/settings'
-  const isConnections = pathname === '/connections'
+  const workspaceSettingsMatch = pathname.match(
+    /^\/workspace\/([^/]+)\/settings$/,
+  )
+  const isWorkspaceSettings = Boolean(workspaceSettingsMatch)
 
   const title = (() => {
     if (isHome) return 'Welcome'
     if (isDashboard) return 'Dashboard'
     if (isSettings) return 'Settings'
-    if (isConnections) return 'Connections'
+    if (isWorkspaceSettings) return 'Workspace settings'
     if (isNewChatRoute) return 'New agent'
     if (
       conversationIdFromPath &&
@@ -62,7 +66,11 @@ export function AppHeader() {
     const wsName = activeWorkspace?.name ?? 'Workspace'
     if (isHome) return wsName
     if (isSettings) return 'AI provider & API key'
-    if (isConnections) return `${wsName} · Tools & integrations`
+    if (isWorkspaceSettings && workspaceSettingsMatch) {
+      const id = workspaceSettingsMatch[1]
+      const w = workspaces.find((x) => x.id === id)
+      return `${w?.name ?? 'Workspace'} · Connections (MCP)`
+    }
     if (isDashboard) return `${wsName} · Overview`
     if (isNewChatRoute) return 'No workspace · move when ready'
     if (routeConversation) return `${wsName} · Chat`

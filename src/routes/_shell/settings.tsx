@@ -13,7 +13,7 @@ import {
   AI_PROVIDERS,
   type AiProviderId,
   defaultModelForProvider,
-  providerMeta,
+  modelOptionsForUi,
 } from '@/lib/ai/model-catalog'
 import {
   memorySettingsGet,
@@ -72,7 +72,7 @@ function SettingsPage() {
     }))
   }, [])
 
-  const models = providerMeta(form.provider)?.models ?? []
+  const models = modelOptionsForUi(form.provider, form.modelId)
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()

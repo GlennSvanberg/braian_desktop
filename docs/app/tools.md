@@ -2,7 +2,7 @@ The model only has the abilities the app gives it through **tools**. If it has n
 
 How instructions and tool lists are combined each turn—including **routing**, **skills**, and **user profile**—is described in [Model context](/docs/model-context).
 
-**Workspace MCP connections** (sidebar **Connections**, file `.braian/mcp.json`) are **not** the same as these built-in tools: they configure external MCP servers for future integration and for **status checks** today. See [Connections (MCP)](/docs/mcp).
+**Workspace MCP connections** (gear icon next to each workspace in the sidebar → **Workspace settings**, file `.braian/mcp.json`) extend the assistant with **MCP tools** when those servers are enabled. See [Connections (MCP)](/docs/mcp).
 
 ## Document canvas (`open_document_canvas`)
 

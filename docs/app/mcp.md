@@ -57,7 +57,7 @@ Workspace file, command, canvas, skills, and dashboard tools stay separate; rout
 
 ## Editing connections
 
-Use **Sidebar → Connections** (per workspace). You can use the **form**, the **JSON** editor for the single server object, or paste a snippet from another tool; **Save** validates the JSON object before writing the file.
+Use the **gear icon** next to a workspace name in the sidebar (**Workspace settings**), then manage **Connections** there. You can use the **form**, the **JSON** editor for the single server object, or paste a snippet from another tool; **Save** validates the JSON object before writing the file.
 
 ## Related
 

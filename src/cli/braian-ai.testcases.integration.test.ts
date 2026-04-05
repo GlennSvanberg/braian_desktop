@@ -144,4 +144,50 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
       expect(snap.systemSections.some((s) => s.id === 'memory')).toBe(false)
     },
   )
+
+  it(
+    'Workspace skills — workspace-scoped dump injects create-skill + catalog sections and skill tools (catalog incomplete in Node)',
+    { timeout: 60_000 },
+    () => {
+      const snap = runDumpRequest('Use my release-notes skill.', {
+        workspaceId: 'ws-workspace-folder',
+        conversationId: null,
+        agentMode: 'document',
+      })
+      expect(snap.systemSections.some((s) => s.id === 'skills-create')).toBe(
+        true,
+      )
+      expect(snap.systemSections.some((s) => s.id === 'skills-catalog')).toBe(
+        true,
+      )
+      const catalog = snap.systemSections.find((s) => s.id === 'skills-catalog')
+      expect(catalog?.text).toContain('Catalog could not be loaded')
+      expect(catalog?.text).toContain('No skill files found')
+      const create = snap.systemSections.find((s) => s.id === 'skills-create')
+      expect(create?.text).toContain('create-skill')
+      expect(create?.text).toContain('.braian/skills/')
+      expect(toolNames(snap)).toContain('list_workspace_skills')
+      expect(toolNames(snap)).toContain('read_workspace_skill')
+      expect(toolNames(snap)).toContain('write_workspace_skill')
+    },
+  )
+
+  it(
+    'Workspace skills — detached session omits skills sections (no workspace folder)',
+    { timeout: 60_000 },
+    () => {
+      const snap = runDumpRequest('List workspace skills.', {
+        workspaceId: '__braian_detached__',
+        conversationId: null,
+        agentMode: 'document',
+      })
+      expect(snap.systemSections.some((s) => s.id === 'skills-create')).toBe(
+        false,
+      )
+      expect(snap.systemSections.some((s) => s.id === 'skills-catalog')).toBe(
+        false,
+      )
+      expect(toolNames(snap)).not.toContain('list_workspace_skills')
+    },
+  )
 })
