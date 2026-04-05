@@ -1,7 +1,19 @@
-import { Braces, Check, Copy, Loader2 } from 'lucide-react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import {
+  Braces,
+  Check,
+  ChevronDown,
+  Copy,
+  Loader2,
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -16,10 +28,8 @@ import {
   tanStackTurnArgsToSnapshot,
   type SerializableModelRequestSnapshot,
 } from '@/lib/ai/chat-turn-args'
-import {
-  MODEL_CONTEXT_SECTION_ORDER_HELP,
-  modelContextSectionGroup,
-} from '@/lib/ai/model-context-section-meta'
+import type { ModelContextSectionGroup } from '@/lib/ai/model-context-section-meta'
+import { deriveSnapshotSummary, type SnapshotSummary, type SectionSummary, type ToolBucket } from '@/lib/ai/snapshot-summary'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
 import {
   isDetachedWorkspaceSessionId,
@@ -32,29 +42,17 @@ import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { cn } from '@/lib/utils'
 
 const EMPTY_DRAFT_USER_LINE =
-  '[Composer is empty. Add text in the box below to preview the outbound user message.]'
+  '[Composer is empty — type a message to preview the outbound payload.]'
 
-type ChatContextManagerDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  workspaceId: string
-  conversationId: string | null
-  thread: ChatThreadState
-  /** Same flag as workspace context (desktop vs browser preview). */
-  isTauriRuntime: boolean
-}
+/* ------------------------------------------------------------------ */
+/*  Small reusable pieces                                              */
+/* ------------------------------------------------------------------ */
 
-function SectionTitle({
-  children,
-  className,
-}: {
-  children: ReactNode
-  className?: string
-}) {
+function SectionHeading({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <h3
       className={cn(
-        'mt-4 border-b border-accent-500/35 pb-1 text-sm font-semibold text-accent-600 first:mt-0 dark:text-accent-500',
+        'mt-5 border-b border-accent-500/30 pb-1 text-xs font-semibold tracking-wide text-accent-600 uppercase first:mt-0 dark:text-accent-500',
         className,
       )}
     >
@@ -63,16 +61,237 @@ function SectionTitle({
   )
 }
 
-function MonospaceBlock({ text }: { text: string }) {
+function Stat({ label, value, muted }: { label: string; value: ReactNode; muted?: boolean }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium tracking-wide text-accent-600/70 uppercase dark:text-accent-500/70">
+        {label}
+      </span>
+      <span className={cn('text-sm font-medium', muted ? 'text-text-3' : 'text-text-1')}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function MonoBlock({ text, maxH }: { text: string; maxH?: string }) {
   return (
     <pre
-      className="max-h-[min(45vh,28rem)] overflow-auto rounded-md border border-border border-l-[3px] border-l-accent-500 bg-accent-500/[0.06] p-2 text-xs whitespace-pre-wrap break-words text-text-2 sm:max-h-[min(50vh,32rem)] dark:bg-accent-500/[0.08]"
+      className={cn(
+        'overflow-auto rounded-md border border-border border-l-[3px] border-l-accent-500 bg-accent-500/[0.04] p-2 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-text-2 dark:bg-accent-500/[0.06]',
+        maxH ?? 'max-h-[min(40vh,24rem)]',
+      )}
       tabIndex={0}
     >
       {text}
     </pre>
   )
 }
+
+function charLabel(n: number): string {
+  if (n > 10_000) return `${(n / 1000).toFixed(1)}k chars`
+  return `${n.toLocaleString()} chars`
+}
+
+/* ------------------------------------------------------------------ */
+/*  Summary cards                                                      */
+/* ------------------------------------------------------------------ */
+
+const GROUP_ORDER: ModelContextSectionGroup[] = [
+  'Core',
+  'Skills',
+  'User',
+  'Workspace',
+  'This turn',
+  'Profile',
+]
+
+function SummaryCards({ summary }: { summary: SnapshotSummary }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Status row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className="border-accent-500/40 text-accent-700 dark:text-accent-500">
+          {summary.mode}
+        </Badge>
+        <Badge variant="outline" className="border-accent-500/40 text-accent-700 dark:text-accent-500">
+          {summary.provider} / {summary.modelId}
+        </Badge>
+        {summary.mockAi && (
+          <Badge variant="secondary" className="bg-yellow-500/15 text-yellow-800 dark:text-yellow-400">
+            mock AI
+          </Badge>
+        )}
+        {summary.appBuilderActive && (
+          <Badge variant="secondary" className="bg-blue-500/15 text-blue-800 dark:text-blue-400">
+            app builder
+          </Badge>
+        )}
+        {summary.mcpToolsPresent && (
+          <Badge variant="secondary" className="bg-purple-500/15 text-purple-800 dark:text-purple-400">
+            MCP
+          </Badge>
+        )}
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-accent-500/20 bg-accent-500/[0.03] p-3 sm:grid-cols-4 dark:bg-accent-500/[0.05]">
+        <Stat label="System chars" value={charLabel(summary.totalSystemChars)} />
+        <Stat label="Messages" value={summary.totalMessageCount} />
+        <Stat label="Tools" value={`${summary.eagerToolCount} eager, ${summary.lazyToolCount} lazy`} />
+        <Stat
+          label="Canvas"
+          value={
+            summary.canvasState === 'present'
+              ? `rev ${summary.canvasRevision ?? '?'}`
+              : summary.canvasState === 'empty'
+                ? 'empty'
+                : 'none'
+          }
+          muted={summary.canvasState === 'none'}
+        />
+        <Stat label="Attached files" value={summary.attachedFilesCount || 'none'} muted={summary.attachedFilesCount === 0} />
+        <Stat label="Skills catalog" value={summary.skillCatalogPresent ? 'yes' : 'no'} muted={!summary.skillCatalogPresent} />
+        <Stat label="Memory" value={summary.memoryPresent ? 'yes' : 'no'} muted={!summary.memoryPresent} />
+        <Stat label="Reasoning" value={summary.reasoningMode} />
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Collapsible section group                                          */
+/* ------------------------------------------------------------------ */
+
+function CollapsibleSystemSection({ section, snap }: { section: SectionSummary; snap: SerializableModelRequestSnapshot }) {
+  const raw = snap.systemSections.find((s) => s.id === section.id)
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent-500/10">
+        <ChevronDown className="size-3.5 shrink-0 text-accent-600 transition-transform group-data-[state=closed]:-rotate-90 dark:text-accent-500" />
+        <span className="min-w-0 flex-1 truncate font-medium text-text-1">{section.label}</span>
+        <span className="shrink-0 text-[10px] tabular-nums text-text-3">{charLabel(section.charCount)}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-2 pt-1 pb-2">
+        {raw && <MonoBlock text={raw.text} />}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function SystemSectionsGrouped({ snap, summary }: { snap: SerializableModelRequestSnapshot; summary: SnapshotSummary }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {GROUP_ORDER.map((group) => {
+        const sections = summary.sectionsByGroup[group]
+        if (sections.length === 0) return null
+        return (
+          <div key={group}>
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-[10px] font-semibold tracking-widest text-accent-600/80 uppercase dark:text-accent-500/80">
+                {group}
+              </span>
+              <span className="text-[10px] text-text-3">
+                {sections.length} {sections.length === 1 ? 'section' : 'sections'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5 rounded-lg border border-accent-500/15 bg-accent-500/[0.02] dark:bg-accent-500/[0.04]">
+              {sections.map((s) => (
+                <CollapsibleSystemSection key={s.id} section={s} snap={snap} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Messages                                                           */
+/* ------------------------------------------------------------------ */
+
+function MessagesList({ messages }: { messages: SerializableModelRequestSnapshot['messages'] }) {
+  if (messages.length === 0) {
+    return <p className="py-4 text-center text-xs text-text-3">No messages in history.</p>
+  }
+  return (
+    <ol className="flex flex-col gap-1.5">
+      {messages.map((m, i) => (
+        <Collapsible key={`${m.role}-${i}`}>
+          <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent-500/10">
+            <ChevronDown className="size-3.5 shrink-0 text-accent-600 transition-transform group-data-[state=closed]:-rotate-90 dark:text-accent-500" />
+            <Badge variant="outline" className="border-accent-500/30 px-1.5 py-0 text-[10px] font-semibold uppercase">
+              {m.role}
+            </Badge>
+            <span className="min-w-0 flex-1 truncate text-text-3">
+              {m.content.slice(0, 100).replace(/\s+/g, ' ')}
+              {m.content.length > 100 ? '…' : ''}
+            </span>
+            <span className="shrink-0 text-[10px] tabular-nums text-text-3">{charLabel(m.content.length)}</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-2 pt-1 pb-2">
+            <MonoBlock text={m.content} />
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
+    </ol>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tools                                                              */
+/* ------------------------------------------------------------------ */
+
+function ToolsList({ snap, buckets }: { snap: SerializableModelRequestSnapshot; buckets: ToolBucket[] }) {
+  if (snap.tools.length === 0) {
+    return <p className="py-4 text-center text-xs text-text-3">No tools available this turn.</p>
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {buckets.map((bucket) => (
+        <div key={bucket.label}>
+          <div className="mb-1 text-[10px] font-semibold tracking-widest text-accent-600/80 uppercase dark:text-accent-500/80">
+            {bucket.label}
+          </div>
+          <div className="flex flex-col gap-0.5 rounded-lg border border-accent-500/15 bg-accent-500/[0.02] dark:bg-accent-500/[0.04]">
+            {bucket.tools.map((t) => {
+              const full = snap.tools.find((ft) => ft.name === t.name)
+              return (
+                <Collapsible key={t.name}>
+                  <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent-500/10">
+                    <ChevronDown className="size-3.5 shrink-0 text-accent-600 transition-transform group-data-[state=closed]:-rotate-90 dark:text-accent-500" />
+                    <code className="min-w-0 flex-1 truncate font-mono text-xs font-medium text-text-1">{t.name}</code>
+                    {t.lazy && (
+                      <Badge variant="secondary" className="bg-accent-500/10 px-1.5 py-0 text-[10px]">lazy</Badge>
+                    )}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-1.5 px-2 pt-1 pb-2 text-xs">
+                    <p className="text-text-2 leading-relaxed">{t.description}</p>
+                    {full?.inputJsonSchema != null && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="cursor-pointer text-[11px] font-medium text-accent-600 hover:underline dark:text-accent-500">
+                          Input schema
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <MonoBlock text={JSON.stringify(full.inputJsonSchema, null, 2)} maxH="max-h-[min(30vh,16rem)]" />
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main snapshot panel                                                 */
+/* ------------------------------------------------------------------ */
 
 function SnapshotPanel({
   snap,
@@ -90,29 +309,34 @@ function SnapshotPanel({
     window.setTimeout(() => setCopied(false), 2000)
   }, [snap])
 
-  if (!snap) {
+  const summary = useMemo<SnapshotSummary | null>(
+    () => (snap ? deriveSnapshotSummary(snap) : null),
+    [snap],
+  )
+
+  if (!snap || !summary) {
     return (
-      <p className="text-text-3 py-6 text-center text-sm text-accent-700/90 dark:text-accent-500/90">
+      <p className="py-6 text-center text-sm text-text-3">
         {emptyLabel}
       </p>
     )
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-text-2 text-xs">
-          Logical payload passed to TanStack{' '}
+    <div className="flex flex-col gap-4">
+      {/* Copy button */}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] text-text-3">
+          Derived from the raw snapshot passed to{' '}
           <code className="rounded bg-accent-500/15 px-1 py-px font-mono text-accent-700 dark:text-accent-500">
             chat()
-          </code>{' '}
-          (provider adapters may merge system blocks).
+          </code>
         </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 gap-1 border-accent-500/45 text-xs text-accent-700 hover:border-accent-500 hover:bg-accent-500/10 dark:text-accent-500"
+          className="h-7 gap-1 border-accent-500/40 text-xs text-accent-700 hover:border-accent-500 hover:bg-accent-500/10 dark:text-accent-500"
           onClick={copyJson}
         >
           {copied ? (
@@ -124,110 +348,47 @@ function SnapshotPanel({
         </Button>
       </div>
 
-      <SectionTitle>Overview</SectionTitle>
-      <dl className="grid gap-1 rounded-lg border border-accent-500/20 bg-accent-500/[0.04] p-3 text-xs text-text-2 sm:grid-cols-2 dark:bg-accent-500/[0.06]">
-        <dt className="font-medium text-accent-700 dark:text-accent-500">Provider</dt>
-        <dd className="text-text-1">{snap.provider}</dd>
-        <dt className="font-medium text-accent-700 dark:text-accent-500">Model</dt>
-        <dd className="text-text-1">{snap.modelId}</dd>
-        <dt className="font-medium text-accent-700 dark:text-accent-500">Mock AI</dt>
-        <dd className="text-text-1">{snap.mockAi ? 'Yes (dev)' : 'No'}</dd>
-        <dt className="font-medium text-accent-700 dark:text-accent-500">Agent mode</dt>
-        <dd className="text-text-1">{snap.isCodeMode ? 'code' : 'document'}</dd>
-        <dt className="font-medium text-accent-700 dark:text-accent-500">User message</dt>
-        <dd className="min-w-0 break-words text-text-1">{snap.userText}</dd>
-      </dl>
-      {snap.settingsWarnings.length > 0 ? (
-        <div className="rounded-md border border-accent-500/25 bg-accent-500/[0.06] p-2 text-xs dark:bg-accent-500/[0.08]">
-          <p className="font-medium text-accent-700 dark:text-accent-500">Settings</p>
-          <ul className="text-text-2 mt-1 list-inside list-disc">
+      {/* Summary cards */}
+      <SummaryCards summary={summary} />
+
+      {/* System prompts — grouped & collapsible */}
+      <SectionHeading>System prompts</SectionHeading>
+      <SystemSectionsGrouped snap={snap} summary={summary} />
+
+      {/* Messages — collapsible */}
+      <SectionHeading>Messages ({snap.messages.length})</SectionHeading>
+      <MessagesList messages={snap.messages} />
+
+      {/* Tools — bucketed & collapsible */}
+      <SectionHeading>Tools ({snap.tools.length})</SectionHeading>
+      <ToolsList snap={snap} buckets={summary.toolBuckets} />
+
+      {/* Settings warnings */}
+      {snap.settingsWarnings.length > 0 && (
+        <>
+          <SectionHeading>Settings warnings</SectionHeading>
+          <ul className="list-inside list-disc rounded-md border border-accent-500/20 bg-accent-500/[0.04] p-3 text-xs text-text-2 dark:bg-accent-500/[0.06]">
             {snap.settingsWarnings.map((w) => (
               <li key={w}>{w}</li>
             ))}
           </ul>
-        </div>
-      ) : null}
-
-      <SectionTitle>{MODEL_CONTEXT_SECTION_ORDER_HELP.title}</SectionTitle>
-      <ol className="text-text-2 mb-2 list-decimal space-y-1.5 rounded-lg border border-accent-500/20 bg-accent-500/[0.04] p-3 pl-8 text-xs leading-relaxed dark:bg-accent-500/[0.06]">
-        {MODEL_CONTEXT_SECTION_ORDER_HELP.items.map((item, i) => (
-          <li key={i}>{item}</li>
-        ))}
-      </ol>
-
-      <SectionTitle>System prompts</SectionTitle>
-      <div className="flex flex-col gap-3">
-        {snap.systemSections.map((s) => {
-          const group = modelContextSectionGroup(s.id)
-          return (
-            <div
-              key={s.id}
-              className="rounded-md border border-accent-500/25 border-l-[3px] border-l-accent-500 bg-accent-500/[0.04] p-3 dark:bg-accent-500/[0.06]"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-accent-700 dark:text-accent-500">
-                  {s.label}
-                </p>
-                <span className="rounded bg-accent-500/20 px-1.5 py-px text-[10px] font-medium tracking-wide text-accent-700 uppercase dark:text-accent-500">
-                  {group}
-                </span>
-              </div>
-              <p className="text-text-3 mt-0.5 font-mono text-[11px]">{s.source}</p>
-              <MonospaceBlock text={s.text} />
-            </div>
-          )
-        })}
-      </div>
-
-      <SectionTitle>Messages</SectionTitle>
-      <ol className="flex flex-col gap-2 text-xs">
-        {snap.messages.map((m, i) => (
-          <li
-            key={`${m.role}-${i}`}
-            className="rounded-md border border-accent-500/25 border-l-[3px] border-l-accent-600/80 bg-accent-500/[0.03] p-2 dark:border-l-accent-500 dark:bg-accent-500/[0.05]"
-          >
-            <span className="font-medium tracking-wide text-accent-700 uppercase dark:text-accent-500">
-              {m.role}
-            </span>
-            <MonospaceBlock text={m.content} />
-          </li>
-        ))}
-      </ol>
-
-      <SectionTitle>Tools</SectionTitle>
-      <ul className="flex flex-col gap-2 text-xs">
-        {snap.tools.map((t) => (
-          <li
-            key={t.name}
-            className="space-y-1 rounded-md border border-accent-500/25 border-l-[3px] border-l-accent-500 bg-accent-500/[0.04] p-2 dark:bg-accent-500/[0.06]"
-          >
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="font-mono font-medium text-accent-700 dark:text-accent-500">
-                {t.name}
-              </span>
-              {t.lazy ? (
-                <span className="rounded bg-accent-500/20 px-1.5 py-px text-[10px] font-medium text-accent-700 dark:text-accent-500">
-                  lazy
-                </span>
-              ) : null}
-            </div>
-            <p className="text-text-3 font-mono text-[11px]">{t.sourceModule}</p>
-            <p className="text-text-2 leading-relaxed">{t.description}</p>
-            {t.inputJsonSchema != null ? (
-              <details className="text-text-2">
-                <summary className="cursor-pointer select-none text-xs font-medium text-accent-600 dark:text-accent-500">
-                  Input JSON Schema
-                </summary>
-                <pre className="mt-1 max-h-[min(32vh,18rem)] overflow-auto rounded border border-accent-500/25 border-l-2 border-l-accent-500 bg-accent-500/[0.06] p-2 font-mono text-[11px] whitespace-pre-wrap break-words dark:bg-accent-500/[0.08]">
-                  {JSON.stringify(t.inputJsonSchema, null, 2)}
-                </pre>
-              </details>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+        </>
+      )}
     </div>
   )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dialog                                                             */
+/* ------------------------------------------------------------------ */
+
+export type ChatContextManagerDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workspaceId: string
+  conversationId: string | null
+  thread: ChatThreadState
+  isTauriRuntime: boolean
 }
 
 export function ChatContextManagerDialog({
@@ -250,7 +411,6 @@ export function ChatContextManagerDialog({
       return
     }
     if (thread.generating) {
-      // Avoid rebuilding the full request preview on every streamed token.
       setNextLoading(false)
       setNextError(null)
       return
@@ -383,8 +543,7 @@ export function ChatContextManagerDialog({
             Model context
           </DialogTitle>
           <DialogDescription className="text-text-2">
-            What the app assembles for the AI on each turn: system prompts, chat history, tools, and
-            settings (no API key).
+            Inspect the full payload assembled for the AI on each turn.
           </DialogDescription>
         </DialogHeader>
 
@@ -414,9 +573,7 @@ export function ChatContextManagerDialog({
             <p className="text-text-2 mb-2 shrink-0 rounded-md border border-accent-500/20 bg-accent-500/[0.06] px-2 py-1.5 text-xs dark:bg-accent-500/[0.08]">
               A reply is in progress. <strong className="text-accent-700 dark:text-accent-500">Last sent</strong>{' '}
               matches that request.{' '}
-              <strong className="text-accent-700 dark:text-accent-500">Next preview</strong> assumes you send
-              the current composer text after this turn finishes (history includes the in-progress
-              assistant text as it exists now).
+              <strong className="text-accent-700 dark:text-accent-500">Next preview</strong> is based on the current draft.
             </p>
           ) : null}
 
@@ -427,7 +584,7 @@ export function ChatContextManagerDialog({
             <ScrollArea className="h-[min(calc(92vh-10rem),62rem)] pr-3">
               <SnapshotPanel
                 snap={lastSent}
-                emptyLabel="No turn has been sent yet in this thread, or the snapshot could not be saved."
+                emptyLabel="No turn has been sent yet in this thread."
               />
             </ScrollArea>
           </TabsContent>
@@ -465,12 +622,12 @@ export function ChatContextManagerTriggerButton({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="ghost"
       size="sm"
-      className="h-7 gap-1.5 border-accent-500/40 px-2 text-xs text-accent-700 hover:border-accent-500 hover:bg-accent-500/10 dark:text-accent-500"
+      className="h-8 gap-1.5 rounded-full border border-accent-500/20 bg-accent-500/5 px-3.5 text-[13px] text-accent-700 transition-colors hover:border-accent-500/40 hover:bg-accent-500/10 dark:text-accent-500"
       onClick={onClick}
     >
-      <Braces className="size-3.5 shrink-0" aria-hidden />
+      <Braces className="size-3.5 shrink-0 opacity-70" aria-hidden />
       Context
     </Button>
   )

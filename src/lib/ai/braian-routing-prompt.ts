@@ -49,7 +49,7 @@ function buildCanvasRoutingLine(options: BuildRoutingPromptOptions): string | nu
 
 function buildSkillsRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (!options.hasSkillTools) return null
-  return '**Workspace skills** (see **Skills catalog** below): when a skill description fits the task, call `read_workspace_skill` before acting on that domain. To create or change skills under `.braian/skills/`, follow the **create-skill** section below.'
+  return '**Workspace skills** (see **Skills catalog** below): when a skill description fits the task, call `read_workspace_skill` before acting on that domain. To create or edit skills, call `read_workspace_skill` on `create-skill` first.'
 }
 
 function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null {

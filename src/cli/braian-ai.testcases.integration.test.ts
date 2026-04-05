@@ -148,7 +148,7 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
   )
 
   it(
-    'Workspace skills — workspace-scoped dump injects create-skill + catalog sections and skill tools (catalog incomplete in Node)',
+    'Workspace skills — workspace-scoped dump injects catalog section and skill tools (catalog incomplete in Node)',
     { timeout: 60_000 },
     () => {
       const snap = runDumpRequest('Use my release-notes skill.', {
@@ -157,7 +157,7 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
         agentMode: 'document',
       })
       expect(snap.systemSections.some((s) => s.id === 'skills-create')).toBe(
-        true,
+        false,
       )
       expect(snap.systemSections.some((s) => s.id === 'skills-catalog')).toBe(
         true,
@@ -165,9 +165,7 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
       const catalog = snap.systemSections.find((s) => s.id === 'skills-catalog')
       expect(catalog?.text).toContain('Catalog could not be loaded')
       expect(catalog?.text).toContain('No skill files found')
-      const create = snap.systemSections.find((s) => s.id === 'skills-create')
-      expect(create?.text).toContain('create-skill')
-      expect(create?.text).toContain('.braian/skills/')
+      expect(catalog?.text).toContain('read_workspace_skill')
       expect(toolNames(snap)).toContain('list_workspace_skills')
       expect(toolNames(snap)).toContain('read_workspace_skill')
       expect(toolNames(snap)).toContain('write_workspace_skill')

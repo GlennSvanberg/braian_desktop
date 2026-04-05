@@ -38,7 +38,7 @@ You can switch modes yourself, or stay on **Document** and ask the assistant to 
 
 ## Workspace skills (`.braian/skills`)
 
-In a **real workspace** on the **desktop app**, the assistant also gets tools to work with **Markdown skills**—reusable instructions stored under **`.braian/skills/*.md`** (YAML frontmatter with `name` and `description`, then the body). The **Model context** preview always includes a **create-skill** block and a **catalog** of skill metadata; the model loads full bodies with **`read_workspace_skill`** when needed.
+In a **real workspace** on the **desktop app**, the assistant also gets tools to work with **Markdown skills** — reusable instructions stored under **`.braian/skills/*.md`** (YAML frontmatter with `name` and `description`, then the body). The **Model context** preview includes a **catalog** of skill metadata (name + description per file); the model loads full bodies with **`read_workspace_skill`** when needed.
 
 | Tool | What it does |
 |------|----------------|

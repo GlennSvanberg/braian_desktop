@@ -13,11 +13,9 @@ import {
   userProfileGet,
 } from '@/lib/user-profile-api'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
-import { EMBEDDED_CREATE_SKILL_MARKDOWN } from '@/lib/skills/embedded-create-skill'
 import {
   formatSkillCatalogSystemText,
   loadAppBuilderSkillMarkdown,
-  loadCreateSkillBodyMarkdown,
   loadSkillCatalog,
 } from '@/lib/skills/load-skill-catalog'
 
@@ -89,8 +87,6 @@ const SOURCE_ROUTING_DOC =
   'src/lib/ai/braian-routing-prompt.ts + chat-turn-args (document mode)'
 const SOURCE_ROUTING_CODE =
   'src/lib/ai/braian-routing-prompt.ts + chat-turn-args (code mode)'
-const SOURCE_SKILLS_CREATE =
-  'src/lib/skills/load-skill-catalog.ts → create-skill.md (+ embedded fallback)'
 const SOURCE_SKILLS_CATALOG = 'src/lib/skills/load-skill-catalog.ts'
 const SOURCE_APP_BUILDER =
   'src/lib/skills/load-skill-catalog.ts → app-builder.md (+ APP_BUILDER_INSTRUCTIONS_FALLBACK)'
@@ -494,21 +490,6 @@ export async function buildTanStackChatTurnArgs(
   }
 
   if (workspaceScoped && ctx.workspaceId != null) {
-    const createBody = await loadCreateSkillBodyMarkdown(
-      ctx.workspaceId,
-      EMBEDDED_CREATE_SKILL_MARKDOWN,
-    )
-    systemSections.push({
-      id: 'skills-create',
-      label: 'Skill — create-skill (always)',
-      source: SOURCE_SKILLS_CREATE,
-      text: [
-        '## create-skill',
-        '',
-        createBody,
-      ].join('\n'),
-    })
-
     const { entries, catalogIncomplete } = await loadSkillCatalog(
       ctx.workspaceId,
     )

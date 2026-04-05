@@ -78,7 +78,9 @@ export function formatSkillCatalogSystemText(
   catalogIncomplete: boolean,
 ): string {
   const lines: string[] = [
-    'Workspace skills under `.braian/skills/` (metadata only — use `read_workspace_skill` for full bodies).',
+    '## Skills catalog',
+    '',
+    'Skills are `.md` files under `.braian/skills/`. Call `read_workspace_skill` to load the full body before following a skill.',
     '',
   ]
   if (catalogIncomplete) {

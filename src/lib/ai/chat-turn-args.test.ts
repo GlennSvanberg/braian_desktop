@@ -148,7 +148,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.id).toBe('routing-doc')
     expect(r.systemSections[0]?.text).toContain('switch_to_code_agent')
     expect(r.systemSections[0]?.text).toContain('__lazy__tool__discovery__')
-    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(true)
+    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
     expect(r.systemSections.some((s) => s.id === 'skills-catalog')).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'list_workspace_skills'),
@@ -176,7 +176,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.text).not.toContain(
       'call `switch_to_code_agent`, then immediately `__lazy__tool__discovery__`',
     )
-    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(true)
+    expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
   })
 
   it('appends user message to prior messages', async () => {

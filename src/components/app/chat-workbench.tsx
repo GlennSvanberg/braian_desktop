@@ -818,7 +818,7 @@ export function ChatWorkbench({
 
   const agentModeGroup = (
     <div
-      className="border-border bg-muted/25 flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border"
+      className="bg-muted/30 flex h-8 shrink-0 items-center overflow-hidden rounded-full p-1"
       role="group"
       aria-label="Agent mode"
     >
@@ -828,16 +828,15 @@ export function ChatWorkbench({
           { id: 'code' as const, label: 'Code' },
           { id: 'app' as const, label: 'App' },
         ] as const
-      ).map((seg, i) => (
+      ).map((seg) => (
         <button
           key={seg.id}
           type="button"
           className={cn(
-            'text-text-2 hover:bg-muted/70 focus-visible:ring-ring px-2.5 text-xs font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none',
-            i > 0 && 'border-border border-l',
+            'focus-visible:ring-ring h-full rounded-full px-3.5 text-[13px] font-medium transition-all duration-200 focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none',
             activeAgentSegment === seg.id
-              ? 'bg-primary text-primary-foreground hover:bg-primary'
-              : 'bg-transparent',
+              ? 'bg-background text-text-1 shadow-sm'
+              : 'text-text-3 hover:text-text-2 bg-transparent',
           )}
           aria-pressed={activeAgentSegment === seg.id}
           title={
@@ -891,9 +890,9 @@ export function ChatWorkbench({
                 {isDetachedSession && isTauriRuntime && workspaces.length > 0 ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="text-text-2 border-border h-7 gap-1.5 px-2 text-xs"
+                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
                     disabled={generating || moveBusy}
                     onClick={() => setMoveOpen(true)}
                   >
@@ -909,9 +908,9 @@ export function ChatWorkbench({
                 {generating ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="text-text-2 border-border h-7 gap-1.5 px-2 text-xs"
+                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
                     onClick={() => stopChatGeneration(sessionKey)}
                   >
                     <Square className="size-2.5 fill-current" aria-hidden />
@@ -924,9 +923,9 @@ export function ChatWorkbench({
                 !isProfileSession ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="text-text-2 border-border h-7 gap-1.5 px-2 text-xs"
+                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
                     disabled={memoryUpdateBusy}
                     onClick={onUpdateMemoryNow}
                   >
@@ -1002,7 +1001,7 @@ export function ChatWorkbench({
                             type="button"
                             variant="outline"
                             size="lg"
-                            className="border-border text-text-1 hover:bg-muted/60 h-auto min-h-14 justify-start gap-3 px-4 py-3 text-left text-base font-medium shadow-sm"
+                            className="border-border/40 text-text-1 hover:bg-muted/60 h-auto min-h-14 justify-start gap-3 rounded-2xl px-4 py-3 text-left text-base font-medium shadow-sm transition-all duration-200 hover:shadow-md"
                             disabled={generating || moveBusy}
                             onClick={() => void runMoveToWorkspace(w.id)}
                           >
@@ -1064,7 +1063,7 @@ export function ChatWorkbench({
                           variant="ghost"
                           size="icon"
                           className={cn(
-                            'text-text-3 hover:text-text-2 absolute top-1 right-1 z-10 size-7 shrink-0',
+                            'text-text-3 hover:text-text-2 absolute top-1 right-1 z-10 size-7 shrink-0 rounded-full',
                             'opacity-70 md:opacity-0 md:transition-opacity',
                             'md:group-hover/message:opacity-100',
                             'focus-visible:opacity-100',
@@ -1082,10 +1081,10 @@ export function ChatWorkbench({
                       ) : null}
                       <div
                         className={cn(
-                          'rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
+                          'px-4 py-3 text-[15px] leading-relaxed',
                           isUser
-                            ? 'bg-primary text-primary-foreground border-primary/20 rounded-tr-md pr-10'
-                            : 'bg-card text-text-2 border-border rounded-tl-md pr-10',
+                            ? 'bg-primary text-primary-foreground rounded-[20px] rounded-tr-[4px] pr-10'
+                            : 'bg-muted/30 text-text-2 rounded-[20px] rounded-tl-[4px] border border-border/40 pr-10',
                           m.role === 'assistant' &&
                             m.status === 'streaming' &&
                             !m.content &&
