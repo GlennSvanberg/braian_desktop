@@ -65,6 +65,10 @@ function hydrateUserProfileThreadOnce() {
       draft: typeof parsed.draft === 'string' ? parsed.draft : '',
       agentMode: parsed.agentMode === 'code' ? 'code' : 'document',
       appHarnessEnabled: false,
+      reasoningMode:
+        (parsed as { reasoningMode?: string }).reasoningMode === 'thinking'
+          ? 'thinking'
+          : 'fast',
       contextFiles: [],
       artifactOpen: false,
       artifactPayload: null,
@@ -95,6 +99,7 @@ function scheduleProfileThreadPersist() {
         messages: t.messages,
         draft: t.draft,
         agentMode: t.agentMode,
+        reasoningMode: t.reasoningMode,
       }
       localStorage.setItem(PROFILE_THREAD_LS_KEY, JSON.stringify(payload))
     } catch (e) {
@@ -109,6 +114,9 @@ function assistantContentForLlmHistory(m: AssistantChatMessage): string {
   if (!parts?.length) return m.content
   const blocks: string[] = []
   for (const p of parts) {
+    if (p.type === 'thinking') {
+      continue
+    }
     if (p.type === 'text' && p.text.trim()) {
       blocks.push(p.text)
     } else if (p.type === 'tool') {
@@ -222,6 +230,35 @@ function appendAssistantTextDelta(
     ]
   }
   return [...parts, { type: 'text', text: delta }]
+}
+
+function ensureOpenThinkingPart(parts: AssistantPart[] | undefined): AssistantPart[] {
+  const base = parts ?? []
+  const last = base[base.length - 1]
+  if (last?.type === 'thinking' && last.status === 'streaming') return base
+  return [...base, { type: 'thinking', text: '', status: 'streaming' as const }]
+}
+
+function appendThinkingDelta(
+  parts: AssistantPart[] | undefined,
+  delta: string,
+): AssistantPart[] | undefined {
+  if (!delta) return parts
+  const base = ensureOpenThinkingPart(parts)
+  const last = base[base.length - 1]
+  if (last.type !== 'thinking') return base
+  return [...base.slice(0, -1), { ...last, text: last.text + delta }]
+}
+
+function closeThinkingPart(
+  parts: AssistantPart[] | undefined,
+): AssistantPart[] | undefined {
+  if (!parts?.length) return parts
+  const last = parts[parts.length - 1]
+  if (last.type === 'thinking' && last.status === 'streaming') {
+    return [...parts.slice(0, -1), { ...last, status: 'done' as const }]
+  }
+  return parts
 }
 
 function appendToolStart(
@@ -346,6 +383,7 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
       contextFiles: state.contextFiles ?? [],
       agentMode: state.agentMode ?? 'document',
       appHarnessEnabled: state.appHarnessEnabled ?? false,
+      reasoningMode: state.reasoningMode === 'thinking' ? 'thinking' : 'fast',
     },
   }
   emitThreads()
@@ -403,6 +441,15 @@ export function setChatAppHarnessEnabled(
     prev.appHarnessEnabled === appHarnessEnabled
       ? prev
       : { ...prev, appHarnessEnabled },
+  )
+}
+
+export function setChatReasoningMode(
+  sessionKey: string,
+  reasoningMode: 'fast' | 'thinking',
+) {
+  patchThread(sessionKey, (prev) =>
+    prev.reasoningMode === reasoningMode ? prev : { ...prev, reasoningMode },
   )
 }
 
@@ -598,6 +645,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         context: chatTurnContext,
         priorMessages,
         skipSettingsValidation: false,
+        reasoningMode: threadNow.reasoningMode === 'thinking' ? 'thinking' : 'fast',
       })
       logChatPerf(sessionKey, 'turn args built', argsBuildStart)
       patchThread(sessionKey, {
@@ -625,6 +673,30 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
               ...m,
               content: m.content + chunk.text,
               parts: appendAssistantTextDelta(m.parts, chunk.text),
+            })),
+          }))
+        } else if (chunk.type === 'thinking-start') {
+          patchThread(sessionKey, (p) => ({
+            ...p,
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
+              ...m,
+              parts: ensureOpenThinkingPart(m.parts),
+            })),
+          }))
+        } else if (chunk.type === 'thinking-delta') {
+          patchThread(sessionKey, (p) => ({
+            ...p,
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
+              ...m,
+              parts: appendThinkingDelta(m.parts, chunk.text),
+            })),
+          }))
+        } else if (chunk.type === 'thinking-end') {
+          patchThread(sessionKey, (p) => ({
+            ...p,
+            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
+              ...m,
+              parts: closeThinkingPart(m.parts),
             })),
           }))
         } else if (chunk.type === 'artifact') {
@@ -909,6 +981,12 @@ export function useChatThreadActions() {
   const stop = useCallback((sessionKey: string) => {
     stopChatGeneration(sessionKey)
   }, [])
+  const setReasoning = useCallback(
+    (sessionKey: string, mode: 'fast' | 'thinking') => {
+      setChatReasoningMode(sessionKey, mode)
+    },
+    [],
+  )
   return {
     sendChatTurn: send,
     setChatDraft: setDraft,
@@ -916,6 +994,7 @@ export function useChatThreadActions() {
     stopChatGeneration: stop,
     setChatAgentMode,
     setChatAppHarnessEnabled,
+    setChatReasoningMode: setReasoning,
     addContextFileEntry,
     removeContextFileEntry,
   }

@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::db;
 
-const CONVERSATION_SCHEMA_VERSION: u32 = 3;
+const CONVERSATION_SCHEMA_VERSION: u32 = 4;
 
 fn default_agent_mode() -> String {
   "document".to_string()
@@ -19,8 +19,12 @@ fn default_app_harness_enabled() -> bool {
   false
 }
 
+fn default_reasoning_mode() -> String {
+  "fast".to_string()
+}
+
 fn conversation_schema_supported(v: u32) -> bool {
-  v == 1 || v == 2 || v == CONVERSATION_SCHEMA_VERSION
+  v == 1 || v == 2 || v == 3 || v == CONVERSATION_SCHEMA_VERSION
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +71,9 @@ struct ConversationFileV1 {
   /// When true, the model receives workspace dashboard builder tools and instructions.
   #[serde(default = "default_app_harness_enabled")]
   app_harness_enabled: bool,
+  /// `"fast"` | `"thinking"` — provider-native reasoning depth for this chat.
+  #[serde(default = "default_reasoning_mode")]
+  reasoning_mode: String,
   #[serde(default)]
   pinned: bool,
   #[serde(default)]
@@ -107,6 +114,8 @@ pub struct ChatThreadDto {
   pub agent_mode: String,
   #[serde(default = "default_app_harness_enabled")]
   pub app_harness_enabled: bool,
+  #[serde(default = "default_reasoning_mode")]
+  pub reasoning_mode: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -133,6 +142,8 @@ pub struct ConversationSaveInput {
   pub agent_mode: String,
   #[serde(default = "default_app_harness_enabled")]
   pub app_harness_enabled: bool,
+  #[serde(default = "default_reasoning_mode")]
+  pub reasoning_mode: String,
   #[serde(default)]
   pub pinned: bool,
   #[serde(default)]
@@ -421,6 +432,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
     context_files: f.context_files,
     agent_mode: f.agent_mode,
     app_harness_enabled: f.app_harness_enabled,
+    reasoning_mode: f.reasoning_mode,
   }
 }
 
@@ -506,6 +518,7 @@ pub fn conversation_create(
     context_files: vec![],
     agent_mode: default_agent_mode(),
     app_harness_enabled: false,
+    reasoning_mode: default_reasoning_mode(),
     pinned: false,
     unread: false,
   };
@@ -599,6 +612,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
     context_files: input.context_files.clone(),
     agent_mode: input.agent_mode.clone(),
     app_harness_enabled: input.app_harness_enabled,
+    reasoning_mode: input.reasoning_mode.clone(),
     pinned: input.pinned,
     unread: input.unread,
   };

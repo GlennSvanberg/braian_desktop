@@ -10,7 +10,7 @@ import {
   mockConversationSetTitle,
   mockConversationSetUnread,
 } from '@/lib/mock-workspace-data'
-import type { ChatThreadState } from '@/lib/chat-sessions/types'
+import type { ChatThreadState, ReasoningMode } from '@/lib/chat-sessions/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import { isTauri } from '@/lib/tauri-env'
 
@@ -231,6 +231,7 @@ export type ConversationSavePayload = {
   contextFiles: ContextFileEntryDto[]
   agentMode: AgentMode
   appHarnessEnabled: boolean
+  reasoningMode: ReasoningMode
   pinned: boolean
   unread: boolean
 }
@@ -256,6 +257,7 @@ type ConversationOpenInvoke = {
     contextFiles?: ContextFileEntryDto[]
     agentMode?: string
     appHarnessEnabled?: boolean
+    reasoningMode?: string
   }
 }
 
@@ -265,6 +267,10 @@ function normalizeAgentMode(raw: string | undefined): AgentMode {
 
 function normalizeAppHarnessEnabled(raw: boolean | undefined): boolean {
   return raw === true
+}
+
+function normalizeReasoningMode(raw: string | undefined): ReasoningMode {
+  return raw === 'thinking' ? 'thinking' : 'fast'
 }
 
 function mapInvokeThreadToState(
@@ -295,6 +301,7 @@ function mapInvokeThreadToState(
     contextFiles: thread.contextFiles ?? [],
     agentMode: normalizeAgentMode(thread.agentMode),
     appHarnessEnabled: normalizeAppHarnessEnabled(thread.appHarnessEnabled),
+    reasoningMode: normalizeReasoningMode(thread.reasoningMode),
     lastModelRequestSnapshot: null,
   }
 }
@@ -344,6 +351,7 @@ export async function conversationOpen(
         contextFiles: [],
         agentMode: 'document',
         appHarnessEnabled: false,
+        reasoningMode: 'fast',
         lastModelRequestSnapshot: null,
       }
       return { conversation, thread }
@@ -358,6 +366,7 @@ export async function conversationOpen(
       contextFiles: [],
       agentMode: 'document',
       appHarnessEnabled: false,
+      reasoningMode: 'fast',
       lastModelRequestSnapshot: null,
     }
     return { conversation, thread }
@@ -416,6 +425,7 @@ export function buildConversationSavePayload(
     })),
     agentMode: thread.agentMode ?? 'document',
     appHarnessEnabled: thread.appHarnessEnabled ?? false,
+    reasoningMode: thread.reasoningMode === 'thinking' ? 'thinking' : 'fast',
   }
 }
 

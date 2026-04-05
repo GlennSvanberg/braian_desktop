@@ -1,11 +1,22 @@
 import type { SerializableModelRequestSnapshot } from '@/lib/ai/chat-turn-args'
-import type { DocumentCanvasSelectionContext } from '@/lib/ai/types'
+import type {
+  DocumentCanvasSelectionContext,
+  ReasoningMode,
+} from '@/lib/ai/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { AgentMode } from '@/lib/workspace-api'
 
 export type ChatRole = 'user' | 'assistant'
 
+export type { ReasoningMode } from '@/lib/ai/types'
+
 export type AssistantTextPart = { type: 'text'; text: string }
+
+export type AssistantThinkingPart = {
+  type: 'thinking'
+  text: string
+  status: 'streaming' | 'done'
+}
 
 export type AssistantToolPart = {
   type: 'tool'
@@ -16,7 +27,10 @@ export type AssistantToolPart = {
   result?: string
 }
 
-export type AssistantPart = AssistantTextPart | AssistantToolPart
+export type AssistantPart =
+  | AssistantTextPart
+  | AssistantThinkingPart
+  | AssistantToolPart
 
 export type UserChatMessage = {
   id: string
@@ -65,6 +79,8 @@ export type ChatThreadState = {
   agentMode: AgentMode
   /** When true, inject workspace dashboard builder instructions and tools for this chat. */
   appHarnessEnabled: boolean
+  /** Persisted: minimize vs enable provider-native chain-of-thought. */
+  reasoningMode: ReasoningMode
   /** Payload assembled for the most recently started model turn (debug / context manager). */
   lastModelRequestSnapshot: SerializableModelRequestSnapshot | null
 }
@@ -79,5 +95,6 @@ export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   contextFiles: [],
   agentMode: 'document',
   appHarnessEnabled: false,
+  reasoningMode: 'fast',
   lastModelRequestSnapshot: null,
 }

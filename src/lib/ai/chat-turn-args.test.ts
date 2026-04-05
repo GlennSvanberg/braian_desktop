@@ -68,6 +68,8 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'open_document_canvas'),
     ).toBe(false)
+    expect(r.reasoningMode).toBe('fast')
+    expect(r.modelOptions).toBeUndefined()
   })
 
   it('includes canvas tools when conversationId is set', async () => {
@@ -248,6 +250,31 @@ describe('buildTanStackChatTurnArgs', () => {
     const routingIdx = r.systemSections.findIndex((s) => s.id === 'routing-doc')
     const userIdx = r.systemSections.findIndex((s) => s.id === 'user-context')
     expect(routingIdx).toBeLessThan(userIdx)
+  })
+
+  it('OpenAI gpt-5 maps reasoningMode to modelOptions', async () => {
+    vi.mocked(aiSettingsGet).mockResolvedValue({
+      ...validSettings,
+      modelId: 'gpt-5.4',
+    })
+    const fast = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: { workspaceId: 'ws', conversationId: 'c1', agentMode: 'document' },
+      priorMessages: [],
+      skipSettingsValidation: true,
+      reasoningMode: 'fast',
+    })
+    expect(fast.reasoningMode).toBe('fast')
+    expect(fast.modelOptions).toEqual({ reasoning: { effort: 'none' } })
+
+    const think = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: { workspaceId: 'ws', conversationId: 'c1', agentMode: 'document' },
+      priorMessages: [],
+      skipSettingsValidation: true,
+      reasoningMode: 'thinking',
+    })
+    expect(think.modelOptions).toEqual({ reasoning: { effort: 'medium' } })
   })
 
   it('profile turnKind uses coach prompt and only update_user_profile', async () => {

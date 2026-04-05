@@ -17,6 +17,7 @@ import { ChatWorkspaceFileReference } from '@/components/app/chat-workspace-file
 import type {
   AssistantChatMessage,
   AssistantPart,
+  AssistantThinkingPart,
   AssistantToolPart,
 } from '@/lib/chat-sessions/types'
 import {
@@ -211,6 +212,71 @@ const toolCallPreVariants = {
   result: 'border-accent-500/25 bg-bg-2/90 text-text-2 ring-1 ring-inset ring-border/40',
 } as const
 
+function ThinkingPartCard({ part }: { part: AssistantThinkingPart }) {
+  const streaming = part.status === 'streaming'
+  const [expanded, setExpanded] = useState(streaming)
+
+  useEffect(() => {
+    if (streaming) setExpanded(true)
+  }, [streaming])
+
+  const hasBody = part.text.trim().length > 0
+
+  return (
+    <div
+      className={cn(
+        'border-border/80 bg-muted/15 rounded-lg border',
+        'text-text-3 px-2.5 py-2 text-xs leading-relaxed',
+      )}
+    >
+      <button
+        type="button"
+        className={cn(
+          'group flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left',
+          'text-text-2 font-medium tracking-tight',
+          'hover:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
+        )}
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            'text-text-3 size-3.5 shrink-0 transition-transform',
+            expanded && 'rotate-180',
+          )}
+        />
+        <span className="min-w-0 truncate">Thinking</span>
+        <span
+          className={cn(
+            'ml-auto shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold',
+            streaming
+              ? 'bg-warning/15 text-warning'
+              : 'bg-muted/40 text-text-3',
+          )}
+        >
+          {streaming ? '…' : 'Done'}
+        </span>
+      </button>
+      {expanded && hasBody ? (
+        <pre
+          className={cn(
+            toolCallPreBase,
+            'border-border/50 bg-background/80 text-text-2 mt-2 max-h-64 overflow-auto',
+          )}
+        >
+          {part.text}
+        </pre>
+      ) : null}
+      {expanded && !hasBody && streaming ? (
+        <p className="text-text-3 mt-2 text-[11px] italic">
+          Working through the problem…
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function ToolCallSectionLabel({ children }: { children: string }) {
   return (
     <p className="text-text-3 mb-1 text-[10px] font-semibold tracking-wide uppercase">
@@ -395,6 +461,9 @@ export function ChatAssistantMessageBody({
       {parts.map((part, i) => {
         if (part.type === 'tool') {
           return <ToolCallCard key={part.toolCallId} part={part} />
+        }
+        if (part.type === 'thinking') {
+          return <ThinkingPartCard key={`thinking-${i}`} part={part} />
         }
         const debounce = streaming && i === lastTextIdx
         return (

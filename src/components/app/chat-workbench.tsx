@@ -178,6 +178,7 @@ export function ChatWorkbench({
     stopChatGeneration,
     setChatAgentMode,
     setChatAppHarnessEnabled,
+    setChatReasoningMode,
     addContextFileEntry,
     removeContextFileEntry,
   } = useChatThreadActions()
@@ -294,6 +295,7 @@ export function ChatWorkbench({
     contextFiles,
     agentMode,
     appHarnessEnabled,
+    reasoningMode,
   } = thread
 
   const showArtifactPanel = artifactOpen && !isProfileSession
@@ -793,6 +795,42 @@ export function ChatWorkbench({
     [sessionKey, setChatAgentMode, setChatAppHarnessEnabled],
   )
 
+  const reasoningModeGroup = (
+    <div
+      className="border-border bg-muted/25 flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border"
+      role="group"
+      aria-label="Reasoning depth"
+    >
+      {(
+        [
+          { id: 'fast' as const, label: 'Fast' },
+          { id: 'thinking' as const, label: 'Thinking' },
+        ] as const
+      ).map((seg, i) => (
+        <button
+          key={seg.id}
+          type="button"
+          className={cn(
+            'text-text-2 hover:bg-muted/70 focus-visible:ring-ring px-2.5 text-xs font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none',
+            i > 0 && 'border-border border-l',
+            reasoningMode === seg.id
+              ? 'bg-primary text-primary-foreground hover:bg-primary'
+              : 'bg-transparent',
+          )}
+          aria-pressed={reasoningMode === seg.id}
+          title={
+            seg.id === 'fast'
+              ? 'Lower latency; minimal or no visible chain-of-thought (provider-dependent)'
+              : 'More reasoning time; may show thinking when the model supports it'
+          }
+          onClick={() => setChatReasoningMode(sessionKey, seg.id)}
+        >
+          {seg.label}
+        </button>
+      ))}
+    </div>
+  )
+
   const agentModeGroup = (
     <div
       className="border-border bg-muted/25 flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border"
@@ -1229,7 +1267,11 @@ export function ChatWorkbench({
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
             <div className="text-text-3 flex min-w-0 flex-wrap items-center gap-2 px-1.5 text-xs leading-relaxed">
-              <p>Enter to send · Shift+Enter for newline</p>
+              <p className="shrink-0">Enter to send · Shift+Enter for newline</p>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-text-3 hidden sm:inline">Reasoning</span>
+                {reasoningModeGroup}
+              </div>
               {isTauriRuntime &&
               activeWorkspace?.rootPath &&
               !isDetachedSession &&

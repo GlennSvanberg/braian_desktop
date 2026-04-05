@@ -108,6 +108,9 @@ export async function* iterateTanStackFromArgs(
     tools: tools.length > 0 ? tools : undefined,
     agentLoopStrategy:
       agentLoopCap != null ? maxIterations(agentLoopCap) : undefined,
+    ...(args.modelOptions != null
+      ? { modelOptions: args.modelOptions as never }
+      : {}),
   })
 
   try {
@@ -158,6 +161,22 @@ export async function* iterateTanStackFromArgs(
             ...(resultStr !== undefined ? { result: resultStr } : {}),
           }
         }
+      } else if (chunk.type === 'STEP_STARTED') {
+        const stepId =
+          typeof chunk.stepId === 'string' && chunk.stepId
+            ? chunk.stepId
+            : 'thinking'
+        yield { type: 'thinking-start', stepId }
+      } else if (chunk.type === 'STEP_FINISHED') {
+        const stepId =
+          typeof chunk.stepId === 'string' && chunk.stepId
+            ? chunk.stepId
+            : 'thinking'
+        const delta = typeof chunk.delta === 'string' ? chunk.delta : ''
+        if (delta) {
+          yield { type: 'thinking-delta', stepId, text: delta }
+        }
+        yield { type: 'thinking-end', stepId }
       } else if (chunk.type === 'RUN_ERROR') {
         const msg = chunk.error?.message ?? 'The model returned an error.'
         throw new Error(msg)

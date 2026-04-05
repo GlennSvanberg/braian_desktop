@@ -36,7 +36,9 @@ import { buildSkillTools } from './skill-tools'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import { buildUserProfileTools } from './user-profile-tools'
-import type { ChatTurnContext, PriorChatMessage } from './types'
+import { buildReasoningModelOptions } from './reasoning-model-options'
+import type { ChatTurnContext, PriorChatMessage, ReasoningMode } from './types'
+import type { ReasoningModelOptions } from './reasoning-model-options'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
 
@@ -81,6 +83,7 @@ export type SerializableModelRequestSnapshot = {
   userText: string
   provider: string
   modelId: string
+  reasoningMode: ReasoningMode
   mockAi: boolean
   isCodeMode: boolean
   settingsWarnings: string[]
@@ -318,6 +321,8 @@ export type BuildTanStackChatTurnArgsOptions = {
    * TanStack streaming still validates separately before calling the API.
    */
   skipSettingsValidation?: boolean
+  /** Defaults to `fast` when omitted (CLI / tests). */
+  reasoningMode?: ReasoningMode
 }
 
 export type BuildTanStackChatTurnArgsResult = {
@@ -336,6 +341,9 @@ export type BuildTanStackChatTurnArgsResult = {
   conversationId: string | undefined
   maxIterations: number | null
   settingsWarnings: string[]
+  reasoningMode: ReasoningMode
+  /** Passed to TanStack `chat({ modelOptions })` when defined. */
+  modelOptions?: ReasoningModelOptions
 }
 
 /** Builds the same logical payload passed to TanStack `chat()` for a turn. */
@@ -363,6 +371,12 @@ export async function buildTanStackChatTurnArgs(
 
   const mockAi = isMockAiMode()
   const ctx = options.context
+  const reasoningMode = options.reasoningMode ?? 'fast'
+  const modelOptions = buildReasoningModelOptions(
+    settings.provider as AiProviderId,
+    settings.modelId,
+    reasoningMode,
+  )
 
   const history: ModelMessage[] = (options.priorMessages ?? []).map((m) => ({
     role: m.role,
@@ -402,6 +416,8 @@ export async function buildTanStackChatTurnArgs(
       conversationId: undefined,
       maxIterations: tools.length > 0 ? 16 : null,
       settingsWarnings,
+      reasoningMode,
+      ...(modelOptions ? { modelOptions } : {}),
     }
   }
 
@@ -586,6 +602,8 @@ export async function buildTanStackChatTurnArgs(
       ctx?.conversationId != null ? ctx.conversationId : undefined,
     maxIterations,
     settingsWarnings,
+    reasoningMode,
+    ...(modelOptions ? { modelOptions } : {}),
   }
 }
 
@@ -610,6 +628,7 @@ export function tanStackTurnArgsToSnapshot(
     userText,
     provider: args.provider,
     modelId: args.modelId,
+    reasoningMode: args.reasoningMode,
     mockAi: args.mockAi,
     isCodeMode: args.isCodeMode,
     settingsWarnings: [...args.settingsWarnings],

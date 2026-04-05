@@ -1,6 +1,9 @@
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { AgentMode } from '@/lib/workspace-api'
 
+/** Per-conversation: minimize vs enable provider chain-of-thought. */
+export type ReasoningMode = 'fast' | 'thinking'
+
 /** User-selected span for a canvas-scoped request (inline mini-prompt). */
 export type DocumentCanvasSelectionContext = {
   /** Markdown excerpt from the selection (from the editor). */
@@ -82,6 +85,9 @@ export type ChatStreamChunk =
       input?: unknown
       result?: string
     }
+  | { type: 'thinking-start'; stepId: string }
+  | { type: 'thinking-delta'; stepId: string; text: string }
+  | { type: 'thinking-end'; stepId: string }
   | { type: 'done' }
 
 export type ChatStreamProvider = (

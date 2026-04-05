@@ -334,6 +334,7 @@ export function ChatContextManagerDialog({
           },
           priorMessages,
           skipSettingsValidation: true,
+          reasoningMode: thread.reasoningMode === 'thinking' ? 'thinking' : 'fast',
         })
 
         if (!cancelled) {
@@ -361,6 +362,7 @@ export function ChatContextManagerDialog({
     thread.draft,
     thread.agentMode,
     thread.appHarnessEnabled,
+    thread.reasoningMode,
     thread.artifactPayload,
     thread.contextFiles,
     thread.generating,

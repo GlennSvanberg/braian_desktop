@@ -246,6 +246,7 @@ export function MarkdownDocumentCanvas({
   const plugins = useMemo(
     () => [
       toolbarPlugin({
+        toolbarPosition: 'bottom',
         toolbarContents: () => (
           <ConditionalContents
             options={[
@@ -366,7 +367,7 @@ export function MarkdownDocumentCanvas({
     <ScrollArea className={cn('min-h-0 flex-1', className)}>
       <div
         className={cn(
-          'markdown-document-canvas text-text-2 h-full w-full px-2 py-3 md:px-4 md:py-4',
+          'markdown-document-canvas text-text-2 flex flex-col min-h-full w-full',
           isDark ? 'dark-theme' : 'light-theme',
         )}
       >
@@ -382,8 +383,8 @@ export function MarkdownDocumentCanvas({
             onChange={handleChange}
             readOnly={readOnly}
             placeholder={placeholder}
-            className="!border-0 !bg-transparent h-full"
-            contentEditableClassName="prose-markdown-canvas min-h-full outline-none"
+            className="!border-0 !bg-transparent flex flex-col min-h-full flex-1"
+            contentEditableClassName="prose-markdown-canvas outline-none px-2 py-3 md:px-4 md:py-4 flex-1"
             plugins={plugins}
           />
         )}
