@@ -67,6 +67,7 @@ function documentForConversation(
     kind: 'document',
     title: chatTitle,
     body,
+    canvasRevision: 0,
   }
 }
 

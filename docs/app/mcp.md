@@ -48,7 +48,7 @@ When a server is **on** in Braian (not in `braian.disabledMcpServers`), its MCP 
 - If one server fails listing, other servers still work; you may see a short warning in the turn’s settings warnings.
 - **Remote** servers use the same JSON-RPC POST session as the status check; very custom gateways may need a URL that speaks MCP over HTTP as above.
 
-Workspace file, command, canvas, skills, and dashboard tools stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
+Workspace file, command, document canvas (`apply_document_canvas_patch` / `open_document_canvas`), skills, and dashboard tools stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
 
 ## Security and Git
 

@@ -1338,6 +1338,21 @@ export function ChatWorkbench({
             >
               <ArtifactPanel
                 payload={artifactPayload}
+                documentLiveSessionKey={
+                  isProfileSession || isDetachedSession ? undefined : sessionKey
+                }
+                onCanvasSelectionAsk={
+                  isProfileSession || isDetachedSession
+                    ? undefined
+                    : ({ instruction, selectedMarkdown }) => {
+                        sendChatTurn(sessionKey, instruction, {
+                          canvasSelection: {
+                            selectedMarkdown,
+                            sectionOnly: true,
+                          },
+                        })
+                      }
+                }
                 onDocumentBodyChange={(body) =>
                   patchDocumentArtifactBody(sessionKey, body)
                 }

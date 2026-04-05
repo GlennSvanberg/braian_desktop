@@ -4,11 +4,14 @@ How instructions and tool lists are combined each turn—including **routing**, 
 
 **Workspace MCP connections** (gear icon next to each workspace in the sidebar → **Workspace settings**, file `.braian/mcp.json`) extend the assistant with **MCP tools** when those servers are enabled. See [Connections (MCP)](/docs/mcp).
 
-## Document canvas (`open_document_canvas`)
+## Document canvas (`apply_document_canvas_patch`, `open_document_canvas`)
 
-When your chat is **saved**, the assistant can write the **document canvas** (side panel markdown) to disk and refresh the UI. It should send the **full** document content each time, merging your latest edits with what you asked for.
+When your chat is **saved**, the assistant can update the **document canvas** (side panel markdown) on disk and refresh the UI.
 
-Use the canvas for readable drafts and reports. **Binary files** (for example `.xlsx`) belong on disk via scripts, not inside the canvas.
+- **`apply_document_canvas_patch`** (preferred): ordered **`find` / `replace`** steps against the latest canvas text, with a **`baseRevision`** that must match the snapshot (optimistic locking). Use for typical edits.
+- **`open_document_canvas`**: replace the **entire** markdown at once — for full rewrites or new documents when patches would be unwieldy.
+
+The app sends a **document canvas snapshot** each turn (including **revision** and any **selection** from the inline canvas prompt). **Binary files** (for example `.xlsx`) belong on disk via scripts, not inside the canvas.
 
 ## Workspace file and command tools
 

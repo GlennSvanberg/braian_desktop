@@ -94,11 +94,11 @@ The file is validated against a small schema in the CLI. Typical fields (see [`C
 | Field | Type | Notes |
 |-------|------|--------|
 | `workspaceId` | string | Required. Use `__braian_detached__` for “no workspace folder” behavior; real ids for workspace-scoped prompts |
-| `conversationId` | string \| null | `null` = unsaved chat → **no** `open_document_canvas` tool |
+| `conversationId` | string \| null | `null` = unsaved chat → **no** document canvas tools |
 | `agentMode` | `"document"` \| `"code"` | Document = triage + lazy code tools; code = eager workspace tools |
 | `turnKind` | `"profile"` | Optional; profile coach turn (sidebar → You) |
 | `appHarnessEnabled` | boolean | Optional; dashboard / app-builder tooling |
-| `documentCanvasSnapshot` | `{ body, title? }` \| null | Optional |
+| `documentCanvasSnapshot` | `{ body, title?, revision?, selection? }` \| null | Optional; `revision` defaults to `0` in CLI if omitted |
 | `contextFiles` | array | Optional; `{ relativePath, text, displayName?, fileTruncated? }` — same idea as file attachments in the UI |
 
 If `--context` is omitted, the CLI uses a **detached** workspace, `conversationId: null`, `agentMode: document`.

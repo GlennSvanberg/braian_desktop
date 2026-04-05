@@ -20,6 +20,11 @@ export type DocumentArtifactPayload = {
   title?: string
   /** GitHub-flavored markdown */
   body: string
+  /**
+   * Monotonic optimistic-revision for canvas edits (user + AI).
+   * Omitted in older saves — treat as 0.
+   */
+  canvasRevision?: number
 }
 
 export type TabularArtifactPayload = {

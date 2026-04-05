@@ -19,6 +19,7 @@ vi.mock('@/lib/ai/mcp-tools', () => ({
 
 import {
   buildTanStackChatTurnArgs,
+  documentCanvasSnapshotPrompt,
   PROFILE_COACH_SYSTEM,
 } from '@/lib/ai/chat-turn-args'
 import { MEMORY_RELATIVE_PATH } from '@/lib/memory/constants'
@@ -69,7 +70,7 @@ describe('buildTanStackChatTurnArgs', () => {
     ).toBe(false)
   })
 
-  it('includes canvas tool when conversationId is set', async () => {
+  it('includes canvas tools when conversationId is set', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -81,8 +82,33 @@ describe('buildTanStackChatTurnArgs', () => {
       skipSettingsValidation: true,
     })
     expect(
+      r.toolsDisplay.some((t) => t.name === 'apply_document_canvas_patch'),
+    ).toBe(true)
+    expect(
       r.toolsDisplay.some((t) => t.name === 'open_document_canvas'),
     ).toBe(true)
+  })
+
+  it('documentCanvasSnapshotPrompt includes revision and patch guidance', () => {
+    const text = documentCanvasSnapshotPrompt({
+      body: '# Hello',
+      revision: 3,
+    })
+    expect(text).toContain('Canvas revision: **3**')
+    expect(text).toContain('apply_document_canvas_patch')
+  })
+
+  it('documentCanvasSnapshotPrompt includes selection when provided', () => {
+    const text = documentCanvasSnapshotPrompt({
+      body: '# Doc',
+      revision: 0,
+      selection: {
+        selectedMarkdown: 'snippet',
+        sectionOnly: true,
+      },
+    })
+    expect(text).toContain('Canvas selection')
+    expect(text).toContain('snippet')
   })
 
   it('document mode uses lazy coding tools and switch_to_code_agent', async () => {

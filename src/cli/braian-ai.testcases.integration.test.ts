@@ -64,7 +64,7 @@ function toolNames(snap: DumpSnapshot): string[] {
 
 describe('testcases.md (CLI: braian-ai dump-request)', () => {
   it(
-    '§3 Unsaved chat — no open_document_canvas; routing tells model to explain save requirement',
+    '§3 Unsaved chat — no canvas tools; routing tells model to explain save requirement',
     { timeout: 60_000 },
     () => {
       const snap = runDumpRequest('Put this spec in the workspace document.', {
@@ -73,13 +73,14 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
         agentMode: 'document',
       })
       expect(toolNames(snap)).not.toContain('open_document_canvas')
+      expect(toolNames(snap)).not.toContain('apply_document_canvas_patch')
       const routing = snap.systemSections.find((s) => s.id === 'routing-doc')
       expect(routing?.text).toMatch(/Unsaved chat/)
     },
   )
 
   it(
-    '§2 Saved chat — open_document_canvas is registered for a persisted conversation',
+    '§2 Saved chat — canvas patch + full canvas tools registered for a persisted conversation',
     { timeout: 60_000 },
     () => {
       const snap = runDumpRequest('Write a one-page project brief for the app.', {
@@ -87,6 +88,7 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
         conversationId: 'persisted-conversation-id',
         agentMode: 'document',
       })
+      expect(toolNames(snap)).toContain('apply_document_canvas_patch')
       expect(toolNames(snap)).toContain('open_document_canvas')
     },
   )

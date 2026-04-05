@@ -7,7 +7,11 @@ import {
 } from '@/lib/ai/chat-turn-args'
 import { discoveryResultIncludesCodeTools } from '@/lib/ai/coding-tools'
 import { discoveryResultIncludesDashboardTools } from '@/lib/ai/dashboard-tools'
-import type { ChatStreamChunk } from '@/lib/ai/types'
+import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
+import type {
+  ChatStreamChunk,
+  DocumentCanvasSelectionContext,
+} from '@/lib/ai/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
@@ -29,6 +33,7 @@ import {
   type ChatMessage,
   type ChatThreadState,
   type ContextFileEntry,
+  type PendingUserTurn,
 } from './types'
 
 const PROFILE_THREAD_LS_KEY = 'braian.io.userProfileChatThread.v1'
@@ -194,6 +199,12 @@ function patchThread(
 
 const abortBySession = new Map<string, AbortController>()
 
+/** Selection context for the next user turn (inline canvas prompt). Cleared when a turn starts. */
+const pendingDocumentCanvasSelectionBySession = new Map<
+  string,
+  DocumentCanvasSelectionContext
+>()
+
 function appendAssistantTextDelta(
   parts: AssistantPart[] | undefined,
   delta: string,
@@ -309,6 +320,20 @@ export function getThreadIfLoaded(sessionKey: string): ChatThreadState | null {
   return threads[sessionKey] ?? null
 }
 
+function normalizePendingUserMessages(raw: PendingUserTurn[] | undefined) {
+  if (!raw?.length) return []
+  return raw.map((item) =>
+    typeof (item as unknown) === 'string'
+      ? { content: item as unknown as string }
+      : {
+          content: item.content,
+          ...(item.canvasSelection
+            ? { canvasSelection: item.canvasSelection }
+            : {}),
+        },
+  )
+}
+
 /** Replace the entire thread for a session (e.g. hydrate from disk). */
 export function replaceThread(sessionKey: string, state: ChatThreadState) {
   threads = {
@@ -316,7 +341,7 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
     [sessionKey]: {
       ...state,
       generating: false,
-      pendingUserMessages: state.pendingUserMessages ?? [],
+      pendingUserMessages: normalizePendingUserMessages(state.pendingUserMessages),
       contextFiles: state.contextFiles ?? [],
       agentMode: state.agentMode ?? 'document',
       appHarnessEnabled: state.appHarnessEnabled ?? false,
@@ -343,7 +368,15 @@ export function patchDocumentArtifactBody(sessionKey: string, body: string) {
     const p = prev.artifactPayload
     if (!p || p.kind !== 'document') return prev
     if (p.body === body) return prev
-    return { ...prev, artifactPayload: { ...p, body } }
+    const prevRev = p.canvasRevision ?? 0
+    return {
+      ...prev,
+      artifactPayload: {
+        ...p,
+        body,
+        canvasRevision: prevRev + 1,
+      },
+    }
   })
 }
 
@@ -464,15 +497,23 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const agentMode = threadNow.agentMode ?? 'document'
       const appHarnessEnabled = threadNow.appHarnessEnabled ?? false
       const ap = threadNow.artifactPayload
+      const live = getDocumentCanvasLivePayload(sessionKey)
+      const pendingSelection =
+        pendingDocumentCanvasSelectionBySession.get(sessionKey) ?? undefined
+      if (pendingSelection) {
+        pendingDocumentCanvasSelectionBySession.delete(sessionKey)
+      }
       const documentCanvasSnapshot =
         isUserProfileSessionId(workspaceId)
           ? null
           : ap?.kind === 'document'
             ? {
-                body: ap.body,
+                body: live?.body ?? ap.body,
                 ...(ap.title !== undefined && ap.title !== ''
                   ? { title: ap.title }
                   : {}),
+                revision: ap.canvasRevision ?? 0,
+                ...(pendingSelection ? { selection: pendingSelection } : {}),
               }
             : null
 
@@ -575,11 +616,21 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
             })),
           }))
         } else if (chunk.type === 'artifact') {
-          patchThread(sessionKey, (p) => ({
-            ...p,
-            artifactOpen: true,
-            artifactPayload: chunk.payload,
-          }))
+          patchThread(sessionKey, (p) => {
+            let payload = chunk.payload
+            if (payload.kind === 'document' && payload.canvasRevision == null) {
+              const prevRev =
+                p.artifactPayload?.kind === 'document'
+                  ? (p.artifactPayload.canvasRevision ?? 0)
+                  : 0
+              payload = { ...payload, canvasRevision: prevRev + 1 }
+            }
+            return {
+              ...p,
+              artifactOpen: true,
+              artifactPayload: payload,
+            }
+          })
         } else if (chunk.type === 'tool-start') {
           patchThread(sessionKey, (p) => ({
             ...p,
@@ -718,7 +769,13 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           ...p,
           pendingUserMessages: rest,
         }))
-        queueMicrotask(() => startChatTurnInternal(sessionKey, next))
+        if (next.canvasSelection) {
+          pendingDocumentCanvasSelectionBySession.set(
+            sessionKey,
+            next.canvasSelection,
+          )
+        }
+        queueMicrotask(() => startChatTurnInternal(sessionKey, next.content))
       } else {
         if (
           streamCompletedOk &&
@@ -736,7 +793,15 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
   })()
 }
 
-export function sendChatTurn(sessionKey: string, text: string) {
+export type SendChatTurnOptions = {
+  canvasSelection?: DocumentCanvasSelectionContext
+}
+
+export function sendChatTurn(
+  sessionKey: string,
+  text: string,
+  options?: SendChatTurnOptions,
+) {
   const trimmed = text.trim()
   if (!trimmed) return
 
@@ -744,10 +809,25 @@ export function sendChatTurn(sessionKey: string, text: string) {
   if (prev.generating) {
     patchThread(sessionKey, (p) => ({
       ...p,
-      pendingUserMessages: [...p.pendingUserMessages, trimmed],
+      pendingUserMessages: [
+        ...p.pendingUserMessages,
+        {
+          content: trimmed,
+          ...(options?.canvasSelection
+            ? { canvasSelection: options.canvasSelection }
+            : {}),
+        },
+      ],
       draft: '',
     }))
     return
+  }
+
+  if (options?.canvasSelection) {
+    pendingDocumentCanvasSelectionBySession.set(
+      sessionKey,
+      options.canvasSelection,
+    )
   }
 
   patchThread(sessionKey, (p) => (p.draft === '' ? p : { ...p, draft: '' }))
@@ -802,9 +882,12 @@ export function removeContextFileEntry(
 }
 
 export function useChatThreadActions() {
-  const send = useCallback((sessionKey: string, text: string) => {
-    sendChatTurn(sessionKey, text)
-  }, [])
+  const send = useCallback(
+    (sessionKey: string, text: string, options?: SendChatTurnOptions) => {
+      sendChatTurn(sessionKey, text, options)
+    },
+    [],
+  )
   const setDraft = useCallback((sessionKey: string, draft: string) => {
     setChatDraft(sessionKey, draft)
   }, [])

@@ -1,10 +1,22 @@
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { AgentMode } from '@/lib/workspace-api'
 
+/** User-selected span for a canvas-scoped request (inline mini-prompt). */
+export type DocumentCanvasSelectionContext = {
+  /** Markdown excerpt from the selection (from the editor). */
+  selectedMarkdown: string
+  /** When true, prefer patch tools that only touch this region. */
+  sectionOnly?: boolean
+}
+
 /** In-memory document canvas at send time (includes edits not yet flushed to disk). */
 export type DocumentCanvasSnapshot = {
   body: string
   title?: string
+  /** Matches `DocumentArtifactPayload.canvasRevision` for optimistic patch locking. */
+  revision: number
+  /** Selection from inline canvas prompt, if any. */
+  selection?: DocumentCanvasSelectionContext
 }
 
 /** Resolved UTF-8 text for one workspace file passed to the model this turn. */

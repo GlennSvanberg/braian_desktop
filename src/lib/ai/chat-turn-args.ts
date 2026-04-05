@@ -126,6 +126,7 @@ function logChatPerf(stage: string, startAt: number) {
 }
 
 const TOOL_SOURCE_BY_NAME: Record<string, string> = {
+  apply_document_canvas_patch: 'src/lib/ai/canvas-tools.ts',
   open_document_canvas: 'src/lib/ai/canvas-tools.ts',
   read_workspace_file: 'src/lib/ai/coding-tools.ts',
   write_workspace_file: 'src/lib/ai/coding-tools.ts',
@@ -208,6 +209,9 @@ export function contextFilesSystemPrompt(
   return lines.join('\n')
 }
 
+/** Soft cap for snapshot size in the system prompt (full body may be larger on disk). */
+export const DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS = 200_000
+
 export function documentCanvasSnapshotPrompt(
   snapshot: NonNullable<ChatTurnContext['documentCanvasSnapshot']>,
 ): string {
@@ -215,9 +219,42 @@ export function documentCanvasSnapshotPrompt(
     snapshot.title != null && snapshot.title !== ''
       ? `Canvas title: ${snapshot.title}\n\n`
       : ''
+  const revisionNote = `Canvas revision: **${snapshot.revision}** — pass this exact integer as \`baseRevision\` to **apply_document_canvas_patch**.\n\n`
+
+  const patchRules = [
+    '**Editing rules:** Prefer **apply_document_canvas_patch** with one or more \`{ find, replace }\` steps (ordered). Each \`find\` must be an exact substring of the current canvas. Prefer a patch over **open_document_canvas** unless the user asked for a full rewrite or restructuring.',
+    'If a **canvas selection** section appears below, the user focused that excerpt — limit edits to that region when possible (still use exact \`find\` strings from the snapshot).',
+    '',
+  ].join('\n')
+
+  let body = snapshot.body
+  let truncNote = ''
+  if (body.length > DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS) {
+    const fullLen = body.length
+    body = body.slice(0, DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS)
+    truncNote = `\n[Note: canvas text truncated here for context (${DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS.toLocaleString()} of ${fullLen.toLocaleString()} characters). Edits outside the visible prefix may still exist on disk — use unique snippets or ask the user to scroll if a find fails.]\n`
+  }
+
+  const selectionNote =
+    snapshot.selection?.selectedMarkdown &&
+    snapshot.selection.selectedMarkdown.trim() !== ''
+      ? [
+          '### Canvas selection (user-focused excerpt)',
+          snapshot.selection.sectionOnly
+            ? 'The user invoked this turn from a **selection in the canvas**. Prefer **apply_document_canvas_patch** with `find`/`replace` that only affect this region; do not rewrite unrelated sections.'
+            : 'The user included this excerpt for context.',
+          '',
+          '```markdown',
+          snapshot.selection.selectedMarkdown,
+          '```',
+          '',
+        ].join('\n')
+      : ''
+
   return (
-    `${titleNote}Document canvas snapshot (latest markdown from the workspace panel as of this user message — your open_document_canvas output must be this entire text plus your edits, preserving the user's work):\n\n` +
-    snapshot.body
+    `${titleNote}${revisionNote}${patchRules}Document canvas snapshot (latest markdown from the editor — includes changes not yet saved to the conversation file):\n${truncNote}\n` +
+    body
+    + (selectionNote ? `\n\n${selectionNote}` : '')
   )
 }
 

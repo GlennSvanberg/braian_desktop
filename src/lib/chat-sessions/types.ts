@@ -1,4 +1,5 @@
 import type { SerializableModelRequestSnapshot } from '@/lib/ai/chat-turn-args'
+import type { DocumentCanvasSelectionContext } from '@/lib/ai/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { AgentMode } from '@/lib/workspace-api'
 
@@ -34,6 +35,12 @@ export type AssistantChatMessage = {
 
 export type ChatMessage = UserChatMessage | AssistantChatMessage
 
+/** Queued composer send while an assistant turn is in flight. */
+export type PendingUserTurn = {
+  content: string
+  canvasSelection?: DocumentCanvasSelectionContext
+}
+
 export type ArtifactPayload = WorkspaceArtifactPayload
 
 /** Workspace-relative path and optional label for chat / model context. */
@@ -50,8 +57,8 @@ export type ChatThreadState = {
   draft: string
   /** Assistant turn in progress for this thread. */
   generating: boolean
-  /** FIFO user texts to send after the current assistant turn finishes (in-memory only). */
-  pendingUserMessages: string[]
+  /** FIFO user messages to send after the current assistant turn finishes (in-memory only). */
+  pendingUserMessages: PendingUserTurn[]
   /** Files pinned to this conversation for model context (paths relative to workspace root). */
   contextFiles: ContextFileEntry[]
   /** Persisted with the conversation when saved. */

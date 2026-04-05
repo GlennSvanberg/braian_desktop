@@ -24,10 +24,16 @@ function braianArtifactFromCustomValue(
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
   if (v.kind !== 'document' || typeof v.body !== 'string') return null
+  const revRaw = v.canvasRevision
+  const canvasRevision =
+    typeof revRaw === 'number' && Number.isFinite(revRaw)
+      ? Math.trunc(revRaw)
+      : undefined
   return {
     kind: 'document',
     body: v.body,
     ...(typeof v.title === 'string' ? { title: v.title } : {}),
+    ...(canvasRevision !== undefined ? { canvasRevision } : {}),
   }
 }
 

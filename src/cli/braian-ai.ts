@@ -36,6 +36,23 @@ const contextFileEntrySchema = z.object({
   fileTruncated: z.boolean().optional(),
 })
 
+const documentCanvasSnapshotSchema = z
+  .object({
+    body: z.string(),
+    title: z.string().optional(),
+    revision: z.number().int().optional(),
+    selection: z
+      .object({
+        selectedMarkdown: z.string(),
+        sectionOnly: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .transform((s) => ({
+    ...s,
+    revision: s.revision ?? 0,
+  }))
+
 const chatTurnContextSchema = z.object({
   workspaceId: z.string(),
   conversationId: z.string().nullable(),
@@ -43,11 +60,7 @@ const chatTurnContextSchema = z.object({
   agentMode: z.enum(['document', 'code']).optional(),
   appHarnessEnabled: z.boolean().optional(),
   documentCanvasSnapshot: z
-    .object({
-      body: z.string(),
-      title: z.string().optional(),
-    })
-    .nullable()
+    .union([documentCanvasSnapshotSchema, z.null()])
     .optional(),
   contextFiles: z.array(contextFileEntrySchema).optional(),
 })

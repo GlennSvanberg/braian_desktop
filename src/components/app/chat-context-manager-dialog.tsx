@@ -20,10 +20,12 @@ import {
   MODEL_CONTEXT_SECTION_ORDER_HELP,
   modelContextSectionGroup,
 } from '@/lib/ai/model-context-section-meta'
+import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
 import {
   isDetachedWorkspaceSessionId,
   isUserProfileSessionId,
 } from '@/lib/chat-sessions/detached'
+import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { chatMessageContentForLlmHistory } from '@/lib/chat-sessions/store'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
@@ -261,15 +263,18 @@ export function ChatContextManagerDialog({
     void (async () => {
       try {
         const ap = thread.artifactPayload
+        const sessionKey = chatSessionKey(workspaceId, conversationId)
+        const live = getDocumentCanvasLivePayload(sessionKey)
         const documentCanvasSnapshot =
           isUserProfileSessionId(workspaceId)
             ? null
             : ap?.kind === 'document'
               ? {
-                  body: ap.body,
+                  body: live?.body ?? ap.body,
                   ...(ap.title !== undefined && ap.title !== ''
                     ? { title: ap.title }
                     : {}),
+                  revision: ap.canvasRevision ?? 0,
                 }
               : null
 

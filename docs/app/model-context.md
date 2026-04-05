@@ -14,7 +14,7 @@ For a normal chat attached to a **workspace folder** (not “new chat” without
 4. **Workspace memory** — Excerpt from **`.braian/MEMORY.md`** when that file exists and is non-empty (subject to size limits). See [Memory](/docs/memory).
 5. **This turn** — Optional blocks appended when relevant:
    - **Attached workspace files** (excerpts from @-attachments),
-   - **Document canvas snapshot** (latest side-panel markdown for this conversation),
+   - **Document canvas snapshot** (latest side-panel markdown + **revision**, optional **selection** excerpt),
    - **Workspace dashboard builder** — When **App** mode is on for that chat, the app injects the full **app-builder** instructions (loaded from **`.braian/skills/app-builder.md`**, with an in-app fallback if the file is missing).
 
 Detached chats (no workspace folder yet) and synthetic sessions skip workspace-only sections (memory, skills on disk, dashboard files) where the app cannot resolve paths.

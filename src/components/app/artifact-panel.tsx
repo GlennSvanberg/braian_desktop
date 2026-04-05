@@ -1,6 +1,9 @@
 import { ImageIcon } from 'lucide-react'
 
-import { MarkdownDocumentCanvas } from '@/components/workspace/markdown-document-canvas'
+import {
+  MarkdownDocumentCanvas,
+  type CanvasSelectionSubmitPayload,
+} from '@/components/workspace/markdown-document-canvas'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { TabularSection } from '@/lib/artifacts/types'
@@ -15,6 +18,9 @@ import { cn } from '@/lib/utils'
 type ArtifactPanelProps = {
   payload: WorkspaceArtifactPayload | null
   onDocumentBodyChange?: (body: string) => void
+  /** Registers fresh markdown for AI context (session key from chat workbench). */
+  documentLiveSessionKey?: string
+  onCanvasSelectionAsk?: (payload: CanvasSelectionSubmitPayload) => void
 }
 
 function formatCell(value: string | number | boolean | null): string {
@@ -168,6 +174,8 @@ function VisualCanvas({
 export function ArtifactPanel({
   payload,
   onDocumentBodyChange,
+  documentLiveSessionKey,
+  onCanvasSelectionAsk,
 }: ArtifactPanelProps) {
   if (!payload) {
     return (
@@ -184,6 +192,8 @@ export function ArtifactPanel({
           <MarkdownDocumentCanvas
             markdown={payload.body}
             onMarkdownChange={onDocumentBodyChange}
+            liveSessionKey={documentLiveSessionKey}
+            onCanvasSelectionAsk={onCanvasSelectionAsk}
           />
         ) : null}
         {isTabularArtifact(payload) ? (

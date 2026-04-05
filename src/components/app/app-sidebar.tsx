@@ -56,11 +56,6 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { listWorkspaceDashboardPageIds } from '@/lib/workspace-dashboard'
 import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
@@ -216,16 +211,7 @@ function ConversationSidebarItem({
             }
           }}
         >
-          {conversation.pinned ? (
-            <span className="size-4 shrink-0" aria-hidden />
-          ) : (
-            <span
-              className="flex size-4 shrink-0 items-center justify-center"
-              aria-hidden
-            >
-              <span className="bg-sidebar-foreground/35 size-1.5 rounded-full" />
-            </span>
-          )}
+          <span className="size-4 shrink-0" aria-hidden />
           <span className="flex min-w-0 min-h-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="min-w-0 flex-1 whitespace-nowrap">
               {conversation.title}
@@ -256,7 +242,7 @@ function ConversationSidebarItem({
           'bg-gradient-to-r from-transparent via-sidebar-accent to-sidebar-accent',
           'transition-opacity duration-150',
           'max-md:opacity-100',
-          'md:opacity-0 md:group-hover/menu-item:opacity-100 md:group-focus-within/menu-item:opacity-100',
+          'md:opacity-0 md:group-hover/menu-item:opacity-100 md:group-has-[[data-slot=sidebar-menu-action]:focus]/menu-item:opacity-100',
         )}
       />
       <SidebarMenuAction
@@ -475,7 +461,7 @@ function WorkspaceConversationGroup({
         </SidebarMenuAction>
 
         <CollapsibleContent asChild>
-          <SidebarMenu className="border-sidebar-border mx-1 ml-2.5 mt-0.5 border-l pl-2">
+          <SidebarMenu className="border-sidebar-border mx-1 ml-1 mt-0.5 border-l pl-1.5">
             {dashboardPageIds.map((pageId) => (
               <SidebarMenuItem key={`page-${pageId}`}>
                 <SidebarMenuButton

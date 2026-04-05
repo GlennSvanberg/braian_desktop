@@ -7,7 +7,7 @@ These cases describe what Braian Desktop’s chat **should** do given the featur
 - Run the **desktop** app (`npm run tauri:dev`). Real provider chat does not work in the browser-only dev server (CORS); mock mode is optional via `localStorage.setItem("braian.mockAi","1")`.
 - **Settings**: provider, model, and API key configured.
 - A **workspace** is open (folder root known to the app).
-- For any expectation that involves the **side panel document canvas** (`open_document_canvas`), the conversation must be **saved** (persisted conversation id). Unsaved chats do not get that tool.
+- For any expectation that involves the **side panel document canvas** (`apply_document_canvas_patch` / `open_document_canvas`), the conversation must be **saved** (persisted conversation id). Unsaved chats do not get those tools.
 
 **UI vocabulary**
 
@@ -61,13 +61,15 @@ These cases describe what Braian Desktop’s chat **should** do given the featur
 
 **Expected behavior**
 
-1. The model uses **`open_document_canvas`** with the **full** markdown document (not a fragment), following the system instructions to **merge** with any **document canvas snapshot** from the user’s manual edits in the panel.
-2. The **workspace panel** shows the rendered markdown; chat contains a **brief** acknowledgment (tool return text already tells the model not to dump the whole doc in chat).
-3. No claim of having run shell commands or written arbitrary binaries unless **`run_workspace_command`** was actually invoked.
+1. The model prefers **`apply_document_canvas_patch`** with exact `find`/`replace` steps and the snapshot **revision** as `baseRevision`. It may use **`open_document_canvas`** only for a **full rewrite**. The **document canvas snapshot** reflects the latest editor text (including manual edits not yet autosaved to the thread).
+2. **Selection mini-prompt:** With text selected in the canvas, the floating prompt sends the instruction with **section-only** context; the model should limit patches to that region when possible.
+3. The **workspace panel** shows the rendered markdown; chat contains a **brief** acknowledgment (tool return text already tells the model not to dump the whole doc in chat).
+4. No claim of having run shell commands or written arbitrary binaries unless **`run_workspace_command`** was actually invoked.
 
 **Limitations / notes**
 
-- If the chat is **not** saved, **`open_document_canvas`** is absent; the model should **explain** that saving the conversation enables the side panel document tool, not pretend the canvas was updated.
+- If the chat is **not** saved, canvas tools are absent; the model should **explain** that saving the conversation enables the side panel document tool, not pretend the canvas was updated.
+- **Large documents:** snapshot text in the system prompt may be **truncated** past a character budget; the model should use distinctive `find` strings or ask the user to narrow scope if a patch fails.
 
 ---
 
