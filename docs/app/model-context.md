@@ -35,9 +35,10 @@ See [Tools](/docs/tools) for a short summary of those tools.
 
 ## Tools vs system text
 
-- **Lazy tools** (document mode): coding and dashboard tools may appear as "lazy" until the model calls the right **`switch_to_*`** tool and completes **tool discovery**. Those unlock steps are only mentioned in the prompt when the corresponding switch tool is actually available that turn.
-- **Code** mode: workspace file/command tools are available immediately for that chat.
+- **Lazy tools** (document mode): coding and dashboard tools may appear as "lazy" until the model calls the right **`switch_to_*`** tool and completes **tool discovery**. Those unlock steps are only mentioned in the prompt when the corresponding switch tool is actually available that turn. The **Context** dialog shows each tool tagged as **eager** or **lazy**.
+- **Code** mode: all workspace tools are available immediately — `read_workspace_file`, `write_workspace_file`, `patch_workspace_file`, `list_workspace_dir`, `search_workspace`, `run_workspace_command`, and `run_workspace_shell`. The routing addendum includes a **tool selection guide** and guidelines for search-before-read, patch-over-rewrite, and shell usage. `maxIterations` is higher (40 base, up to 48 with MCP) to accommodate the richer tool surface.
 - **App** mode: dashboard tools are eager; detailed JSON schema for tiles and pages is reinforced via the **app-builder** section (from the skill file when possible). See [Dashboard & in-app pages](/docs/dashboard).
+- **MCP issues**: when MCP connections fail or are slow, warnings are injected into a dedicated **"Connections (MCP) issues"** system section so the model is aware of unavailable tools. Active MCP server names are listed in the routing text.
 
 ## Related
 

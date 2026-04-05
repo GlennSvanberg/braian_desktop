@@ -21,6 +21,7 @@ export function modelContextSectionGroup(
     case 'memory':
       return 'Workspace'
     case 'context-files':
+    case 'context-prior-conversations':
     case 'canvas-snapshot':
     case 'app-builder':
       return 'This turn'
@@ -41,6 +42,6 @@ export const MODEL_CONTEXT_SECTION_ORDER_HELP: { title: string; items: string[] 
       'Skills — Catalog of `.braian/skills/*.md` (metadata only; full bodies loaded on demand).',
       'User — Profile and automatic client time.',
       'Workspace — Durable MEMORY.md.',
-      'This turn — Attached files, document canvas snapshot, and (when App mode is on) dashboard builder instructions.',
+      'This turn — Attached files, prior conversation transcripts, document canvas snapshot, and (when App mode is on) dashboard builder instructions.',
     ],
   }

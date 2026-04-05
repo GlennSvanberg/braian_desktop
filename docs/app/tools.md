@@ -4,14 +4,24 @@ How instructions and tool lists are combined each turn—including **routing**, 
 
 **Workspace MCP connections** (gear icon next to each workspace in the sidebar → **Workspace settings**, file `.braian/mcp.json`) extend the assistant with **MCP tools** when those servers are enabled. See [Connections (MCP)](/docs/mcp).
 
-## Document canvas (`apply_document_canvas_patch`, `open_document_canvas`)
+## Canvas tools
 
-When your chat is **saved**, the assistant can update the **document canvas** (side panel markdown) on disk and refresh the UI.
+When your chat is **saved**, the assistant can update the side-panel canvas. Three canvas kinds are supported:
+
+### Document canvas (`apply_document_canvas_patch`, `open_document_canvas`)
 
 - **`apply_document_canvas_patch`** (preferred): ordered **`find` / `replace`** steps against the latest canvas text, with a **`baseRevision`** that must match the snapshot (optimistic locking). Use for typical edits.
 - **`open_document_canvas`**: replace the **entire** markdown at once — for full rewrites or new documents when patches would be unwieldy.
 
 The app sends a **document canvas snapshot** each turn (including **revision** and any **selection** from the inline canvas prompt). **Binary files** (for example `.xlsx`) belong on disk via scripts, not inside the canvas.
+
+### Tabular canvas (`apply_tabular_canvas`)
+
+Displays structured data as a table in the side panel. Takes `columns` (id, label, optional type hint) and `rows` (keyed by column id), with optional `title` and `sourceLabel`.
+
+### Visual canvas (`apply_visual_canvas`)
+
+Displays an image in the side panel. Takes optional `title`, `prompt`, `imageSrc` (URL or data URI), and `alt` text.
 
 ## Workspace file and command tools
 
@@ -21,17 +31,20 @@ When **code-style** workspace tools are enabled, the assistant can:
 |------|----------------|
 | `read_workspace_file` | Read a UTF-8 text file under the workspace (fails on binary-only content). |
 | `write_workspace_file` | Create or overwrite a UTF-8 file; parent folders are created as needed. |
+| `patch_workspace_file` | Apply targeted find/replace edits to an existing file. Preferred over `write_workspace_file` for small changes to large files. |
 | `list_workspace_dir` | List files and folders in one directory (not recursive). |
-| `run_workspace_command` | Run a program with arguments (**no interactive shell**). Stdout and stderr are captured; very large output may be truncated. |
+| `search_workspace` | Search for text across all files in the workspace (recursive). Returns matching lines with file paths and line numbers. |
+| `run_workspace_command` | Run a program with exact argv (**no shell**). Stdout and stderr are captured; very large output may be truncated. |
+| `run_workspace_shell` | Run a shell command string (pipes, redirects, chaining). Windows: `cmd.exe /C`. Unix: `sh -c`. |
 
-Paths are always **relative to the workspace root**. On Windows, follow the app’s guidance for running Python or PowerShell (separate arguments, not a single shell string).
+Paths are always **relative to the workspace root**. The shell tool provides full shell syntax while the command tool gives deterministic argv execution.
 
 ## Chat mode: Document, Code, and App (saved chats)
 
 In a **saved** workspace chat (desktop app), the header includes **Document** | **Code** | **App**:
 
-- **Code** — Workspace read/write/list/run tools are **on** for that chat immediately (no extra “switch” step).
-- **Document** — Default assistant behavior; file tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** and completes the tool-discovery step. The model is only told about that workflow when the switch tool is available in the current turn.
+- **Code** — All workspace tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. The routing prompt includes a tool selection guide and guidelines for search-before-read, patch-over-rewrite, and shell usage.
+- **Document** — Default assistant behavior; workspace tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** and completes the tool-discovery step. The model is only told about that workflow when the switch tool is available in the current turn.
 - **App** — Keeps document-style behavior but **always** exposes the **workspace dashboard** tools (`read_workspace_dashboard`, `apply_workspace_dashboard`, `upsert_workspace_page`) so the model can edit `.braian/dashboard/board.json` and page JSON under `.braian/dashboard/pages/`. See [Dashboard & in-app pages](/docs/dashboard).
 
 You can switch modes yourself, or stay on **Document** and ask the assistant to enable dashboard or code capabilities through its tools when needed.
@@ -46,7 +59,7 @@ In a **real workspace** on the **desktop app**, the assistant also gets tools to
 | `read_workspace_skill` | Reads one `.md` file under `.braian/skills/` (no subfolders; path must stay under that directory). |
 | `write_workspace_skill` | Creates or replaces a skill file; content must be valid skill Markdown (frontmatter + body). |
 
-These tools are **not** available in the **You** profile coach, detached “new chat” without a folder, or in the browser-only dev preview.
+These tools are **not** available in the **You** profile coach, detached "new chat" without a folder, or in the browser-only dev preview.
 
 ## Workspace dashboard tools
 

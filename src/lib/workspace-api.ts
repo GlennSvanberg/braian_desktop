@@ -212,6 +212,12 @@ export type ContextFileEntryDto = {
   addedAtMs?: number
 }
 
+export type ContextConversationEntryDto = {
+  conversationId: string
+  title?: string
+  addedAtMs?: number
+}
+
 export type AgentMode = 'document' | 'code'
 
 export type ConversationSavePayload = {
@@ -229,6 +235,7 @@ export type ConversationSavePayload = {
   }>
   artifactPayload: WorkspaceArtifactPayload | null
   contextFiles: ContextFileEntryDto[]
+  contextConversations: ContextConversationEntryDto[]
   agentMode: AgentMode
   appHarnessEnabled: boolean
   reasoningMode: ReasoningMode
@@ -255,6 +262,7 @@ type ConversationOpenInvoke = {
     draft: string
     generating: boolean
     contextFiles?: ContextFileEntryDto[]
+    contextConversations?: ContextConversationEntryDto[]
     agentMode?: string
     appHarnessEnabled?: boolean
     reasoningMode?: string
@@ -299,6 +307,7 @@ function mapInvokeThreadToState(
     generating: thread.generating,
     pendingUserMessages: [],
     contextFiles: thread.contextFiles ?? [],
+    contextConversations: thread.contextConversations ?? [],
     agentMode: normalizeAgentMode(thread.agentMode),
     appHarnessEnabled: normalizeAppHarnessEnabled(thread.appHarnessEnabled),
     reasoningMode: normalizeReasoningMode(thread.reasoningMode),
@@ -349,6 +358,7 @@ export async function conversationOpen(
         generating: false,
         pendingUserMessages: [],
         contextFiles: [],
+        contextConversations: [],
         agentMode: 'document',
         appHarnessEnabled: false,
         reasoningMode: 'fast',
@@ -364,6 +374,7 @@ export async function conversationOpen(
       generating: false,
       pendingUserMessages: [],
       contextFiles: [],
+      contextConversations: [],
       agentMode: 'document',
       appHarnessEnabled: false,
       reasoningMode: 'fast',
@@ -422,6 +433,11 @@ export function buildConversationSavePayload(
         ? { displayName: f.displayName }
         : {}),
       ...(f.addedAtMs != null ? { addedAtMs: f.addedAtMs } : {}),
+    })),
+    contextConversations: (thread.contextConversations ?? []).map((c) => ({
+      conversationId: c.conversationId,
+      ...(c.title != null && c.title !== '' ? { title: c.title } : {}),
+      ...(c.addedAtMs != null ? { addedAtMs: c.addedAtMs } : {}),
     })),
     agentMode: thread.agentMode ?? 'document',
     appHarnessEnabled: thread.appHarnessEnabled ?? false,
@@ -492,6 +508,25 @@ export async function workspaceRunCommand(input: {
   })
 }
 
+export async function workspaceRunShell(input: {
+  workspaceId: string
+  command: string
+  cwd?: string | null
+  timeoutMs?: number | null
+  maxOutputBytes?: number | null
+}): Promise<WorkspaceRunCommandResult> {
+  if (!isTauri()) {
+    throw new Error('Running shell commands requires the desktop app.')
+  }
+  return invoke<WorkspaceRunCommandResult>('workspace_run_shell', {
+    workspaceId: input.workspaceId,
+    command: input.command,
+    cwd: input.cwd ?? null,
+    timeoutMs: input.timeoutMs ?? null,
+    maxOutputBytes: input.maxOutputBytes ?? null,
+  })
+}
+
 export type WorkspaceImportFileResult = {
   relativePath: string
   displayName: string
@@ -539,5 +574,36 @@ export async function workspaceListAllFiles(
   if (!isTauri()) return []
   return invoke<WorkspaceFileIndexEntry[]>('workspace_list_all_files', {
     workspaceId,
+  })
+}
+
+export type WorkspaceSearchMatch = {
+  relativePath: string
+  lineNumber: number
+  lineText: string
+}
+
+export type WorkspaceSearchResult = {
+  matches: WorkspaceSearchMatch[]
+  truncated: boolean
+  filesSearched: number
+}
+
+export async function workspaceSearchText(input: {
+  workspaceId: string
+  query: string
+  fileGlob?: string | null
+  caseInsensitive?: boolean | null
+  maxResults?: number | null
+}): Promise<WorkspaceSearchResult> {
+  if (!isTauri()) {
+    throw new Error('Searching workspace files requires the desktop app.')
+  }
+  return invoke<WorkspaceSearchResult>('workspace_search_text', {
+    workspaceId: input.workspaceId,
+    query: input.query,
+    fileGlob: input.fileGlob ?? null,
+    caseInsensitive: input.caseInsensitive ?? null,
+    maxResults: input.maxResults ?? null,
   })
 }

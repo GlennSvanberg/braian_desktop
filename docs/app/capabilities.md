@@ -9,10 +9,12 @@
 
 ## What the assistant can and cannot do
 
-- **Text files:** Read/write UTF-8 text via tools when enabled; binary-only reads fail by design.
-- **Commands:** Non-interactive runs with captured output; not a full remote desktop or unrestricted shell.
-- **Canvas:** Markdown in the side panel for documents; not a substitute for spreadsheets or binaries on disk.
-- **New vs saved chat:** Some tools (for example updating the document canvas) require a **saved** conversation.
+- **Text files:** Read, write, and patch UTF-8 text via tools when enabled; binary-only reads fail by design. Use `search_workspace` to find code by content across the workspace.
+- **Shell access:** In **Code** mode, the assistant can run shell commands (`run_workspace_shell`) with full shell syntax — pipes, redirects, chaining, environment variables. The working directory is set under the workspace root, but shell commands can reference paths outside. Network access is allowed. This is a deliberate trade-off for power; the cwd guardrail is the primary boundary.
+- **Argv commands:** `run_workspace_command` runs a program with exact arguments (no shell interpretation) for deterministic subprocess invocations.
+- **Patch edits:** `patch_workspace_file` applies targeted find/replace steps to existing files, reducing token use and stomping risk versus full-file rewrites.
+- **Canvas:** The side panel supports **document** (markdown), **tabular** (structured data tables), and **visual** (images) canvas types. Each has dedicated tools.
+- **New vs saved chat:** Some tools (for example updating the canvas) require a **saved** conversation.
 
 ## What this app is not
 

@@ -92,6 +92,8 @@ const SOURCE_APP_BUILDER =
   'src/lib/skills/load-skill-catalog.ts → app-builder.md (+ APP_BUILDER_INSTRUCTIONS_FALLBACK)'
 const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
+const SOURCE_PRIOR_CONVERSATIONS =
+  'src/lib/ai/chat-turn-args.ts (priorConversationsSystemPrompt)'
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
 const SOURCE_USER_CONTEXT = 'src/lib/ai/chat-turn-args.ts (user context + client time)'
 const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM)'
@@ -120,10 +122,15 @@ function logChatPerf(stage: string, startAt: number) {
 const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   apply_document_canvas_patch: 'src/lib/ai/canvas-tools.ts',
   open_document_canvas: 'src/lib/ai/canvas-tools.ts',
+  apply_tabular_canvas: 'src/lib/ai/canvas-tools.ts',
+  apply_visual_canvas: 'src/lib/ai/canvas-tools.ts',
   read_workspace_file: 'src/lib/ai/coding-tools.ts',
   write_workspace_file: 'src/lib/ai/coding-tools.ts',
+  patch_workspace_file: 'src/lib/ai/coding-tools.ts',
   list_workspace_dir: 'src/lib/ai/coding-tools.ts',
+  search_workspace: 'src/lib/ai/coding-tools.ts',
   run_workspace_command: 'src/lib/ai/coding-tools.ts',
+  run_workspace_shell: 'src/lib/ai/coding-tools.ts',
   switch_to_code_agent: 'src/lib/ai/switch-code-agent-tool.ts',
   switch_to_app_builder: 'src/lib/ai/switch-app-builder-tool.ts',
   __lazy__tool__discovery__: '@tanstack/ai (lazy tool discovery)',
@@ -197,6 +204,27 @@ export function contextFilesSystemPrompt(
     lines.push(`--- FILE: ${f.relativePath} (${label}) ---`)
     lines.push(f.text)
     lines.push(truncNote + '--- END FILE ---\n')
+  }
+  return lines.join('\n')
+}
+
+export function priorConversationsSystemPrompt(
+  convs: NonNullable<ChatTurnContext['contextPriorConversations']>,
+): string {
+  if (convs.length === 0) return ''
+  const lines: string[] = [
+    'Transcripts from other chats in this workspace (for reference):',
+    '',
+  ]
+  for (const c of convs) {
+    const truncNote = c.truncated
+      ? '\n[Note: this conversation was truncated by size limits — only the beginning is included.]\n'
+      : ''
+    lines.push(
+      `--- PRIOR CONVERSATION: ${c.title} (id: ${c.conversationId}) ---`,
+    )
+    lines.push(c.text)
+    lines.push(truncNote + '--- END PRIOR CONVERSATION ---\n')
   }
   return lines.join('\n')
 }
@@ -421,7 +449,7 @@ export async function buildTanStackChatTurnArgs(
   const dashboardTools = buildDashboardTools(ctx)
   const skillTools = buildSkillTools(ctx)
   const mcpToolsStart = nowMs()
-  const { tools: mcpTools, warnings: mcpWarnings } = await buildMcpTools(ctx)
+  const { tools: mcpTools, warnings: mcpWarnings, serverNames: mcpServerNames } = await buildMcpTools(ctx)
   logChatPerf('buildMcpTools', mcpToolsStart)
   for (const w of mcpWarnings) {
     settingsWarnings.push(w)
@@ -448,6 +476,11 @@ export async function buildTanStackChatTurnArgs(
     ctx?.contextFiles != null && ctx.contextFiles.length > 0
       ? contextFilesSystemPrompt(ctx.contextFiles)
       : ''
+  const pc =
+    ctx?.contextPriorConversations != null &&
+    ctx.contextPriorConversations.length > 0
+      ? priorConversationsSystemPrompt(ctx.contextPriorConversations)
+      : ''
   const snapshotText =
     ctx?.documentCanvasSnapshot != null
       ? documentCanvasSnapshotPrompt(ctx.documentCanvasSnapshot)
@@ -469,6 +502,7 @@ export async function buildTanStackChatTurnArgs(
       hasCanvasSnapshot: snapshotText.length > 0,
       hasSkillTools: skillTools.length > 0,
       hasMcpTools: mcpTools.length > 0,
+      mcpServerNames,
     }),
     isCodeMode ? CODE_MODE_ROUTING_ADDENDUM : DOC_MODE_ROUTING_ADDENDUM,
   ].join('\n\n')
@@ -526,6 +560,15 @@ export async function buildTanStackChatTurnArgs(
     })
   }
 
+  if (pc) {
+    systemSections.push({
+      id: 'context-prior-conversations',
+      label: 'Prior conversations (attached)',
+      source: SOURCE_PRIOR_CONVERSATIONS,
+      text: pc,
+    })
+  }
+
   if (snapshotText) {
     systemSections.push({
       id: 'canvas-snapshot',
@@ -552,6 +595,18 @@ export async function buildTanStackChatTurnArgs(
     })
   }
 
+  if (mcpWarnings.length > 0) {
+    const mcpIssuesText = mcpWarnings
+      .map((w) => `- ${w}`)
+      .join('\n')
+    systemSections.push({
+      id: 'mcp-issues',
+      label: 'Connections (MCP) issues',
+      source: 'src/lib/ai/chat-turn-args.ts',
+      text: `## Connections (MCP) issues\n\nSome MCP connections had problems this turn. Tools from these servers may be unavailable:\n\n${mcpIssuesText}`,
+    })
+  }
+
   const systemPrompts = systemSections.map((s) => s.text)
 
   const toolsDisplay = tools.map((t) => toolToDisplayInfo(t))
@@ -560,12 +615,12 @@ export async function buildTanStackChatTurnArgs(
     tools.length > 0
       ? (() => {
           let base = isCodeMode
-            ? 32
+            ? 40
             : dashboardTools.length > 0
               ? 28
               : 24
           if (mcpTools.length > 0) {
-            base = Math.min(base + 8, 40)
+            base = Math.min(base + 8, 48)
           }
           return base
         })()

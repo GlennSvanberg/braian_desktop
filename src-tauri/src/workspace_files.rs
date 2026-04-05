@@ -354,3 +354,193 @@ pub fn workspace_list_all_files(
   out.sort_by(|a, b| a.relative_path.to_lowercase().cmp(&b.relative_path.to_lowercase()));
   Ok(out)
 }
+
+// ---------------------------------------------------------------------------
+// Text search
+// ---------------------------------------------------------------------------
+
+const SEARCH_MAX_FILE_BYTES: u64 = 1_024 * 1_024;
+const SEARCH_MAX_MATCHES: usize = 200;
+const SEARCH_MAX_FILES: usize = 5_000;
+const SEARCH_MAX_LINE_LEN: usize = 500;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSearchMatch {
+  pub relative_path: String,
+  pub line_number: u32,
+  pub line_text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSearchResult {
+  pub matches: Vec<WorkspaceSearchMatch>,
+  pub truncated: bool,
+  pub files_searched: u32,
+}
+
+fn matches_glob(name: &str, glob: &str) -> bool {
+  if let Some(ext) = glob.strip_prefix("*.") {
+    name.ends_with(&format!(".{ext}"))
+  } else {
+    name == glob
+  }
+}
+
+fn search_file(
+  path: &Path,
+  relative_path: &str,
+  pattern: &regex::Regex,
+  out: &mut Vec<WorkspaceSearchMatch>,
+  max_matches: usize,
+) -> Result<bool, ()> {
+  let meta = fs::metadata(path).map_err(|_| ())?;
+  if meta.len() > SEARCH_MAX_FILE_BYTES {
+    return Ok(false);
+  }
+  let bytes = fs::read(path).map_err(|_| ())?;
+  let text = match std::str::from_utf8(&bytes) {
+    Ok(t) => t,
+    Err(_) => return Ok(false),
+  };
+  for (idx, line) in text.lines().enumerate() {
+    if out.len() >= max_matches {
+      return Ok(true);
+    }
+    if pattern.is_match(line) {
+      let display_line = if line.len() > SEARCH_MAX_LINE_LEN {
+        format!("{}…", &line[..SEARCH_MAX_LINE_LEN])
+      } else {
+        line.to_string()
+      };
+      out.push(WorkspaceSearchMatch {
+        relative_path: relative_path.to_string(),
+        line_number: (idx + 1) as u32,
+        line_text: display_line,
+      });
+    }
+  }
+  Ok(false)
+}
+
+fn search_recursive(
+  canon_root: &Path,
+  dir: &Path,
+  relative_prefix: &str,
+  pattern: &regex::Regex,
+  file_glob: Option<&str>,
+  out: &mut Vec<WorkspaceSearchMatch>,
+  max_matches: usize,
+  files_searched: &mut u32,
+) -> Result<bool, String> {
+  if *files_searched as usize >= SEARCH_MAX_FILES || out.len() >= max_matches {
+    return Ok(true);
+  }
+  let entries = match fs::read_dir(dir) {
+    Ok(e) => e,
+    Err(_) => return Ok(false),
+  };
+  for entry in entries {
+    let entry = match entry {
+      Ok(e) => e,
+      Err(_) => continue,
+    };
+    let name = entry.file_name().to_string_lossy().to_string();
+    if name == "." || name == ".." {
+      continue;
+    }
+    let path = entry.path();
+    let meta = match entry.metadata() {
+      Ok(m) => m,
+      Err(_) => continue,
+    };
+    if meta.is_dir() {
+      if SKIP_WALK_DIR_NAMES.contains(&name.as_str()) {
+        continue;
+      }
+      let next_prefix = if relative_prefix.is_empty() {
+        name.clone()
+      } else {
+        format!("{relative_prefix}/{name}")
+      };
+      if search_recursive(
+        canon_root, &path, &next_prefix, pattern, file_glob, out, max_matches, files_searched,
+      )? {
+        return Ok(true);
+      }
+    } else if meta.is_file() {
+      if let Some(glob) = file_glob {
+        if !matches_glob(&name, glob) {
+          continue;
+        }
+      }
+      let canon_file = match path.canonicalize() {
+        Ok(c) => c,
+        Err(_) => continue,
+      };
+      if !canon_file.starts_with(canon_root) {
+        continue;
+      }
+      let rel_path = if relative_prefix.is_empty() {
+        name.clone()
+      } else {
+        format!("{relative_prefix}/{name}")
+      };
+      let rel_path = rel_path.replace('\\', "/");
+      *files_searched += 1;
+      if *files_searched as usize >= SEARCH_MAX_FILES || out.len() >= max_matches {
+        return Ok(true);
+      }
+      let _ = search_file(&path, &rel_path, pattern, out, max_matches);
+      if out.len() >= max_matches {
+        return Ok(true);
+      }
+    }
+  }
+  Ok(false)
+}
+
+/// Recursive text search under the workspace.
+#[tauri::command]
+pub fn workspace_search_text(
+  app: AppHandle,
+  workspace_id: String,
+  query: String,
+  file_glob: Option<String>,
+  case_insensitive: Option<bool>,
+  max_results: Option<usize>,
+) -> Result<WorkspaceSearchResult, String> {
+  let query = query.trim();
+  if query.is_empty() {
+    return Err("Search query cannot be empty.".to_string());
+  }
+
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &workspace_id)?;
+  let canon = root.canonicalize().map_err(|e| e.to_string())?;
+
+  let case_i = case_insensitive.unwrap_or(false);
+  let pattern_str = if case_i {
+    format!("(?i){}", regex::escape(query))
+  } else {
+    regex::escape(query)
+  };
+  let pattern = regex::Regex::new(&pattern_str)
+    .map_err(|e| format!("Invalid search pattern: {e}"))?;
+
+  let max_matches = max_results.unwrap_or(100).min(SEARCH_MAX_MATCHES);
+  let glob_ref = file_glob.as_deref().filter(|s| !s.trim().is_empty());
+  let mut matches: Vec<WorkspaceSearchMatch> = Vec::new();
+  let mut files_searched: u32 = 0;
+
+  let truncated = search_recursive(
+    &canon, &canon, "", &pattern, glob_ref, &mut matches, max_matches, &mut files_searched,
+  )?;
+
+  Ok(WorkspaceSearchResult {
+    matches,
+    truncated,
+    files_searched,
+  })
+}

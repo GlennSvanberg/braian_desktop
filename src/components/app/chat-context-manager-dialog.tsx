@@ -38,6 +38,7 @@ import {
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { chatMessageContentForLlmHistory } from '@/lib/chat-sessions/store'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
+import { loadContextConversationsForModel } from '@/lib/context-conversations-for-ai'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { cn } from '@/lib/utils'
 
@@ -151,6 +152,7 @@ function SummaryCards({ summary }: { summary: SnapshotSummary }) {
           muted={summary.canvasState === 'none'}
         />
         <Stat label="Attached files" value={summary.attachedFilesCount || 'none'} muted={summary.attachedFilesCount === 0} />
+        <Stat label="Attached chats" value={summary.attachedChatsCount || 'none'} muted={summary.attachedChatsCount === 0} />
         <Stat label="Skills catalog" value={summary.skillCatalogPresent ? 'yes' : 'no'} muted={!summary.skillCatalogPresent} />
         <Stat label="Memory" value={summary.memoryPresent ? 'yes' : 'no'} muted={!summary.memoryPresent} />
         <Stat label="Reasoning" value={summary.reasoningMode} />
@@ -262,8 +264,10 @@ function ToolsList({ snap, buckets }: { snap: SerializableModelRequestSnapshot; 
                   <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent-500/10">
                     <ChevronDown className="size-3.5 shrink-0 text-accent-600 transition-transform group-data-[state=closed]:-rotate-90 dark:text-accent-500" />
                     <code className="min-w-0 flex-1 truncate font-mono text-xs font-medium text-text-1">{t.name}</code>
-                    {t.lazy && (
-                      <Badge variant="secondary" className="bg-accent-500/10 px-1.5 py-0 text-[10px]">lazy</Badge>
+                    {t.lazy ? (
+                      <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0 text-[10px]">lazy</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-1.5 py-0 text-[10px]">eager</Badge>
                     )}
                   </CollapsibleTrigger>
                   <CollapsibleContent className="space-y-1.5 px-2 pt-1 pb-2 text-xs">
@@ -441,6 +445,9 @@ export function ChatContextManagerDialog({
         let contextFiles:
           | Awaited<ReturnType<typeof loadContextFilesForModel>>
           | undefined
+        let contextPriorConversations:
+          | Awaited<ReturnType<typeof loadContextConversationsForModel>>
+          | undefined
         if (thread.contextFiles.length > 0) {
           if (
             isDetachedWorkspaceSessionId(workspaceId) ||
@@ -469,6 +476,35 @@ export function ChatContextManagerDialog({
           }
         }
 
+        if ((thread.contextConversations ?? []).length > 0) {
+          if (
+            isDetachedWorkspaceSessionId(workspaceId) ||
+            isUserProfileSessionId(workspaceId)
+          ) {
+            contextPriorConversations = undefined
+          } else if (!isTauriRuntime) {
+            contextPriorConversations = (thread.contextConversations ?? []).map(
+              (c) => ({
+                conversationId: c.conversationId,
+                title: c.title?.trim() || c.conversationId,
+                text: '[Prior conversation transcripts load in the desktop app only; this is a web preview.]',
+                truncated: false,
+              }),
+            )
+          } else {
+            try {
+              contextPriorConversations = await loadContextConversationsForModel(
+                workspaceId,
+                thread.contextConversations ?? [],
+                conversationId,
+              )
+            } catch (e) {
+              console.error('[braian] context manager load conversations', e)
+              contextPriorConversations = undefined
+            }
+          }
+        }
+
         const priorMessages = thread.messages.map((m) => ({
           role: m.role,
           content: chatMessageContentForLlmHistory(m),
@@ -490,6 +526,10 @@ export function ChatContextManagerDialog({
             documentCanvasSnapshot,
             ...(contextFiles != null && contextFiles.length > 0
               ? { contextFiles }
+              : {}),
+            ...(contextPriorConversations != null &&
+            contextPriorConversations.length > 0
+              ? { contextPriorConversations }
               : {}),
           },
           priorMessages,
@@ -525,6 +565,7 @@ export function ChatContextManagerDialog({
     thread.reasoningMode,
     thread.artifactPayload,
     thread.contextFiles,
+    thread.contextConversations,
     thread.generating,
     isTauriRuntime,
   ])

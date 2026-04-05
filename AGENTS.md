@@ -52,6 +52,47 @@ There is **no** Convex/cloud backend in this repo yet.
 - Opening and migration scaffolding live in **`src-tauri`** (`rusqlite`, bundled SQLite).
 - If most data access should move to the frontend later, consider **`@tauri-apps/plugin-sql`**; for now the DB is validated from Rust only.
 
+## Zod schemas for LLM tool definitions (OpenAI compatibility)
+
+This project uses **Zod v4** (`^4.x`) with `@tanstack/ai` `toolDefinition()`. Zod schemas are converted to **JSON Schema** and sent to providers like OpenAI as function parameter schemas. **OpenAI's function calling API is strict** about which JSON Schema features it accepts — many valid JSON Schema constructs are rejected at runtime with `400` errors.
+
+### Rules — follow these when writing any `z.object({...})` for a tool `inputSchema`
+
+1. **Never use `z.record()`**. It emits `propertyNames` in JSON Schema, which OpenAI rejects.
+   ```ts
+   // BAD — OpenAI rejects `propertyNames`
+   z.record(z.string(), z.string())
+   z.record(z.string())
+
+   // GOOD — use z.object({}).passthrough() for arbitrary key/value objects
+   z.object({}).passthrough().describe('JSON object with string keys.')
+   ```
+
+2. **Never use `z.any()` or `z.unknown()`**. They emit `{}` (empty schema) with no `type` key, which OpenAI rejects.
+   ```ts
+   // BAD — no `type` key in JSON Schema output
+   z.array(z.any())
+   z.any()
+
+   // GOOD — use z.string() and JSON-encode complex/dynamic data
+   z.string().describe('JSON-encoded array of objects. Example: [{"a":1}]')
+   ```
+
+3. **Every schema node must have a `type`**. All properties, array items, and nested objects need an explicit Zod type that maps to a JSON Schema `type` (`string`, `number`, `boolean`, `object`, `array`).
+
+4. **For dynamic/arbitrary objects as tool input**, encode as a JSON string and parse in the handler:
+   ```ts
+   const schema = z.object({
+     dataJson: z.string().describe('JSON-encoded data. Example: [{"col":"val"}]'),
+   })
+   // In handler:
+   const data = JSON.parse(input.dataJson)
+   ```
+
+5. **Allowed Zod types for tool schemas**: `z.string()`, `z.number()`, `z.boolean()`, `z.literal()`, `z.enum()`, `z.object({...})`, `z.array(typedItem)`, `z.union([...])` (typed variants), `z.optional()`, `z.null()`. Combine only these.
+
+6. **Existing helper** (`src/lib/ai/mcp-tools.ts`): `stripPropertyNamesFromJsonSchema()` recursively removes `propertyNames` from external MCP schemas. For **our own** tool schemas, avoid the problem at the source by following the rules above instead of relying on stripping.
+
 ## Reference projects
 
 - Earlier web prototype (colors only, for history): `C:\git\glenn\braian\`

@@ -92,6 +92,7 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "log",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

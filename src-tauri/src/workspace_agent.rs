@@ -37,24 +37,13 @@ pub struct WorkspaceRunCommandResult {
   pub timed_out: bool,
 }
 
-/// Run a program with argv (no shell). `cwd` is optional, relative to workspace root; default is workspace root.
-#[tauri::command]
-pub fn workspace_run_command(
-  app: AppHandle,
-  workspace_id: String,
-  program: String,
-  args: Vec<String>,
-  cwd: Option<String>,
-  timeout_ms: Option<u64>,
-  max_output_bytes: Option<usize>,
-) -> Result<WorkspaceRunCommandResult, String> {
-  let program = program.trim();
-  if program.is_empty() {
-    return Err("Program name cannot be empty.".to_string());
-  }
-
-  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
-  let root = workspace_root_path(&conn, &workspace_id)?;
+fn resolve_workspace_cwd(
+  app: &AppHandle,
+  workspace_id: &str,
+  cwd: &Option<String>,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, workspace_id)?;
   let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
 
   let cwd_path = match cwd.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
@@ -73,18 +62,14 @@ pub fn workspace_run_command(
     return Err("Working directory escapes workspace.".to_string());
   }
 
-  let timeout = Duration::from_millis(
-    timeout_ms
-      .unwrap_or(DEFAULT_TIMEOUT_MS)
-      .clamp(1_000, 600_000),
-  );
-  let max_each = max_output_bytes
-    .unwrap_or(DEFAULT_MAX_OUTPUT_BYTES)
-    .clamp(4_096, 2 * 1024 * 1024);
+  Ok((canon_root, cwd_path))
+}
 
-  let mut cmd = Command::new(program);
-  cmd.args(&args);
-  cmd.current_dir(&cwd_path);
+fn run_child(
+  mut cmd: Command,
+  timeout: Duration,
+  max_each: usize,
+) -> Result<WorkspaceRunCommandResult, String> {
   cmd.stdout(Stdio::piped());
   cmd.stderr(Stdio::piped());
   #[cfg(windows)]
@@ -96,7 +81,7 @@ pub fn workspace_run_command(
 
   let mut child = cmd
     .spawn()
-    .map_err(|e| format!("Failed to start `{program}`: {e}"))?;
+    .map_err(|e| format!("Failed to start process: {e}"))?;
 
   let stdout = child.stdout.take();
   let stderr = child.stderr.take();
@@ -142,4 +127,75 @@ pub fn workspace_run_command(
     stderr,
     timed_out,
   })
+}
+
+fn parse_limits(timeout_ms: Option<u64>, max_output_bytes: Option<usize>) -> (Duration, usize) {
+  let timeout = Duration::from_millis(
+    timeout_ms
+      .unwrap_or(DEFAULT_TIMEOUT_MS)
+      .clamp(1_000, 600_000),
+  );
+  let max_each = max_output_bytes
+    .unwrap_or(DEFAULT_MAX_OUTPUT_BYTES)
+    .clamp(4_096, 2 * 1024 * 1024);
+  (timeout, max_each)
+}
+
+/// Run a program with argv (no shell). `cwd` is optional, relative to workspace root; default is workspace root.
+#[tauri::command]
+pub fn workspace_run_command(
+  app: AppHandle,
+  workspace_id: String,
+  program: String,
+  args: Vec<String>,
+  cwd: Option<String>,
+  timeout_ms: Option<u64>,
+  max_output_bytes: Option<usize>,
+) -> Result<WorkspaceRunCommandResult, String> {
+  let program = program.trim();
+  if program.is_empty() {
+    return Err("Program name cannot be empty.".to_string());
+  }
+
+  let (_canon_root, cwd_path) = resolve_workspace_cwd(&app, &workspace_id, &cwd)?;
+  let (timeout, max_each) = parse_limits(timeout_ms, max_output_bytes);
+
+  let mut cmd = Command::new(program);
+  cmd.args(&args);
+  cmd.current_dir(&cwd_path);
+
+  run_child(cmd, timeout, max_each)
+}
+
+/// Run a shell command string. Windows: cmd.exe /C. Unix: sh -c.
+/// `cwd` is optional, relative to workspace root; default is workspace root.
+#[tauri::command]
+pub fn workspace_run_shell(
+  app: AppHandle,
+  workspace_id: String,
+  command: String,
+  cwd: Option<String>,
+  timeout_ms: Option<u64>,
+  max_output_bytes: Option<usize>,
+) -> Result<WorkspaceRunCommandResult, String> {
+  let command = command.trim().to_string();
+  if command.is_empty() {
+    return Err("Shell command cannot be empty.".to_string());
+  }
+
+  let (_canon_root, cwd_path) = resolve_workspace_cwd(&app, &workspace_id, &cwd)?;
+  let (timeout, max_each) = parse_limits(timeout_ms, max_output_bytes);
+
+  let mut cmd = if cfg!(windows) {
+    let mut c = Command::new("cmd.exe");
+    c.args(["/C", &command]);
+    c
+  } else {
+    let mut c = Command::new("sh");
+    c.args(["-c", &command]);
+    c
+  };
+  cmd.current_dir(&cwd_path);
+
+  run_child(cmd, timeout, max_each)
 }

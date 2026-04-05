@@ -3,8 +3,10 @@ import {
   Check,
   Copy,
   CornerDownLeft,
+  FileText,
   FolderOpen,
   Loader2,
+  MessageSquare,
   Paperclip,
   Square,
   X,
@@ -49,10 +51,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { useIsMobile } from '@/hooks/use-mobile'
 import {
-  applyMentionToDraft,
-  filterWorkspaceFilesForMention,
+  applyMentionPickToDraft,
+  buildMentionPickList,
   getMentionQuery,
-} from '@/lib/chat-mention-files'
+  type MentionPick,
+} from '@/lib/chat-mentions'
 import {
   DETACHED_WORKSPACE_SESSION_ID,
   USER_PROFILE_WORKSPACE_SESSION_ID,
@@ -83,6 +86,7 @@ import {
 import {
   buildConversationSavePayload,
   conversationCreate,
+  conversationList,
   conversationSave,
   workspaceImportFile,
   workspaceListAllFiles,
@@ -180,6 +184,8 @@ export function ChatWorkbench({
     setChatReasoningMode,
     addContextFileEntry,
     removeContextFileEntry,
+    addContextConversationEntry,
+    removeContextConversationEntry,
   } = useChatThreadActions()
 
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -187,6 +193,9 @@ export function ChatWorkbench({
   const [memoryUpdateHint, setMemoryUpdateHint] = useState<string | null>(null)
   const [workspaceFileIndex, setWorkspaceFileIndex] = useState<
     WorkspaceFileIndexEntry[]
+  >([])
+  const [workspaceConversations, setWorkspaceConversations] = useState<
+    ConversationDto[]
   >([])
   const [caretPos, setCaretPos] = useState(0)
   const [mentionHighlight, setMentionHighlight] = useState(0)
@@ -292,6 +301,7 @@ export function ChatWorkbench({
     generating,
     pendingUserMessages,
     contextFiles,
+    contextConversations,
     agentMode,
     appHarnessEnabled,
     reasoningMode,
@@ -306,9 +316,19 @@ export function ChatWorkbench({
   const mentionOptions = useMemo(
     () =>
       mention
-        ? filterWorkspaceFilesForMention(workspaceFileIndex, mention.query)
+        ? buildMentionPickList(
+            workspaceFileIndex,
+            workspaceConversations,
+            mention.query,
+            conversationId,
+          )
         : [],
-    [mention, workspaceFileIndex],
+    [
+      mention,
+      workspaceFileIndex,
+      workspaceConversations,
+      conversationId,
+    ],
   )
   const showMentionList =
     mention != null &&
@@ -429,7 +449,7 @@ export function ChatWorkbench({
   useEffect(() => {
     if (
       !isTauriRuntime ||
-      !activeWorkspaceId ||
+      !threadWorkspaceId ||
       isDetachedSession ||
       isProfileSession
     ) {
@@ -437,7 +457,7 @@ export function ChatWorkbench({
       return
     }
     let cancelled = false
-    void workspaceListAllFiles(activeWorkspaceId)
+    void workspaceListAllFiles(threadWorkspaceId)
       .then((rows) => {
         if (!cancelled) setWorkspaceFileIndex(rows)
       })
@@ -445,7 +465,28 @@ export function ChatWorkbench({
     return () => {
       cancelled = true
     }
-  }, [isTauriRuntime, activeWorkspaceId, isDetachedSession, isProfileSession])
+  }, [isTauriRuntime, threadWorkspaceId, isDetachedSession, isProfileSession])
+
+  useEffect(() => {
+    if (
+      !isTauriRuntime ||
+      !threadWorkspaceId ||
+      isDetachedSession ||
+      isProfileSession
+    ) {
+      setWorkspaceConversations([])
+      return
+    }
+    let cancelled = false
+    void conversationList(threadWorkspaceId)
+      .then((rows) => {
+        if (!cancelled) setWorkspaceConversations(rows)
+      })
+      .catch((e) => console.error('[braian] conversation list for mentions', e))
+    return () => {
+      cancelled = true
+    }
+  }, [isTauriRuntime, threadWorkspaceId, isDetachedSession, isProfileSession])
 
   useEffect(() => {
     if (!isTauriRuntime) return
@@ -507,22 +548,29 @@ export function ChatWorkbench({
   }, [isTauriRuntime, isProfileSession, onNativeFileDrop])
 
   const pickMention = useCallback(
-    (pick: WorkspaceFileIndexEntry) => {
+    (pick: MentionPick) => {
       const ta = textareaRef.current
       const caret = ta?.selectionStart ?? caretPos
       const m = getMentionQuery(draft, caret)
       if (!m) return
-      const { nextDraft, nextCaret } = applyMentionToDraft(
+      const { nextDraft, nextCaret } = applyMentionPickToDraft(
         draft,
         caret,
         m.start,
         pick,
       )
       setChatDraft(sessionKey, nextDraft)
-      addContextFileEntry(sessionKey, {
-        relativePath: pick.relativePath,
-        displayName: pick.name,
-      })
+      if (pick.kind === 'file') {
+        addContextFileEntry(sessionKey, {
+          relativePath: pick.file.relativePath,
+          displayName: pick.file.name,
+        })
+      } else {
+        addContextConversationEntry(sessionKey, {
+          conversationId: pick.conversation.id,
+          title: pick.conversation.title,
+        })
+      }
       setMentionMenuSuppressed(true)
       requestAnimationFrame(() => {
         const t = textareaRef.current
@@ -534,6 +582,7 @@ export function ChatWorkbench({
       })
     },
     [
+      addContextConversationEntry,
       addContextFileEntry,
       caretPos,
       draft,
@@ -974,6 +1023,15 @@ export function ChatWorkbench({
                 {contextFiles.length === 1 ? '' : 's'} in context
               </p>
             ) : null}
+            {contextConversations.length > 0 ? (
+              <p
+                className="text-text-3 text-xs"
+                title="Attached chat transcripts are sent to your configured AI provider when you send a message."
+              >
+                {contextConversations.length} other chat
+                {contextConversations.length === 1 ? '' : 's'} in context
+              </p>
+            ) : null}
           </div>
           {messages.length === 0 ? (
             <div className="border-border bg-muted/25 text-text-3 rounded-xl border border-dashed px-4 py-8 text-center text-sm leading-relaxed">
@@ -1149,6 +1207,10 @@ export function ChatWorkbench({
                 className="text-text-2 border-border max-w-full gap-1 pr-0.5 font-normal"
                 title={f.relativePath}
               >
+                <FileText
+                  className="text-text-3 size-3.5 shrink-0"
+                  aria-hidden
+                />
                 <span className="max-w-[14rem] truncate">
                   {f.displayName?.trim() ||
                     f.relativePath.split('/').pop() ||
@@ -1157,7 +1219,7 @@ export function ChatWorkbench({
                 <button
                   type="button"
                   className="hover:bg-muted rounded-full p-0.5"
-                  aria-label={`Remove ${f.relativePath}`}
+                  aria-label={`Remove file ${f.displayName?.trim() || f.relativePath}`}
                   onClick={() =>
                     removeContextFileEntry(sessionKey, f.relativePath)
                   }
@@ -1166,6 +1228,40 @@ export function ChatWorkbench({
                 </button>
               </Badge>
             ))}
+          </div>
+        ) : null}
+        {contextConversations.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {contextConversations.map((c) => {
+              const label = c.title?.trim() || c.conversationId
+              return (
+                <Badge
+                  key={c.conversationId}
+                  variant="outline"
+                  className="text-accent-700 border-accent-500/35 max-w-full gap-1 pr-0.5 font-normal dark:text-accent-500"
+                  title={c.conversationId}
+                >
+                  <MessageSquare
+                    className="text-accent-600 size-3.5 shrink-0 dark:text-accent-500"
+                    aria-hidden
+                  />
+                  <span className="max-w-[14rem] truncate">Chat: {label}</span>
+                  <button
+                    type="button"
+                    className="hover:bg-accent-500/10 rounded-full p-0.5"
+                    aria-label={`Remove chat from context: ${label}`}
+                    onClick={() =>
+                      removeContextConversationEntry(
+                        sessionKey,
+                        c.conversationId,
+                      )
+                    }
+                  >
+                    <X className="size-3 opacity-70" aria-hidden />
+                  </button>
+                </Badge>
+              )
+            })}
           </div>
         ) : null}
         <div
@@ -1179,40 +1275,80 @@ export function ChatWorkbench({
             <div
               className="border-border bg-popover text-popover-foreground absolute bottom-full left-2 right-2 z-20 mb-1 max-h-52 overflow-hidden rounded-lg border shadow-md"
               role="listbox"
-              aria-label="Attach workspace file"
+              aria-label="Attach workspace file or conversation"
             >
               <ScrollArea className="max-h-52">
                 <ul className="py-1">
                   {mentionOptions.length === 0 ? (
                     <li className="text-text-3 px-3 py-2 text-xs">
-                      No matching files
+                      No matching files or chats
                     </li>
                   ) : (
-                    mentionOptions.map((opt, idx) => (
-                      <li key={opt.relativePath}>
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={idx === mentionHighlight}
-                          className={cn(
-                            'hover:bg-muted/80 flex w-full flex-col gap-0.5 px-3 py-2 text-left text-xs',
-                            idx === mentionHighlight && 'bg-muted',
-                          )}
-                          onMouseEnter={() => setMentionHighlight(idx)}
-                          onMouseDown={(ev) => {
-                            ev.preventDefault()
-                            pickMention(opt)
-                          }}
-                        >
-                          <span className="text-text-1 font-medium">
-                            {opt.name}
-                          </span>
-                          <span className="text-text-3 truncate">
-                            {opt.relativePath}
-                          </span>
-                        </button>
-                      </li>
-                    ))
+                    mentionOptions.map((opt, idx) => {
+                      const showFilesHeader =
+                        opt.kind === 'file' &&
+                        (idx === 0 || mentionOptions[idx - 1]?.kind !== 'file')
+                      const showChatsHeader =
+                        opt.kind === 'chat' &&
+                        (idx === 0 ||
+                          mentionOptions[idx - 1]?.kind === 'file')
+                      const rowKey =
+                        opt.kind === 'file'
+                          ? `f:${opt.file.relativePath}`
+                          : `c:${opt.conversation.id}`
+                      return (
+                        <li key={rowKey} className="list-none">
+                          {showFilesHeader ? (
+                            <div className="text-text-3 px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide uppercase">
+                              Files
+                            </div>
+                          ) : null}
+                          {showChatsHeader ? (
+                            <div className="text-accent-600 px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide uppercase dark:text-accent-500">
+                              Chats
+                            </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={idx === mentionHighlight}
+                            className={cn(
+                              'hover:bg-muted/80 flex w-full items-start gap-2 px-3 py-2 text-left text-xs',
+                              idx === mentionHighlight && 'bg-muted',
+                            )}
+                            onMouseEnter={() => setMentionHighlight(idx)}
+                            onMouseDown={(ev) => {
+                              ev.preventDefault()
+                              pickMention(opt)
+                            }}
+                          >
+                            {opt.kind === 'file' ? (
+                              <FileText
+                                className="text-text-3 mt-0.5 size-3.5 shrink-0"
+                                aria-hidden
+                              />
+                            ) : (
+                              <MessageSquare
+                                className="text-accent-600 mt-0.5 size-3.5 shrink-0 dark:text-accent-500"
+                                aria-hidden
+                              />
+                            )}
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="text-text-1 font-medium">
+                                {opt.kind === 'file'
+                                  ? opt.file.name
+                                  : opt.conversation.title}
+                              </span>
+                              <span className="text-text-3 truncate">
+                                {opt.kind === 'file'
+                                  ? opt.file.relativePath
+                                  : `Conversation · ${opt.conversation.id.slice(0, 8)}…`}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })
                   )}
                 </ul>
               </ScrollArea>
@@ -1297,7 +1433,7 @@ export function ChatWorkbench({
             ? USER_PROFILE_WORKSPACE_SESSION_ID
             : isDetachedSession
               ? DETACHED_WORKSPACE_SESSION_ID
-              : activeWorkspaceId
+              : threadWorkspaceId
         }
         conversationId={conversationId}
         thread={thread}

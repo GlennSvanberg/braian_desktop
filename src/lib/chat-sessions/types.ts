@@ -64,6 +64,13 @@ export type ContextFileEntry = {
   addedAtMs?: number
 }
 
+/** Another saved conversation pinned for model context (same workspace). */
+export type ContextConversationEntry = {
+  conversationId: string
+  title?: string
+  addedAtMs?: number
+}
+
 export type ChatThreadState = {
   messages: ChatMessage[]
   artifactOpen: boolean
@@ -75,6 +82,8 @@ export type ChatThreadState = {
   pendingUserMessages: PendingUserTurn[]
   /** Files pinned to this conversation for model context (paths relative to workspace root). */
   contextFiles: ContextFileEntry[]
+  /** Other conversations pinned for model context (transcript injected on send). */
+  contextConversations: ContextConversationEntry[]
   /** Persisted with the conversation when saved. */
   agentMode: AgentMode
   /** When true, inject workspace dashboard builder instructions and tools for this chat. */
@@ -93,6 +102,7 @@ export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   generating: false,
   pendingUserMessages: [],
   contextFiles: [],
+  contextConversations: [],
   agentMode: 'document',
   appHarnessEnabled: false,
   reasoningMode: 'fast',

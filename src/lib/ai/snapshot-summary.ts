@@ -25,6 +25,7 @@ export type SnapshotSummary = {
   canvasState: 'present' | 'empty' | 'none'
   canvasRevision: number | null
   attachedFilesCount: number
+  attachedChatsCount: number
   skillCatalogPresent: boolean
   mcpToolsPresent: boolean
   memoryPresent: boolean
@@ -122,6 +123,12 @@ export function deriveSnapshotSummary(
     canvasRevision: extractCanvasRevision(snap.systemSections),
     attachedFilesCount: snap.systemSections.filter((s) => s.id === 'context-files').length > 0
       ? (snap.systemSections.find((s) => s.id === 'context-files')?.text.match(/--- FILE:/g)?.length ?? 0)
+      : 0,
+    attachedChatsCount: snap.systemSections.filter((s) => s.id === 'context-prior-conversations')
+      .length > 0
+      ? (snap.systemSections
+          .find((s) => s.id === 'context-prior-conversations')
+          ?.text.match(/--- PRIOR CONVERSATION:/g)?.length ?? 0)
       : 0,
     skillCatalogPresent: snap.systemSections.some((s) => s.id === 'skills-catalog'),
     mcpToolsPresent: mcpTools.length > 0,

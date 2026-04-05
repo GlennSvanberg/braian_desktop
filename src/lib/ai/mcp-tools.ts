@@ -186,6 +186,8 @@ export type BuildMcpToolsResult = {
   tools: Tool[]
   /** Per-server list failures to show as settings-style warnings. */
   warnings: string[]
+  /** Human-readable names of MCP servers that contributed tools. */
+  serverNames: string[]
 }
 
 /**
@@ -200,7 +202,7 @@ export async function buildMcpTools(
     isNonWorkspaceScopedSessionId(context.workspaceId) ||
     !isTauri()
   ) {
-    return { tools: [], warnings }
+    return { tools: [], warnings, serverNames: [] }
   }
 
   let catalog: McpCatalog
@@ -213,7 +215,7 @@ export async function buildMcpTools(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     warnings.push(`Connections (MCP): could not list tools — ${msg}`)
-    return { tools: [], warnings }
+    return { tools: [], warnings, serverNames: [] }
   }
 
   const usedNames = new Set<string>()
@@ -291,5 +293,9 @@ export async function buildMcpTools(
     }
   }
 
-  return { tools, warnings }
+  const serverNames = catalog.servers
+    .filter((s) => s.tools.length > 0 && !s.error?.trim())
+    .map((s) => s.name)
+
+  return { tools, warnings, serverNames }
 }

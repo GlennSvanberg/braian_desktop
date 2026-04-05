@@ -147,11 +147,16 @@ export async function* streamMockChatTurn(
     context?.contextFiles != null && context.contextFiles.length > 0
       ? ` (${context.contextFiles.length} attached file(s): ${context.contextFiles.map((f) => f.displayName?.trim() || f.relativePath).join(', ')}.)`
       : ''
+  const chatHint =
+    context?.contextPriorConversations != null &&
+    context.contextPriorConversations.length > 0
+      ? ` (${context.contextPriorConversations.length} prior chat(s): ${context.contextPriorConversations.map((c) => c.title).join(', ')}.)`
+      : ''
   const replyText = isCodeMode
-    ? `${pickRandomReply()}${fileHint} Mock mode: coding tools (read/write/run) are not simulated — use the real desktop app without braian.mockAi for workspace commands.`
+    ? `${pickRandomReply()}${fileHint}${chatHint} Mock mode: coding tools (read/write/run) are not simulated — use the real desktop app without braian.mockAi for workspace commands.`
     : hasPersistedConversation
-      ? `${pickRandomReply()}${fileHint} ${canvasHint(payload.kind)}`
-      : `${pickRandomReply()}${fileHint} Mock mode: the document canvas tool is only available for a saved conversation (persisted id). On desktop, use New chat from the sidebar so a conversation is created before you type; on /chat/new in the browser there is no canvas tool until you follow that flow.`
+      ? `${pickRandomReply()}${fileHint}${chatHint} ${canvasHint(payload.kind)}`
+      : `${pickRandomReply()}${fileHint}${chatHint} Mock mode: the document canvas tool is only available for a saved conversation (persisted id). On desktop, use New chat from the sidebar so a conversation is created before you type; on /chat/new in the browser there is no canvas tool until you follow that flow.`
 
   signal?.throwIfAborted()
   if (!isCodeMode && hasPersistedConversation) {

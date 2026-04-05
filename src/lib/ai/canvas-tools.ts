@@ -53,6 +53,43 @@ const openDocumentCanvasInputSchema = z.object({
     .describe('Optional short title for the canvas document.'),
 })
 
+const tabularColumnSchema = z.object({
+  id: z.string().describe('Column identifier (used as row key).'),
+  label: z.string().describe('Column header label.'),
+  type: z
+    .enum(['string', 'number', 'date', 'boolean'])
+    .optional()
+    .describe('Optional type hint for formatting.'),
+})
+
+const applyTabularCanvasInputSchema = z.object({
+  columns: z
+    .array(tabularColumnSchema)
+    .min(1)
+    .describe('Column definitions for the table.'),
+  rowsJson: z
+    .string()
+    .describe('JSON-encoded array of row objects keyed by column id. Example: [{"name":"Alice","age":30},{"name":"Bob","age":25}]. Values may be string, number, boolean, or null.'),
+  title: z.string().optional().describe('Optional title for the data canvas.'),
+  sourceLabel: z
+    .string()
+    .optional()
+    .describe('Optional source label (e.g. "from Budget.xlsx").'),
+})
+
+const applyVisualCanvasInputSchema = z.object({
+  title: z.string().optional().describe('Optional title for the visual.'),
+  prompt: z
+    .string()
+    .optional()
+    .describe('The prompt or description that produced the image.'),
+  imageSrc: z
+    .string()
+    .optional()
+    .describe('Image URL or data:image/...;base64,... string.'),
+  alt: z.string().optional().describe('Alt text for the image.'),
+})
+
 const applyDocumentCanvasPatchTool = toolDefinition({
   name: 'apply_document_canvas_patch',
   description:
@@ -61,10 +98,24 @@ const applyDocumentCanvasPatchTool = toolDefinition({
 })
 
 const openDocumentCanvasTool = toolDefinition({
-  name: 'open_document_canvas',
+    name: 'open_document_canvas',
+    description:
+      'Replace the entire document canvas markdown in one shot. Use for full rewrites or new documents.',
+    inputSchema: openDocumentCanvasInputSchema,
+  })
+
+const applyTabularCanvasTool = toolDefinition({
+  name: 'apply_tabular_canvas',
   description:
-    'Replace the entire document canvas markdown in one shot. Use for full rewrites or new documents.',
-  inputSchema: openDocumentCanvasInputSchema,
+    'Display structured tabular data in the side-panel data canvas. Replaces any current canvas content with a table view.',
+  inputSchema: applyTabularCanvasInputSchema,
+})
+
+const applyVisualCanvasTool = toolDefinition({
+  name: 'apply_visual_canvas',
+  description:
+    'Display a visual (image) in the side-panel visual canvas. Use for generated images, charts rendered to image, or visual content.',
+  inputSchema: applyVisualCanvasInputSchema,
 })
 
 function sessionKeyFromContext(context: ChatTurnContext): string {
@@ -189,6 +240,47 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
         ok: true as const,
         message:
           'Canvas updated. Reply briefly in chat; the document is in the side panel.',
+      }
+    }),
+
+    applyTabularCanvasTool.server(async (args, toolCtx) => {
+      const input = applyTabularCanvasInputSchema.parse(args)
+      let rows: Record<string, unknown>[]
+      try {
+        rows = JSON.parse(input.rowsJson) as Record<string, unknown>[]
+      } catch {
+        return { ok: false as const, error: 'rowsJson is not valid JSON.' }
+      }
+      if (!Array.isArray(rows)) {
+        return { ok: false as const, error: 'rowsJson must encode a JSON array.' }
+      }
+      toolCtx?.emitCustomEvent('braian-artifact', {
+        kind: 'tabular',
+        columns: input.columns,
+        rows,
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
+      })
+      return {
+        ok: true as const,
+        message:
+          'Data canvas updated. Reply briefly in chat; the table is in the side panel.',
+      }
+    }),
+
+    applyVisualCanvasTool.server(async (args, toolCtx) => {
+      const input = applyVisualCanvasInputSchema.parse(args)
+      toolCtx?.emitCustomEvent('braian-artifact', {
+        kind: 'visual',
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.prompt ? { prompt: input.prompt } : {}),
+        ...(input.imageSrc ? { imageSrc: input.imageSrc } : {}),
+        ...(input.alt ? { alt: input.alt } : {}),
+      })
+      return {
+        ok: true as const,
+        message:
+          'Visual canvas updated. Reply briefly in chat; the image is in the side panel.',
       }
     }),
   ]

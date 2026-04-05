@@ -13,6 +13,7 @@ import type {
   ChatStreamChunk,
   DocumentCanvasSelectionContext,
 } from '@/lib/ai/types'
+import { loadContextConversationsForModel } from '@/lib/context-conversations-for-ai'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
@@ -33,9 +34,14 @@ import {
   type AssistantChatMessage,
   type ChatMessage,
   type ChatThreadState,
+  type ContextConversationEntry,
   type ContextFileEntry,
   type PendingUserTurn,
 } from './types'
+
+import { chatMessageContentForLlmHistory } from './chat-message-llm-history'
+
+export { chatMessageContentForLlmHistory }
 
 const PROFILE_THREAD_LS_KEY = 'braian.io.userProfileChatThread.v1'
 
@@ -70,6 +76,7 @@ function hydrateUserProfileThreadOnce() {
           ? 'thinking'
           : 'fast',
       contextFiles: [],
+      contextConversations: [],
       artifactOpen: false,
       artifactPayload: null,
       generating: false,
@@ -106,33 +113,6 @@ function scheduleProfileThreadPersist() {
       console.error('[braian] profile chat persist', e)
     }
   }, 400)
-}
-
-/** Include tool traces so follow-up turns stay grounded in prior workspace reads/runs. */
-function assistantContentForLlmHistory(m: AssistantChatMessage): string {
-  const parts = m.parts
-  if (!parts?.length) return m.content
-  const blocks: string[] = []
-  for (const p of parts) {
-    if (p.type === 'thinking') {
-      continue
-    }
-    if (p.type === 'text' && p.text.trim()) {
-      blocks.push(p.text)
-    } else if (p.type === 'tool') {
-      const bits = [`[Tool ${p.toolName}]`]
-      if (p.argsText?.trim()) bits.push(`Input: ${p.argsText}`)
-      if (p.result?.trim()) bits.push(`Output: ${p.result}`)
-      blocks.push(bits.join('\n'))
-    }
-  }
-  const merged = blocks.join('\n\n').trim()
-  return merged || m.content
-}
-
-export function chatMessageContentForLlmHistory(m: ChatMessage): string {
-  if (m.role === 'user') return m.content
-  return assistantContentForLlmHistory(m)
 }
 
 function createId() {
@@ -381,6 +361,7 @@ export function replaceThread(sessionKey: string, state: ChatThreadState) {
       generating: false,
       pendingUserMessages: normalizePendingUserMessages(state.pendingUserMessages),
       contextFiles: state.contextFiles ?? [],
+      contextConversations: state.contextConversations ?? [],
       agentMode: state.agentMode ?? 'document',
       appHarnessEnabled: state.appHarnessEnabled ?? false,
       reasoningMode: state.reasoningMode === 'thinking' ? 'thinking' : 'fast',
@@ -615,6 +596,45 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         }
       }
 
+      let contextPriorConversations:
+        | Awaited<ReturnType<typeof loadContextConversationsForModel>>
+        | undefined
+      const ccEntries = prev.contextConversations ?? []
+      if (ccEntries.length > 0) {
+        if (
+          isDetachedWorkspaceSessionId(workspaceId) ||
+          isUserProfileSessionId(workspaceId)
+        ) {
+          contextPriorConversations = undefined
+        } else if (!isTauri()) {
+          contextPriorConversations = ccEntries.map((c) => ({
+            conversationId: c.conversationId,
+            title: c.title?.trim() || c.conversationId,
+            text: '[Prior conversation transcripts load in the desktop app only; this is a web preview.]',
+            truncated: false,
+          }))
+        } else {
+          try {
+            const ccStart = nowMs()
+            contextPriorConversations = await loadContextConversationsForModel(
+              workspaceId,
+              ccEntries,
+              conversationId,
+            )
+            if (contextPriorConversations?.length) {
+              logChatPerf(
+                sessionKey,
+                `context-conversations loaded (${contextPriorConversations.length})`,
+                ccStart,
+              )
+            }
+          } catch (e) {
+            console.error('[braian] load context conversations', e)
+            contextPriorConversations = undefined
+          }
+        }
+      }
+
       const chatTurnContext = {
         workspaceId,
         conversationId,
@@ -636,6 +656,10 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         },
         ...(contextFiles != null && contextFiles.length > 0
           ? { contextFiles }
+          : {}),
+        ...(contextPriorConversations != null &&
+        contextPriorConversations.length > 0
+          ? { contextPriorConversations }
           : {}),
       }
 
@@ -965,6 +989,40 @@ export function removeContextFileEntry(
   }))
 }
 
+export function addContextConversationEntry(
+  sessionKey: string,
+  entry: ContextConversationEntry,
+) {
+  patchThread(sessionKey, (p) => {
+    const prevCc = p.contextConversations ?? []
+    if (prevCc.some((x) => x.conversationId === entry.conversationId)) {
+      return p
+    }
+    return {
+      ...p,
+      contextConversations: [
+        ...prevCc,
+        {
+          ...entry,
+          addedAtMs: entry.addedAtMs ?? Date.now(),
+        },
+      ],
+    }
+  })
+}
+
+export function removeContextConversationEntry(
+  sessionKey: string,
+  conversationId: string,
+) {
+  patchThread(sessionKey, (p) => ({
+    ...p,
+    contextConversations: (p.contextConversations ?? []).filter(
+      (x) => x.conversationId !== conversationId,
+    ),
+  }))
+}
+
 export function useChatThreadActions() {
   const send = useCallback(
     (sessionKey: string, text: string, options?: SendChatTurnOptions) => {
@@ -997,5 +1055,7 @@ export function useChatThreadActions() {
     setChatReasoningMode: setReasoning,
     addContextFileEntry,
     removeContextFileEntry,
+    addContextConversationEntry,
+    removeContextConversationEntry,
   }
 }

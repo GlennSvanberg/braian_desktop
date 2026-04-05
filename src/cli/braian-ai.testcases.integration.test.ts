@@ -135,6 +135,50 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
   )
 
   it(
+    'Code mode — shell, search, and patch tools are eager alongside existing tools',
+    { timeout: 60_000 },
+    () => {
+      const snap = runDumpRequest('Search for the main function and fix a bug.', {
+        workspaceId: 'ws-workspace-folder',
+        conversationId: 'persisted-conversation-id',
+        agentMode: 'code',
+      })
+      const names = toolNames(snap)
+      expect(names).toContain('run_workspace_shell')
+      expect(names).toContain('search_workspace')
+      expect(names).toContain('patch_workspace_file')
+      expect(names).toContain('read_workspace_file')
+      expect(names).toContain('write_workspace_file')
+      expect(names).toContain('run_workspace_command')
+      expect(names).not.toContain('switch_to_code_agent')
+
+      const shell = snap.tools.find((t) => t.name === 'run_workspace_shell')
+      expect(shell?.lazy).toBeUndefined()
+
+      const routing = snap.systemSections.find((s) => s.id === 'routing-code')
+      expect(routing?.text).toContain('search_workspace')
+      expect(routing?.text).toContain('patch_workspace_file')
+      expect(routing?.text).toContain('run_workspace_shell')
+    },
+  )
+
+  it(
+    'Saved chat with canvas includes tabular and visual canvas tools',
+    { timeout: 60_000 },
+    () => {
+      const snap = runDumpRequest('Show me a table of results.', {
+        workspaceId: 'ws-workspace-folder',
+        conversationId: 'persisted-conversation-id',
+        agentMode: 'document',
+      })
+      const names = toolNames(snap)
+      expect(names).toContain('apply_tabular_canvas')
+      expect(names).toContain('apply_visual_canvas')
+      expect(names).toContain('apply_document_canvas_patch')
+    },
+  )
+
+  it(
     '§5 MEMORY.md — Node CLI has no Tauri file read; memory block is omitted (desktop verifies injection)',
     { timeout: 60_000 },
     () => {

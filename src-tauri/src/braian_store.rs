@@ -53,6 +53,16 @@ pub struct ContextFileRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ContextConversationRecord {
+  pub conversation_id: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub title: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub added_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ConversationFileV1 {
   schema_version: u32,
   id: String,
@@ -65,6 +75,8 @@ struct ConversationFileV1 {
   messages: Vec<ChatMessageFile>,
   #[serde(default)]
   context_files: Vec<ContextFileRecord>,
+  #[serde(default)]
+  context_conversations: Vec<ContextConversationRecord>,
   /// `"document"` | `"code"` — persisted chat agent mode.
   #[serde(default = "default_agent_mode")]
   agent_mode: String,
@@ -110,6 +122,8 @@ pub struct ChatThreadDto {
   pub generating: bool,
   #[serde(default)]
   pub context_files: Vec<ContextFileRecord>,
+  #[serde(default)]
+  pub context_conversations: Vec<ContextConversationRecord>,
   #[serde(default = "default_agent_mode")]
   pub agent_mode: String,
   #[serde(default = "default_app_harness_enabled")]
@@ -138,6 +152,8 @@ pub struct ConversationSaveInput {
   pub artifact_payload: Option<Value>,
   #[serde(default)]
   pub context_files: Vec<ContextFileRecord>,
+  #[serde(default)]
+  pub context_conversations: Vec<ContextConversationRecord>,
   #[serde(default = "default_agent_mode")]
   pub agent_mode: String,
   #[serde(default = "default_app_harness_enabled")]
@@ -430,6 +446,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
     draft: f.draft,
     generating: false,
     context_files: f.context_files,
+    context_conversations: f.context_conversations,
     agent_mode: f.agent_mode,
     app_harness_enabled: f.app_harness_enabled,
     reasoning_mode: f.reasoning_mode,
@@ -516,6 +533,7 @@ pub fn conversation_create(
     draft: String::new(),
     messages: vec![],
     context_files: vec![],
+    context_conversations: vec![],
     agent_mode: default_agent_mode(),
     app_harness_enabled: false,
     reasoning_mode: default_reasoning_mode(),
@@ -610,6 +628,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
       })
       .collect(),
     context_files: input.context_files.clone(),
+    context_conversations: input.context_conversations.clone(),
     agent_mode: input.agent_mode.clone(),
     app_harness_enabled: input.app_harness_enabled,
     reasoning_mode: input.reasoning_mode.clone(),

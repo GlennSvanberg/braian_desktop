@@ -30,3 +30,4 @@ tauri-plugin-http = "2"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-window-state = "2"
 ureq = { version = "2.9", default-features = true }
+regex = "1"

@@ -1,9 +1,10 @@
-export type DocumentCanvasReplacement = {
-  find: string
-  replace: string
-  /** When true, replace every non-overlapping occurrence; default single replace. */
-  replaceAll?: boolean
-}
+import {
+  applyTextPatches,
+  type TextReplacement,
+  type ApplyTextPatchesResult,
+} from './text-patches'
+
+export type DocumentCanvasReplacement = TextReplacement
 
 export type ApplyDocumentCanvasPatchesOk = {
   ok: true
@@ -29,50 +30,12 @@ export function applyDocumentCanvasPatches(
   markdown: string,
   replacements: DocumentCanvasReplacement[],
 ): ApplyDocumentCanvasPatchesResult {
-  let current = markdown
-
-  for (let i = 0; i < replacements.length; i++) {
-    const op = replacements[i]
-    const find = op.find
-    if (find.length === 0) {
-      return {
-        ok: false,
-        code: 'EMPTY_FIND',
-        error: `Replacement ${i + 1}: "find" must be a non-empty exact substring.`,
-      }
-    }
-
-    if (op.replaceAll) {
-      if (!current.includes(find)) {
-        return {
-          ok: false,
-          code: 'NOT_FOUND',
-          error: `Replacement ${i + 1}: find text not found in document.`,
-        }
-      }
-      current = current.split(find).join(op.replace)
-      continue
-    }
-
-    const first = current.indexOf(find)
-    if (first === -1) {
-      return {
-        ok: false,
-        code: 'NOT_FOUND',
-        error: `Replacement ${i + 1}: find text not found in document.`,
-      }
-    }
-    const second = current.indexOf(find, first + find.length)
-    if (second !== -1) {
-      return {
-        ok: false,
-        code: 'AMBIGUOUS',
-        error: `Replacement ${i + 1}: find text matches multiple times; widen the snippet, set replaceAll, or add earlier replacements to disambiguate.`,
-      }
-    }
-    current =
-      current.slice(0, first) + op.replace + current.slice(first + find.length)
+  const result: ApplyTextPatchesResult = applyTextPatches(
+    markdown,
+    replacements,
+  )
+  if (!result.ok) {
+    return result
   }
-
-  return { ok: true, markdown: current }
+  return { ok: true, markdown: result.text }
 }

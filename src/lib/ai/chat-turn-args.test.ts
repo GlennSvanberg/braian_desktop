@@ -14,7 +14,7 @@ vi.mock('@/lib/workspace-api', () => ({
 vi.mock('@/lib/ai/mcp-tools', () => ({
   buildMcpTools: vi
     .fn()
-    .mockResolvedValue({ tools: [], warnings: [] }),
+    .mockResolvedValue({ tools: [], warnings: [], serverNames: [] }),
 }))
 
 import {
@@ -177,6 +177,102 @@ describe('buildTanStackChatTurnArgs', () => {
       'call `switch_to_code_agent`, then immediately `__lazy__tool__discovery__`',
     )
     expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
+  })
+
+  it('code mode includes shell, search, and patch tools eagerly', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: null,
+        agentMode: 'code',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const shell = r.toolsDisplay.find((t) => t.name === 'run_workspace_shell')
+    expect(shell).toBeDefined()
+    expect(shell?.lazy).toBeUndefined()
+
+    const search = r.toolsDisplay.find((t) => t.name === 'search_workspace')
+    expect(search).toBeDefined()
+    expect(search?.lazy).toBeUndefined()
+
+    const patch = r.toolsDisplay.find((t) => t.name === 'patch_workspace_file')
+    expect(patch).toBeDefined()
+    expect(patch?.lazy).toBeUndefined()
+  })
+
+  it('document mode has shell, search, and patch tools as lazy', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: null,
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const shell = r.toolsDisplay.find((t) => t.name === 'run_workspace_shell')
+    expect(shell?.lazy).toBe(true)
+
+    const search = r.toolsDisplay.find((t) => t.name === 'search_workspace')
+    expect(search?.lazy).toBe(true)
+
+    const patch = r.toolsDisplay.find((t) => t.name === 'patch_workspace_file')
+    expect(patch?.lazy).toBe(true)
+  })
+
+  it('code mode routing includes tool selection guide', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: null,
+        agentMode: 'code',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const routing = r.systemSections.find((s) => s.id === 'routing-code')
+    expect(routing?.text).toContain('search_workspace')
+    expect(routing?.text).toContain('patch_workspace_file')
+    expect(routing?.text).toContain('run_workspace_shell')
+    expect(routing?.text).toContain('Tool selection guide')
+  })
+
+  it('canvas tools include tabular and visual when conversationId is set', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'apply_tabular_canvas'),
+    ).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'apply_visual_canvas'),
+    ).toBe(true)
+  })
+
+  it('code mode maxIterations is 40 base', async () => {
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: null,
+        agentMode: 'code',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.maxIterations).toBe(40)
   })
 
   it('appends user message to prior messages', async () => {

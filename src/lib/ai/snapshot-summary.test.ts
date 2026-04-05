@@ -83,6 +83,22 @@ describe('deriveSnapshotSummary', () => {
     expect(deriveSnapshotSummary(snap).attachedFilesCount).toBe(2)
   })
 
+  it('counts attached chats by PRIOR CONVERSATION markers', () => {
+    const snap = makeSnap({
+      systemSections: [
+        {
+          id: 'context-prior-conversations',
+          label: 'Chats',
+          source: 'test',
+          text:
+            '--- PRIOR CONVERSATION: A (id: x) ---\nhi\n--- END PRIOR CONVERSATION ---\n--- PRIOR CONVERSATION: B (id: y) ---\nbye\n--- END PRIOR CONVERSATION ---',
+        },
+      ],
+    })
+    expect(deriveSnapshotSummary(snap).attachedChatsCount).toBe(2)
+    expect(deriveSnapshotSummary(makeSnap()).attachedChatsCount).toBe(0)
+  })
+
   it('sections grouped by model-context-section-meta', () => {
     const snap = makeSnap({
       systemSections: [

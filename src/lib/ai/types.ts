@@ -36,6 +36,14 @@ export type ContextFileForModel = {
   fileTruncated?: boolean
 }
 
+/** Resolved transcript from another conversation passed to the model this turn. */
+export type ContextPriorConversationForModel = {
+  conversationId: string
+  title: string
+  text: string
+  truncated?: boolean
+}
+
 export type ChatTurnKind = 'default' | 'profile'
 
 export type ChatTurnContext = {
@@ -55,6 +63,8 @@ export type ChatTurnContext = {
   documentCanvasSnapshot?: DocumentCanvasSnapshot | null
   /** Workspace files loaded for this user turn (paths relative to workspace root). */
   contextFiles?: ContextFileForModel[]
+  /** Other saved conversations (full thread text) loaded for this user turn. */
+  contextPriorConversations?: ContextPriorConversationForModel[]
 }
 
 export type PriorChatMessage = {

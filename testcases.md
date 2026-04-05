@@ -140,6 +140,86 @@ These cases describe what Braian Desktop’s chat **should** do given the featur
 
 ---
 
+## 6. Shell command execution (medium — code mode + shell tool)
+
+**Goal:** Run shell commands with pipes, chaining, and environment variables under the workspace.
+
+**Preconditions**
+
+- Saved chat, **Code** mode (or model auto-switches via `switch_to_code_agent`).
+- Desktop app (Tauri runtime).
+
+**User actions**
+
+1. Ask: "Install pandas and create a quick script to plot sales data."
+
+**Expected behavior**
+
+1. The model uses **`run_workspace_shell`** for shell one-liners like `pip install pandas openpyxl` or `npm install`.
+2. Shell commands run via `cmd.exe /C` (Windows) or `sh -c` (Unix) with cwd under workspace root.
+3. For script creation, the model uses **`write_workspace_file`** or **`patch_workspace_file`** to write the script, then **`run_workspace_shell`** or **`run_workspace_command`** to execute it.
+4. Stdout/stderr are reported honestly; timeouts are handled gracefully.
+
+**Limitations / notes**
+
+- Shell commands can reference paths outside the workspace (cwd is the only boundary).
+- Network access is allowed (e.g. `pip install`, `npm install`, `git clone`).
+- No interactive shell; commands must complete without user input.
+
+---
+
+## 7. Search + patch workflow (medium — code mode)
+
+**Goal:** Find code by content and make targeted edits without full-file rewrites.
+
+**Preconditions**
+
+- Saved or unsaved chat with a workspace, **Code** mode.
+
+**User actions**
+
+1. Ask: "Find all uses of `oldFunctionName` and rename it to `newFunctionName`."
+
+**Expected behavior**
+
+1. The model calls **`search_workspace`** with query `oldFunctionName` to find all files and line numbers.
+2. For each file with matches, the model calls **`patch_workspace_file`** with `find`/`replace` steps (using `replaceAll: true` for the rename).
+3. The model reports which files were updated and how many replacements were made.
+4. If `search_workspace` returns truncated results (>200 matches), the model notes the truncation and suggests narrowing the search.
+
+**Limitations / notes**
+
+- `search_workspace` is plain text matching (escaped as regex), not semantic search.
+- `patch_workspace_file` requires exact string matches; ambiguous matches return an error with guidance.
+
+---
+
+## 8. Tabular and visual canvas (medium — canvas tools)
+
+**Goal:** Display structured data or images in the side-panel canvas.
+
+**Preconditions**
+
+- Saved chat (so canvas tools are available).
+
+**User actions**
+
+1. Ask: "Show me a summary table of the top 10 products by revenue."
+2. Or: "Display this chart image in the canvas."
+
+**Expected behavior**
+
+1. For tabular data, the model calls **`apply_tabular_canvas`** with `columns` and `rows` matching the data.
+2. For images/visuals, the model calls **`apply_visual_canvas`** with `imageSrc`, `title`, and `alt`.
+3. The side panel updates to show the table or image (replacing previous canvas content).
+
+**Limitations / notes**
+
+- Tabular canvas replaces the entire canvas; there is no patch tool for tabular data.
+- Visual canvas requires an image URL or data URI; the model cannot generate images natively without an image generation skill/MCP.
+
+---
+
 ## Automated alignment (headless CLI)
 
 `npm run test` includes subprocess checks that run `tsx src/cli/braian-ai.ts dump-request` against JSON contexts matching §§1–5 (tool lists and system sections only — no provider calls), plus **workspace skills** sections and tools when `workspaceId` is workspace-scoped (catalog text reflects Node’s non-Tauri load). See [`src/cli/braian-ai.testcases.integration.test.ts`](src/cli/braian-ai.testcases.integration.test.ts). **§5** full behavior (real `MEMORY.md` on disk) is additionally covered with a mocked file read in [`src/lib/ai/chat-turn-args.test.ts`](src/lib/ai/chat-turn-args.test.ts) (`testcases.md §5`).
@@ -152,11 +232,15 @@ These cases describe what Braian Desktop’s chat **should** do given the featur
 |------|------------------------|
 | Triage vs code agent prompts | `src/lib/ai/tanstack-chat-stream.ts` |
 | `open_document_canvas` → disk + panel | `src/lib/ai/canvas-tools.ts`, Tauri `canvas_document_write` |
-| Workspace read/write/list/run | `src/lib/ai/coding-tools.ts` → `src/lib/workspace-api.ts` / Tauri |
+| Workspace read/write/list/run/shell/search/patch | `src/lib/ai/coding-tools.ts` → `src/lib/workspace-api.ts` / Tauri |
+| Shell execution (Rust) | `src-tauri/src/workspace_agent.rs` (`workspace_run_shell`) |
+| Text search (Rust) | `src-tauri/src/workspace_files.rs` (`workspace_search_text`) |
+| Patch logic (shared) | `src/lib/ai/text-patches.ts` (used by both canvas patch and file patch) |
 | Switch to code + lazy discovery | `src/lib/ai/switch-code-agent-tool.ts` |
 | Stream chunks → UI | `src/lib/ai/types.ts`, `src/lib/chat-sessions/store.ts` |
 | Panel rendering | `src/components/app/artifact-panel.tsx` |
 | Attach + reveal files | `src/components/app/workspace-files-panel.tsx` |
-| Artifact shapes (document / tabular / visual) | `src/lib/artifacts/types.ts` — **live LLM path today emits document canvas via tool**; tabular/visual are mainly mock/placeholder flows unless extended |
+| Artifact shapes (document / tabular / visual) | `src/lib/artifacts/types.ts` |
+| Tabular + visual canvas tools | `src/lib/ai/canvas-tools.ts` (`apply_tabular_canvas`, `apply_visual_canvas`) |
 
 When a testcase and the product disagree, treat the testcase as the **desired** behavior and either fix the app or adjust this file after intentional changes.
