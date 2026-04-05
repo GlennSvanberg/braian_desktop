@@ -11,6 +11,7 @@ import type { ChatStreamChunk } from '@/lib/ai/types'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
+import { workspaceMcpSessionsDisconnect } from '@/lib/mcp-runtime-api'
 import { isTauri } from '@/lib/tauri-env'
 import type { AgentMode } from '@/lib/workspace-api'
 
@@ -608,6 +609,18 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         }))
       }
     } finally {
+      try {
+        const { workspaceId: mcpWsId } = parseChatSessionKey(sessionKey)
+        if (
+          isTauri() &&
+          !isUserProfileSessionId(mcpWsId) &&
+          !isDetachedWorkspaceSessionId(mcpWsId)
+        ) {
+          await workspaceMcpSessionsDisconnect(mcpWsId)
+        }
+      } catch (e) {
+        console.error('[braian] MCP session cleanup', e)
+      }
       if (abortBySession.get(sessionKey) === ac) {
         abortBySession.delete(sessionKey)
       }

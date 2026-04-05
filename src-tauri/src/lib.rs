@@ -5,6 +5,10 @@ mod workspace;
 mod workspace_agent;
 mod workspace_files;
 mod workspace_mcp_config;
+mod workspace_mcp_http;
+mod workspace_mcp_runtime;
+mod workspace_mcp_stdio;
+mod workspace_mcp_probe;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -56,6 +60,10 @@ pub fn run() {
       ai_settings::ai_settings_set,
       workspace_mcp_config::workspace_mcp_config_get,
       workspace_mcp_config::workspace_mcp_config_set,
+      workspace_mcp_probe::workspace_mcp_probe_connection,
+      workspace_mcp_runtime::workspace_mcp_list_tools,
+      workspace_mcp_runtime::workspace_mcp_call_tool,
+      workspace_mcp_runtime::workspace_mcp_sessions_disconnect,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

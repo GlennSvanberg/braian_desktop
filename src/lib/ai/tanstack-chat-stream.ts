@@ -4,9 +4,13 @@ import {
   type AnyTextAdapter,
 } from '@tanstack/ai'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
+import type { AiSettingsDto } from '@/lib/ai-settings-api'
 import { isTauri } from '@/lib/tauri-env'
 
-import { buildTanStackChatTurnArgs } from './chat-turn-args'
+import {
+  buildTanStackChatTurnArgs,
+  type BuildTanStackChatTurnArgsResult,
+} from './chat-turn-args'
 import { buildChatAdapter, resolveFetch } from './chat-adapter'
 import type {
   ChatStreamChunk,
@@ -27,18 +31,7 @@ function braianArtifactFromCustomValue(
   }
 }
 
-export async function* streamTanStackChatTurn(
-  userText: string,
-  signal: AbortSignal | undefined,
-  context: ChatTurnContext | undefined,
-  priorMessages: PriorChatMessage[] | undefined,
-): AsyncGenerator<ChatStreamChunk> {
-  if (!isTauri()) {
-    throw new Error(
-      'AI chat requires the Braian desktop app so requests can reach providers without browser CORS limits. Run `npm run tauri:dev`, or use mock mode in dev: localStorage.setItem("braian.mockAi","1").',
-    )
-  }
-
+function mergeAbortParent(signal: AbortSignal | undefined): AbortController {
   const ac = new AbortController()
   if (signal) {
     if (signal.aborted) {
@@ -49,13 +42,25 @@ export async function* streamTanStackChatTurn(
       })
     }
   }
+  return ac
+}
 
-  const args = await buildTanStackChatTurnArgs({
-    userText,
-    context,
-    priorMessages,
-    skipSettingsValidation: false,
-  })
+export type IterateTanStackFromArgsOptions = {
+  /** Omit tools and agent loop (Node CLI / evaluation without Tauri tool execution). */
+  stripTools?: boolean
+}
+
+/**
+ * Runs TanStack `chat()` for already-built turn args. Shared by the desktop stream and headless CLI.
+ */
+export async function* iterateTanStackFromArgs(
+  args: BuildTanStackChatTurnArgsResult,
+  ac: AbortController,
+  options?: IterateTanStackFromArgsOptions,
+): AsyncGenerator<ChatStreamChunk> {
+  const stripTools = options?.stripTools === true
+  const tools = stripTools ? [] : args.tools
+  const agentLoopCap = stripTools ? null : args.maxIterations
 
   const fetchImpl = resolveFetch(args.provider)
 
@@ -71,11 +76,9 @@ export async function* streamTanStackChatTurn(
     systemPrompts: args.systemPrompts,
     abortController: ac,
     conversationId: args.conversationId,
-    tools: args.tools.length > 0 ? args.tools : undefined,
+    tools: tools.length > 0 ? tools : undefined,
     agentLoopStrategy:
-      args.maxIterations != null
-        ? maxIterations(args.maxIterations)
-        : undefined,
+      agentLoopCap != null ? maxIterations(agentLoopCap) : undefined,
   })
 
   try {
@@ -137,4 +140,59 @@ export async function* streamTanStackChatTurn(
   }
 
   yield { type: 'done' }
+}
+
+export async function* streamTanStackChatTurn(
+  userText: string,
+  signal: AbortSignal | undefined,
+  context: ChatTurnContext | undefined,
+  priorMessages: PriorChatMessage[] | undefined,
+): AsyncGenerator<ChatStreamChunk> {
+  if (!isTauri()) {
+    throw new Error(
+      'AI chat requires the Braian desktop app so requests can reach providers without browser CORS limits. Run `npm run tauri:dev`, or use mock mode in dev: localStorage.setItem("braian.mockAi","1").',
+    )
+  }
+
+  const ac = mergeAbortParent(signal)
+
+  const args = await buildTanStackChatTurnArgs({
+    userText,
+    context,
+    priorMessages,
+    skipSettingsValidation: false,
+  })
+
+  yield* iterateTanStackFromArgs(args, ac)
+}
+
+export type StreamTanStackChatTurnHeadlessOptions = {
+  skipSettingsValidation?: boolean
+  /** Default true: workspace tools need Tauri; stripping avoids failed invoke calls in Node. */
+  noTools?: boolean
+}
+
+/**
+ * Same pipeline as the desktop app, for Node-based evaluation (CLI). Requires explicit settings (no SQLite / localStorage).
+ */
+export async function* streamTanStackChatTurnHeadless(
+  userText: string,
+  signal: AbortSignal | undefined,
+  context: ChatTurnContext | undefined,
+  priorMessages: PriorChatMessage[] | undefined,
+  settings: AiSettingsDto,
+  options?: StreamTanStackChatTurnHeadlessOptions,
+): AsyncGenerator<ChatStreamChunk> {
+  const ac = mergeAbortParent(signal)
+  const noTools = options?.noTools !== false
+
+  const args = await buildTanStackChatTurnArgs({
+    userText,
+    context,
+    priorMessages,
+    settings,
+    skipSettingsValidation: options?.skipSettingsValidation === true,
+  })
+
+  yield* iterateTanStackFromArgs(args, ac, { stripTools: noTools })
 }

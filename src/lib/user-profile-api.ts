@@ -66,8 +66,16 @@ function isEmptyProfile(p: UserProfileDto): boolean {
   )
 }
 
+function localStorageUsable(): boolean {
+  return (
+    typeof localStorage !== 'undefined' &&
+    typeof localStorage.getItem === 'function' &&
+    typeof localStorage.setItem === 'function'
+  )
+}
+
 function readLocal(): UserProfileDto {
-  if (typeof localStorage === 'undefined') return EMPTY_PROFILE
+  if (!localStorageUsable()) return EMPTY_PROFILE
   const raw = localStorage.getItem(LS_KEY)
   try {
     if (readCacheLsRaw !== false && raw === readCacheLsRaw) {
@@ -90,7 +98,7 @@ function readLocal(): UserProfileDto {
 }
 
 function writeLocal(p: UserProfileDto) {
-  if (typeof localStorage === 'undefined') return
+  if (!localStorageUsable()) return
   localStorage.setItem(LS_KEY, JSON.stringify(p))
 }
 

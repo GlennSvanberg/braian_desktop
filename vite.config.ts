@@ -8,6 +8,9 @@ import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  test: {
+    environment: 'node',
+  },
   clearScreen: false,
   server: {
     port: 3000,

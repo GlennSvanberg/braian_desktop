@@ -31,6 +31,7 @@ import { buildCanvasTools } from './canvas-tools'
 import { buildCodingTools } from './coding-tools'
 import { buildDashboardTools } from './dashboard-tools'
 import { isMockAiMode } from './mock-mode'
+import { buildMcpTools } from './mcp-tools'
 import { buildSkillTools } from './skill-tools'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
@@ -202,6 +203,7 @@ export function documentCanvasSnapshotPrompt(
 }
 
 function toolSourceModule(name: string): string {
+  if (name.startsWith('mcp__')) return 'src/lib/ai/mcp-tools.ts'
   return TOOL_SOURCE_BY_NAME[name] ?? '@tanstack/ai'
 }
 
@@ -339,6 +341,10 @@ export async function buildTanStackChatTurnArgs(
   const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
   const dashboardTools = buildDashboardTools(ctx)
   const skillTools = buildSkillTools(ctx)
+  const { tools: mcpTools, warnings: mcpWarnings } = await buildMcpTools(ctx)
+  for (const w of mcpWarnings) {
+    settingsWarnings.push(w)
+  }
   const tools: Tool[] = [
     ...canvasTools,
     ...codingTools,
@@ -346,6 +352,7 @@ export async function buildTanStackChatTurnArgs(
     ...(switchToCodeTool ? [switchToCodeTool] : []),
     ...(switchToAppTool ? [switchToAppTool] : []),
     ...dashboardTools,
+    ...mcpTools,
   ]
 
   const memoryBlock =
@@ -469,11 +476,17 @@ export async function buildTanStackChatTurnArgs(
 
   const maxIterations =
     tools.length > 0
-      ? isCodeMode
-        ? 32
-        : dashboardTools.length > 0
-          ? 28
-          : 24
+      ? (() => {
+          let base = isCodeMode
+            ? 32
+            : dashboardTools.length > 0
+              ? 28
+              : 24
+          if (mcpTools.length > 0) {
+            base = Math.min(base + 8, 40)
+          }
+          return base
+        })()
       : null
 
   return {

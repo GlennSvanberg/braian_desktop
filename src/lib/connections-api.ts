@@ -64,3 +64,36 @@ export async function workspaceMcpConfigSet(
     config: documentToDto(config),
   })
 }
+
+export type McpToolProbeSummary = {
+  name: string
+  description?: string | null
+}
+
+export type McpConnectionProbeResult = {
+  ok: boolean
+  toolCount: number | null
+  errorMessage: string | null
+  transport: string
+  /** Names (and optional descriptions) from a real MCP `tools/list` handshake. */
+  tools?: McpToolProbeSummary[]
+}
+
+/** Runs a short MCP handshake (stdio) or HTTP GET (remote). Desktop only. */
+export async function workspaceMcpProbeConnection(
+  workspaceId: string,
+  serverName: string,
+): Promise<McpConnectionProbeResult> {
+  if (!isTauri()) {
+    return {
+      ok: false,
+      toolCount: null,
+      errorMessage: 'Connection checks run only in the desktop app.',
+      transport: 'unknown',
+    }
+  }
+  return invoke<McpConnectionProbeResult>('workspace_mcp_probe_connection', {
+    workspaceId,
+    serverName,
+  })
+}

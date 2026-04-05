@@ -11,12 +11,20 @@ vi.mock('@/lib/workspace-api', () => ({
   workspaceListDir: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock('@/lib/ai/mcp-tools', () => ({
+  buildMcpTools: vi
+    .fn()
+    .mockResolvedValue({ tools: [], warnings: [] }),
+}))
+
 import {
   buildTanStackChatTurnArgs,
   PROFILE_COACH_SYSTEM,
 } from '@/lib/ai/chat-turn-args'
+import { MEMORY_RELATIVE_PATH } from '@/lib/memory/constants'
 import { USER_PROFILE_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { aiSettingsGet } from '@/lib/ai-settings-api'
+import { workspaceReadTextFile } from '@/lib/workspace-api'
 
 const validSettings = {
   provider: 'openai' as const,
@@ -248,6 +256,35 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'list_workspace_skills'),
     ).toBe(false)
+  })
+
+  it('testcases.md §5: injects workspace memory when MEMORY.md is readable', async () => {
+    vi.mocked(workspaceReadTextFile).mockImplementation(
+      async (_ws: string, rel: string) => {
+        if (rel === MEMORY_RELATIVE_PATH) {
+          return {
+            text: 'Always call the product **WidgetPro**, never Acme.',
+            truncated: false,
+          }
+        }
+        throw new Error('no file')
+      },
+    )
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'What is our product called?',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    const mem = r.systemSections.find((s) => s.id === 'memory')
+    expect(mem).toBeDefined()
+    expect(mem?.text).toMatch(/WidgetPro/)
+    vi.mocked(workspaceReadTextFile).mockReset()
+    vi.mocked(workspaceReadTextFile).mockRejectedValue(new Error('no file'))
   })
 
   it('omits dashboard tools for user profile workspace id even if harness on', async () => {

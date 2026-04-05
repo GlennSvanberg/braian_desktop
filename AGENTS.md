@@ -32,6 +32,7 @@ There is **no** Convex/cloud backend in this repo yet.
 - **Desktop:** `npm run tauri:dev` (or `npx tauri dev`) — runs `beforeDevCommand` (`npm run dev`) and opens the WebView to `http://localhost:3000`.
 - **Production web build:** `npm run build` — static client assets for Tauri live in **`dist/client/`** (`src-tauri/tauri.conf.json` → `build.frontendDist`). (Some TanStack Start versions emit `.output/public` instead; if you upgrade and the path changes, update `frontendDist` to match.)
 - **Desktop release build:** `npm run tauri:build`.
+- **Tests:** `npm run test` (Vitest). **Headless AI evaluation** (`ai:dump`, `ai:stream`) and how they map to manual QA live in [`TESTING.md`](TESTING.md); chat scenarios are listed in [`testcases.md`](testcases.md).
 
 ## Styling contract
 

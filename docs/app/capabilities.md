@@ -5,6 +5,7 @@
 - **Workspace scope:** File access and commands are limited to the **active workspace** folder. The assistant cannot browse arbitrary paths on your PC outside that root.
 - **Attachments:** When you attach or reference workspace files, the app may include excerpts in context; large files can be truncated.
 - **In-app dashboard:** Tiles and pages are **data files** in the workspace (`.braian/dashboard/`). They are not a public site and do not run arbitrary HTML or scripts as a full browser would. See [Dashboard & in-app pages](/docs/dashboard).
+- **Connections (MCP):** Optional **Model Context Protocol** servers are listed per workspace in **`.braian/mcp.json`** (Cursor-compatible `mcpServers`). The UI can **probe** stdio or remote entries for a quick health check; attaching those tools to chat is separate from built-in workspace tools. See [Connections (MCP)](/docs/mcp).
 
 ## What the assistant can and cannot do
 
@@ -24,4 +25,5 @@
 - [Model context](/docs/model-context)
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Tools](/docs/tools)
+- [Connections (MCP)](/docs/mcp)
 - [Memory](/docs/memory)

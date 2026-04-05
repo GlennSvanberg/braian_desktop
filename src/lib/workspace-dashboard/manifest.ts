@@ -1,5 +1,3 @@
-import { z } from 'zod'
-
 import {
   DASHBOARD_BOARD_RELATIVE_PATH,
   DASHBOARD_PAGES_DIR_RELATIVE_PATH,
@@ -134,12 +132,12 @@ export async function listWorkspaceDashboardPageIds(
 /** Validate manifest shape from unknown (e.g. tool args). */
 export function safeParseDashboardManifest(
   input: unknown,
-): z.SafeParseReturnType<unknown, DashboardManifest> {
+): ReturnType<typeof dashboardManifestSchema.safeParse> {
   return dashboardManifestSchema.safeParse(input)
 }
 
 export function safeParseWorkspacePage(
   input: unknown,
-): z.SafeParseReturnType<unknown, WorkspacePage> {
+): ReturnType<typeof workspacePageSchema.safeParse> {
   return workspacePageSchema.safeParse(input)
 }

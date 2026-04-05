@@ -2,8 +2,8 @@
 export function isMockAiMode(): boolean {
   try {
     return (
-      import.meta.env.DEV &&
-      typeof globalThis.localStorage !== 'undefined' &&
+      import.meta.env?.DEV === true &&
+      typeof globalThis.localStorage?.getItem === 'function' &&
       globalThis.localStorage.getItem('braian.mockAi') === '1'
     )
   } catch {

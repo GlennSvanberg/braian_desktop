@@ -42,6 +42,7 @@ See [Tools](/docs/tools) for a short summary of those tools.
 
 - [Overview](/docs/overview)
 - [Tools](/docs/tools)
+- [Connections (MCP)](/docs/mcp) — workspace `.braian/mcp.json` (not yet merged into this prompt pipeline)
 - [Memory](/docs/memory)
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Capabilities](/docs/capabilities)

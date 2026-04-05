@@ -11,6 +11,8 @@ export const BRAIAN_ROUTING_TREE = `## Braian routing (follow in order)
 
 5. **Workspace skills** (see **Skills catalog** below): when a skill’s description fits the task, call \`read_workspace_skill\` **before** acting on that domain. To **create or change** skills under \`.braian/skills/\`, follow the **create-skill** section (always injected below).
 
+5b. **Connections (MCP)** — tools whose names start with \`mcp__\` come from workspace **Connections** (stdio or remote). Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.
+
 6. **Unsaved chat**: if \`open_document_canvas\` is not in this turn, tell the user saving the conversation enables the side-panel document workflow; you may still use other available tools.
 
 7. **Honesty**: use only tools that appear in this turn (or that you unlock via switch + discovery). Do not claim access you do not have.`

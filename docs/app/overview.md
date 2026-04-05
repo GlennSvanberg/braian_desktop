@@ -23,5 +23,6 @@ Some assistant actions only work after the conversation is **saved** (a real thr
 - [Model context](/docs/model-context) — how prompts, skills, and profile are assembled each turn
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Tools the assistant can use](/docs/tools)
+- [Connections (MCP)](/docs/mcp) — `.braian/mcp.json`, Cursor-style servers, status checks
 - [Workspace memory](/docs/memory)
 - [Capabilities and limits](/docs/capabilities)

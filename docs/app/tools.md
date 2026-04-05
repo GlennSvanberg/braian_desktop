@@ -2,6 +2,8 @@ The model only has the abilities the app gives it through **tools**. If it has n
 
 How instructions and tool lists are combined each turn—including **routing**, **skills**, and **user profile**—is described in [Model context](/docs/model-context).
 
+**Workspace MCP connections** (sidebar **Connections**, file `.braian/mcp.json`) are **not** the same as these built-in tools: they configure external MCP servers for future integration and for **status checks** today. See [Connections (MCP)](/docs/mcp).
+
 ## Document canvas (`open_document_canvas`)
 
 When your chat is **saved**, the assistant can write the **document canvas** (side panel markdown) to disk and refresh the UI. It should send the **full** document content each time, merging your latest edits with what you asked for.
@@ -60,5 +62,6 @@ The assistant should read before overwriting and merge carefully so tiles are no
 - [Model context](/docs/model-context)
 - [Overview](/docs/overview)
 - [Dashboard & in-app pages](/docs/dashboard)
+- [Connections (MCP)](/docs/mcp)
 - [Memory](/docs/memory)
 - [Capabilities](/docs/capabilities)

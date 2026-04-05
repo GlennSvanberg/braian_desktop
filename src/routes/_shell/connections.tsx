@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Copy, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  ChevronDown,
+  Copy,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +25,8 @@ import { useWorkspace } from '@/components/app/workspace-context'
 import {
   workspaceMcpConfigGet,
   workspaceMcpConfigSet,
+  workspaceMcpProbeConnection,
+  type McpToolProbeSummary,
 } from '@/lib/connections-api'
 import {
   disabledSetFromDoc,
@@ -28,12 +38,24 @@ import {
   type WorkspaceMcpConfigDocument,
 } from '@/lib/mcp-config-types'
 import { isTauri } from '@/lib/tauri-env'
+import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_shell/connections')({
   component: ConnectionsPage,
 })
 
 type ConnKind = 'stdio' | 'remote'
+
+type ConnectionProbeUiState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | {
+      kind: 'ok'
+      transport: string
+      toolCount: number | null
+      tools: McpToolProbeSummary[]
+    }
+  | { kind: 'error'; message: string }
 
 type KvRow = { key: string; value: string }
 
@@ -144,6 +166,16 @@ function ConnectionsPage() {
   /** When true, form edits rewrite the JSON panel; when false, JSON is being edited directly. */
   const [syncJsonFromForm, setSyncJsonFromForm] = useState(true)
   const [dialogError, setDialogError] = useState<string | null>(null)
+  const [probeByServer, setProbeByServer] = useState<
+    Record<string, ConnectionProbeUiState>
+  >({})
+  const [probeRefreshing, setProbeRefreshing] = useState(false)
+  const [expandedProbeDetail, setExpandedProbeDetail] = useState<
+    string | null
+  >(null)
+  const [expandedToolsServer, setExpandedToolsServer] = useState<
+    string | null
+  >(null)
 
   const reload = useCallback(async () => {
     if (!tauri || !activeWorkspaceId) {
@@ -167,6 +199,73 @@ function ConnectionsPage() {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  const serverListSignature = useMemo(() => {
+    if (!doc) return ''
+    return JSON.stringify({
+      s: doc.mcpServers,
+      d: doc.braian?.disabledMcpServers ?? [],
+    })
+  }, [doc])
+
+  const runConnectionProbes = useCallback(async () => {
+    if (!tauri || !activeWorkspaceId || !doc) return
+    const names = Object.keys(doc.mcpServers)
+    if (names.length === 0) {
+      setProbeByServer({})
+      return
+    }
+    setProbeRefreshing(true)
+    setProbeByServer(
+      Object.fromEntries(names.map((n) => [n, { kind: 'checking' as const }])),
+    )
+    try {
+      const entries = await Promise.all(
+        names.map(async (name) => {
+          try {
+            const r = await workspaceMcpProbeConnection(
+              activeWorkspaceId,
+              name,
+            )
+            if (r.ok) {
+              return [
+                name,
+                {
+                  kind: 'ok' as const,
+                  transport: r.transport,
+                  toolCount: r.toolCount,
+                  tools: Array.isArray(r.tools) ? r.tools : [],
+                },
+              ] as const
+            }
+            return [
+              name,
+              {
+                kind: 'error' as const,
+                message: r.errorMessage ?? 'Connection check failed.',
+              },
+            ] as const
+          } catch (e) {
+            return [
+              name,
+              {
+                kind: 'error' as const,
+                message: e instanceof Error ? e.message : String(e),
+              },
+            ] as const
+          }
+        }),
+      )
+      setProbeByServer(Object.fromEntries(entries))
+    } finally {
+      setProbeRefreshing(false)
+    }
+  }, [tauri, activeWorkspaceId, doc])
+
+  useEffect(() => {
+    if (!tauri || !activeWorkspaceId || !doc || loading) return
+    void runConnectionProbes()
+  }, [tauri, activeWorkspaceId, loading, serverListSignature, runConnectionProbes])
 
   const persist = useCallback(
     async (next: WorkspaceMcpConfigDocument) => {
@@ -414,7 +513,7 @@ function ConnectionsPage() {
 
   return (
     <div className="bg-background flex min-h-0 flex-1 flex-col overflow-auto p-4 md:p-6">
-      <div className="mx-auto w-full max-w-lg space-y-6">
+      <div className="mx-auto w-full max-w-2xl space-y-6">
         <div>
           <h1 className="text-text-1 text-lg font-semibold tracking-tight">
             Connections
@@ -424,9 +523,11 @@ function ConnectionsPage() {
             in{' '}
             <code className="text-text-2 text-xs">.braian/mcp.json</code> using
             the same <code className="text-text-2 text-xs">mcpServers</code>{' '}
-            shape as Cursor. Tokens in <code className="text-text-2">env</code>{' '}
-            or <code className="text-text-2">headers</code> may be committed if
-            you use Git—avoid secrets in tracked files.
+            shape as Cursor. Status dots run a short handshake (stdio) or HTTP
+            check (remote)—not the full chat integration yet. Tokens in{' '}
+            <code className="text-text-2">env</code> or{' '}
+            <code className="text-text-2">headers</code> may be committed if you
+            use Git—avoid secrets in tracked files.
           </p>
         </div>
 
@@ -476,6 +577,20 @@ function ConnectionsPage() {
                 <Copy className="size-4" aria-hidden />
                 Copy for Cursor
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void runConnectionProbes()}
+                disabled={serverNames.length === 0 || probeRefreshing}
+              >
+                {probeRefreshing ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="size-4" aria-hidden />
+                )}
+                Check status
+              </Button>
             </div>
 
             <div className="border-border space-y-3 rounded-xl border p-4 shadow-sm md:p-5">
@@ -494,65 +609,196 @@ function ConnectionsPage() {
                     const remote = isRemoteServer(entry)
                     const enabled = isServerEnabled(name, doc)
                     const busy = toggleBusy === name
+                    const probe = probeByServer[name] ?? { kind: 'idle' as const }
+                    const initial = name.slice(0, 1).toUpperCase()
+                    const detailOpen = expandedProbeDetail === name
                     return (
                       <li
                         key={name}
-                        className="border-border flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                        className="border-border rounded-lg border p-3"
                       >
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-text-1 font-medium">
-                              {name}
-                            </span>
-                            <Badge variant="secondary">
-                              {remote ? 'Remote' : 'Stdio'}
-                            </Badge>
-                          </div>
-                          <p className="text-text-3 font-mono text-xs break-all">
-                            {serverSummaryLine(name, entry)}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <label className="text-text-2 flex cursor-pointer items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              className="border-border text-accent-600 size-4 shrink-0 rounded"
-                              checked={enabled}
-                              disabled={busy || saving}
-                              onChange={(e) =>
-                                void onToggle(name, e.target.checked)
+                        <div className="flex gap-3 sm:items-start">
+                          <div className="relative shrink-0">
+                            <div
+                              className="bg-muted text-text-1 flex size-10 items-center justify-center rounded-lg text-sm font-semibold"
+                              aria-hidden
+                            >
+                              {initial}
+                            </div>
+                            <span
+                              className={cn(
+                                'border-background absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2',
+                                probe.kind === 'checking' || probe.kind === 'idle'
+                                  ? 'bg-muted-foreground animate-pulse'
+                                  : probe.kind === 'ok'
+                                    ? 'bg-[var(--color-success)]'
+                                    : 'bg-destructive',
+                              )}
+                              title={
+                                probe.kind === 'ok'
+                                  ? 'Reachable'
+                                  : probe.kind === 'error'
+                                    ? 'Error'
+                                    : probe.kind === 'checking'
+                                      ? 'Checking…'
+                                      : 'Not checked yet'
                               }
                             />
-                            <span>{enabled ? 'On' : 'Off'}</span>
-                          </label>
-                          {busy ? (
-                            <Loader2
-                              className="text-text-3 size-4 animate-spin"
-                              aria-label="Saving"
-                            />
-                          ) : null}
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="size-8"
-                            aria-label={`Edit ${name}`}
-                            onClick={() => openEdit(name, entry)}
-                            disabled={saving}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="text-destructive size-8"
-                            aria-label={`Remove ${name}`}
-                            onClick={() => void removeServer(name)}
-                            disabled={saving}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-text-1 font-medium">
+                                {name}
+                              </span>
+                              <Badge variant="secondary">
+                                {remote ? 'Remote' : 'Stdio'}
+                              </Badge>
+                              {!enabled ? (
+                                <Badge variant="outline">Off in Braian</Badge>
+                              ) : null}
+                            </div>
+                            {probe.kind === 'ok' ? (
+                              <div className="space-y-2">
+                                <p className="text-text-3 text-sm">
+                                  {typeof probe.toolCount === 'number' ? (
+                                    <>
+                                      {probe.toolCount}{' '}
+                                      {probe.toolCount === 1
+                                        ? 'tool'
+                                        : 'tools'}{' '}
+                                      discovered
+                                    </>
+                                  ) : (
+                                    <>Connected (no tool list)</>
+                                  )}
+                                </p>
+                                {probe.tools.length > 0 ? (
+                                  <div>
+                                    <button
+                                      type="button"
+                                      className="text-text-3 hover:text-text-1 inline-flex items-center gap-1 text-sm underline-offset-2 hover:underline"
+                                      onClick={() =>
+                                        setExpandedToolsServer((x) =>
+                                          x === name ? null : name,
+                                        )
+                                      }
+                                    >
+                                      Show tool names
+                                      <ChevronDown
+                                        className={cn(
+                                          'size-4 transition-transform',
+                                          expandedToolsServer === name
+                                            ? 'rotate-180'
+                                            : '',
+                                        )}
+                                        aria-hidden
+                                      />
+                                    </button>
+                                    {expandedToolsServer === name ? (
+                                      <ul className="border-border mt-2 max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border py-2 pr-2 pl-5 text-sm">
+                                        {probe.tools.map((t) => (
+                                          <li
+                                            key={t.name}
+                                            className="text-text-2 marker:text-text-3"
+                                          >
+                                            <span className="text-text-1 font-medium">
+                                              {t.name}
+                                            </span>
+                                            {t.description?.trim() ? (
+                                              <span className="text-text-3 block text-xs">
+                                                {t.description.trim()}
+                                              </span>
+                                            ) : null}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : probe.kind === 'error' ? (
+                              <div className="space-y-1">
+                                <button
+                                  type="button"
+                                  className="text-text-3 hover:text-text-1 inline-flex items-center gap-1 text-sm underline-offset-2 hover:underline"
+                                  onClick={() =>
+                                    setExpandedProbeDetail((x) =>
+                                      x === name ? null : name,
+                                    )
+                                  }
+                                >
+                                  Error — Show output
+                                  <ChevronDown
+                                    className={cn(
+                                      'size-4 transition-transform',
+                                      detailOpen ? 'rotate-180' : '',
+                                    )}
+                                    aria-hidden
+                                  />
+                                </button>
+                                {detailOpen ? (
+                                  <pre className="bg-muted text-text-2 max-h-40 overflow-auto rounded-md p-2 text-xs whitespace-pre-wrap break-all">
+                                    {probe.message}
+                                  </pre>
+                                ) : null}
+                              </div>
+                            ) : probe.kind === 'checking' ? (
+                              <p className="text-text-3 text-sm">
+                                Checking connection…
+                              </p>
+                            ) : (
+                              <p className="text-text-3 text-sm">
+                                Status not loaded yet.
+                              </p>
+                            )}
+                            <p className="text-text-3 font-mono text-xs break-all">
+                              {serverSummaryLine(name, entry)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                            <label className="text-text-2 flex cursor-pointer items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="border-border text-accent-600 size-4 shrink-0 rounded"
+                                checked={enabled}
+                                disabled={busy || saving}
+                                onChange={(e) =>
+                                  void onToggle(name, e.target.checked)
+                                }
+                              />
+                              <span>{enabled ? 'On' : 'Off'}</span>
+                            </label>
+                            {busy ? (
+                              <Loader2
+                                className="text-text-3 size-4 animate-spin"
+                                aria-label="Saving"
+                              />
+                            ) : null}
+                            <div className="flex items-center gap-0.5">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                aria-label={`Edit ${name}`}
+                                onClick={() => openEdit(name, entry)}
+                                disabled={saving}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive size-8"
+                                aria-label={`Remove ${name}`}
+                                onClick={() => void removeServer(name)}
+                                disabled={saving}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       </li>
                     )

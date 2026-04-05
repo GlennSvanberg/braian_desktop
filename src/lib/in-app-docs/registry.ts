@@ -4,6 +4,7 @@ import memoryMd from '../../../docs/app/memory.md?raw'
 import capabilitiesMd from '../../../docs/app/capabilities.md?raw'
 import dashboardMd from '../../../docs/app/dashboard.md?raw'
 import modelContextMd from '../../../docs/app/model-context.md?raw'
+import mcpMd from '../../../docs/app/mcp.md?raw'
 
 export type InAppDocSlug =
   | 'overview'
@@ -12,6 +13,7 @@ export type InAppDocSlug =
   | 'capabilities'
   | 'dashboard'
   | 'model-context'
+  | 'mcp'
 
 export type InAppDocMeta = {
   slug: InAppDocSlug
@@ -39,6 +41,13 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     description:
       'Canvas, workspace files, commands, skills, dashboard, and code-agent tools.',
     body: toolsMd,
+  },
+  {
+    slug: 'mcp',
+    title: 'Connections (MCP)',
+    description:
+      'Per-workspace MCP servers in .braian/mcp.json, Cursor-compatible config, and status checks.',
+    body: mcpMd,
   },
   {
     slug: 'dashboard',
