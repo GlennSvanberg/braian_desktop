@@ -257,16 +257,93 @@ html:not(.light):not(.dark) {
 
 .markdown-document-canvas .mdxeditor {
   --basePageBg: transparent;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * MDXEditor maps toolbar / popover chrome to --base* and --accent* (slate + blue in the package).
+ * Remap to Braian --app-* tokens. `braian-mdx-canvas` is copied onto portaled `.mdxeditor-popup-container`.
+ */
+html.dark .markdown-document-canvas .mdxeditor.braian-mdx-canvas,
+html.dark .mdxeditor-popup-container.braian-mdx-canvas,
+html:not(.light):not(.dark) .markdown-document-canvas .mdxeditor.braian-mdx-canvas,
+html:not(.light):not(.dark) .mdxeditor-popup-container.braian-mdx-canvas {
+  --basePageBg: var(--app-bg-1);
+  --baseBase: var(--app-bg-1);
+  --baseBgSubtle: var(--app-bg-1);
+  --baseBg: var(--app-bg-2);
+  --baseBgHover: color-mix(in srgb, var(--app-text-1) 10%, var(--app-bg-2));
+  --baseBgActive: color-mix(in srgb, var(--app-accent-500) 26%, var(--app-bg-2));
+  --baseLine: var(--app-border);
+  --baseBorder: var(--app-border);
+  --baseBorderHover: var(--app-text-3);
+  --baseSolid: var(--app-text-3);
+  --baseSolidHover: var(--app-text-2);
+  --baseText: var(--app-text-3);
+  --baseTextContrast: var(--app-text-2);
+
+  --accentBase: color-mix(in srgb, var(--app-accent-500) 12%, var(--app-bg-0));
+  --accentBgSubtle: color-mix(in srgb, var(--app-accent-500) 14%, var(--app-bg-1));
+  --accentBg: color-mix(in srgb, var(--app-accent-500) 20%, var(--app-bg-2));
+  --accentBgHover: color-mix(in srgb, var(--app-accent-500) 30%, var(--app-bg-2));
+  --accentBgActive: color-mix(in srgb, var(--app-accent-500) 38%, var(--app-bg-2));
+  --accentLine: var(--app-accent-600);
+  --accentBorder: var(--app-accent-600);
+  --accentBorderHover: var(--app-accent-500);
+  --accentSolid: var(--app-accent-500);
+  --accentSolidHover: var(--app-accent-600);
+  --accentText: var(--app-accent-200);
+  --accentTextContrast: var(--sidebar-primary-foreground);
+}
+
+html.light .markdown-document-canvas .mdxeditor.braian-mdx-canvas,
+html.light .mdxeditor-popup-container.braian-mdx-canvas {
+  --basePageBg: var(--app-bg-1);
+  --baseBase: var(--app-bg-0);
+  --baseBgSubtle: var(--app-muted);
+  --baseBg: var(--app-bg-2);
+  --baseBgHover: color-mix(in srgb, var(--app-text-1) 6%, var(--app-bg-2));
+  --baseBgActive: color-mix(in srgb, var(--app-accent-500) 16%, var(--app-bg-2));
+  --baseLine: var(--app-border);
+  --baseBorder: var(--app-border);
+  --baseBorderHover: var(--app-text-3);
+  --baseSolid: var(--app-text-3);
+  --baseSolidHover: var(--app-text-2);
+  --baseText: var(--app-text-3);
+  --baseTextContrast: var(--app-text-2);
+
+  --accentBase: color-mix(in srgb, var(--app-accent-500) 10%, var(--app-bg-0));
+  --accentBgSubtle: var(--app-accent-200);
+  --accentBg: color-mix(in srgb, var(--app-accent-500) 22%, var(--app-bg-2));
+  --accentBgHover: color-mix(in srgb, var(--app-accent-500) 32%, var(--app-bg-2));
+  --accentBgActive: color-mix(in srgb, var(--app-accent-500) 40%, var(--app-bg-2));
+  --accentLine: var(--app-accent-600);
+  --accentBorder: var(--app-accent-600);
+  --accentBorderHover: var(--app-accent-500);
+  --accentSolid: var(--app-accent-500);
+  --accentSolidHover: var(--app-accent-600);
+  --accentText: var(--app-accent-700);
+  --accentTextContrast: var(--sidebar-primary-foreground);
+}
+
+/* Scroll only the document; keep toolbar as artifact footer (not in scroll flow). */
+.markdown-document-canvas .mdxeditor-root-contenteditable {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .markdown-document-canvas .mdxeditor-toolbar {
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
+  position: relative;
+  top: auto;
   z-index: 20;
-  background: var(--app-bg-0);
+  background: var(--app-bg-2);
   border-top: 1px solid var(--app-border);
   border-bottom: none !important;
-  margin-top: auto;
   padding: 0.5rem 1rem;
 }
 

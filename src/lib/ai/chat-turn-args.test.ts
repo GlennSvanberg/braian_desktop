@@ -68,6 +68,8 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'open_document_canvas'),
     ).toBe(false)
+    expect(r.systemSections[0]?.text).toContain('Unsaved chat')
+    expect(r.systemSections[0]?.text).not.toContain('apply_document_canvas_patch')
     expect(r.reasoningMode).toBe('fast')
     expect(r.modelOptions).toBeUndefined()
   })
@@ -89,6 +91,8 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'open_document_canvas'),
     ).toBe(true)
+    expect(r.systemSections[0]?.text).toContain('apply_document_canvas_patch')
+    expect(r.systemSections[0]?.text).not.toContain('Unsaved chat')
   })
 
   it('documentCanvasSnapshotPrompt includes revision and patch guidance', () => {
@@ -122,7 +126,7 @@ describe('buildTanStackChatTurnArgs', () => {
     })
     expect(text).toContain('Canvas selection turn')
     expect(text).toContain('reverse it')
-    expect(text).toMatch(/\*\*Do not\*\* ask whether/i)
+    expect(text).toContain('The fenced **Canvas selection** markdown above is the target')
   })
 
   it('document mode uses lazy coding tools and switch_to_code_agent', async () => {
@@ -142,6 +146,8 @@ describe('buildTanStackChatTurnArgs', () => {
       r.toolsDisplay.some((t) => t.name === 'switch_to_code_agent'),
     ).toBe(true)
     expect(r.systemSections[0]?.id).toBe('routing-doc')
+    expect(r.systemSections[0]?.text).toContain('switch_to_code_agent')
+    expect(r.systemSections[0]?.text).toContain('__lazy__tool__discovery__')
     expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(true)
     expect(r.systemSections.some((s) => s.id === 'skills-catalog')).toBe(true)
     expect(
@@ -166,6 +172,10 @@ describe('buildTanStackChatTurnArgs', () => {
       r.toolsDisplay.some((t) => t.name === 'switch_to_code_agent'),
     ).toBe(false)
     expect(r.systemSections[0]?.id).toBe('routing-code')
+    expect(r.systemSections[0]?.text).not.toContain('switch_to_code_agent')
+    expect(r.systemSections[0]?.text).not.toContain(
+      'call `switch_to_code_agent`, then immediately `__lazy__tool__discovery__`',
+    )
     expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(true)
   })
 
@@ -202,6 +212,7 @@ describe('buildTanStackChatTurnArgs', () => {
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
+    expect(r.systemSections[0]?.text).toContain('switch_to_app_builder')
   })
 
   it('includes eager dashboard tools, app-builder section, no switch when harness on', async () => {
@@ -230,6 +241,7 @@ describe('buildTanStackChatTurnArgs', () => {
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(true)
+    expect(r.systemSections[0]?.text).not.toContain('switch_to_app_builder')
   })
 
   it('includes user-context section with ISO time on default turns', async () => {
@@ -321,6 +333,8 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'list_workspace_skills'),
     ).toBe(false)
+    expect(r.systemSections[0]?.text).not.toContain('switch_to_app_builder')
+    expect(r.systemSections[0]?.text).not.toContain('switch_to_code_agent')
   })
 
   it('testcases.md §5: injects workspace memory when MEMORY.md is readable', async () => {

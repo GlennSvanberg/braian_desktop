@@ -19,7 +19,7 @@ export function formatCanvasSelectionUserMessage(
     truncNote = '\n\n[… excerpt truncated for chat message length]'
   }
   return [
-    "**Canvas selection** — apply the instruction **only** to the text in the fenced block below (what was marked in the document). Words like \"this\", \"this part\", \"it\", or \"the selection\" mean **that** text—not the whole document.",
+    '**Canvas selection** — apply the instruction only to the fenced text below. Words like "this", "this part", "it", or "the selection" refer to that excerpt, not the whole document.',
     '',
     '```markdown',
     excerpt + truncNote,

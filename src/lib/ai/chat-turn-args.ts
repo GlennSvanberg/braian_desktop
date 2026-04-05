@@ -23,7 +23,7 @@ import {
 
 import {
   APP_BUILDER_INSTRUCTIONS_FALLBACK,
-  BRAIAN_ROUTING_TREE,
+  buildBraianRoutingPrompt,
   CODE_MODE_ROUTING_ADDENDUM,
   DOC_MODE_ROUTING_ADDENDUM,
 } from './braian-routing-prompt'
@@ -42,12 +42,6 @@ import type { ReasoningModelOptions } from './reasoning-model-options'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
 
-/** Composed document-mode system text (routing + doc addendum). */
-export const TRIAGE_SYSTEM = `${BRAIAN_ROUTING_TREE}\n\n${DOC_MODE_ROUTING_ADDENDUM}`
-
-/** Composed code-mode system text (routing + code addendum). */
-export const CODE_AGENT_SYSTEM = `${BRAIAN_ROUTING_TREE}\n\n${CODE_MODE_ROUTING_ADDENDUM}`
-
 /** Fallback dashboard instructions if `.braian/skills/app-builder.md` is unavailable. */
 export const APP_BUILDER_SYSTEM = APP_BUILDER_INSTRUCTIONS_FALLBACK
 
@@ -57,7 +51,6 @@ export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Des
 - Ask short, natural questions (name, where they are, languages they prefer for answers, timezone or locale if relevant, role or context that helps assistants across workspaces).
 - When the user shares something they want remembered, call **update_user_profile** with only the fields that changed. Do not invent facts.
 - If they clear or correct something, use the tool with null or empty string for that field, or an updated list for languages.
-- Remind them they can return to **sidebar → You** anytime to update who they are.
 - You have **no** workspace files, code, document canvas, or dashboard tools — only **update_user_profile**. If they ask for other work, say that normal chats in a workspace handle that, and stay focused on profile here.
 
 **Privacy:** Only store what they explicitly give you or clearly confirm.`
@@ -165,7 +158,7 @@ export function buildUserContextSystemSectionText(now: Date = new Date()): strin
     `Local: ${local}`,
     `ISO: ${iso}`,
     '',
-    'Use the profile and time for tone, locale, scheduling, and recency. Do not read the clock aloud unless the user asks for the time or date.',
+    'Use the profile and time for tone, locale, scheduling, and recency. Only read the clock aloud when the user asks for the time or date.',
   ].join('\n')
 }
 
@@ -197,7 +190,7 @@ export function contextFilesSystemPrompt(
 ): string {
   if (files.length === 0) return ''
   const lines: string[] = [
-    'Attached workspace files for this user message (paths relative to workspace root).',
+    'Attached workspace files for this user message:',
     '',
   ]
   for (const f of files) {
@@ -225,8 +218,9 @@ export function documentCanvasSnapshotPrompt(
   const revisionNote = `Canvas revision: **${snapshot.revision}** — pass this exact integer as \`baseRevision\` to **apply_document_canvas_patch**.\n\n`
 
   const patchRules = [
-    '**Editing rules:** Prefer **apply_document_canvas_patch** with one or more \`{ find, replace }\` steps (ordered). Each \`find\` must be an exact substring of the current canvas. Prefer a patch over **open_document_canvas** unless the user asked for a full rewrite or restructuring.',
-    'If a **canvas selection** section appears below, the user focused that excerpt — limit edits to that region when possible (still use exact \`find\` strings from the snapshot).',
+    '**Editing rules:** Prefer **apply_document_canvas_patch** with ordered \`{ find, replace }\` steps. Each \`find\` must be an exact substring of the current canvas.',
+    'Use **open_document_canvas** only for a full rewrite or major restructuring.',
+    'If a **canvas selection** section appears below, limit edits to that region when possible.',
     '',
   ].join('\n')
 
@@ -244,7 +238,7 @@ export function documentCanvasSnapshotPrompt(
       ? [
           '### Canvas selection (user-focused excerpt)',
           snapshot.selection.sectionOnly
-            ? 'The user invoked this turn from a **selection in the canvas**. Prefer **apply_document_canvas_patch** with `find`/`replace` that only affect this region; do not rewrite unrelated sections.'
+            ? 'The user invoked this turn from a **selection in the canvas**. Keep the edit scoped to this region.'
             : 'The user included this excerpt for context.',
           '',
           '```markdown',
@@ -262,8 +256,8 @@ export function documentCanvasSnapshotPrompt(
           '---',
           '**Canvas selection turn — follow this binding:**',
           "- The user's **latest user message** includes the same excerpt and their instruction; treat them as one request.",
-          '- **Do not** ask whether they mean the canvas selection vs chat—the fenced **Canvas selection** markdown above is the **only** target for pronouns like "this", "it", "this part".',
-          '- Apply **`apply_document_canvas_patch`** with a `find` string copied exactly from that excerpt (unless they explicitly asked to change the whole document).',
+          '- The fenced **Canvas selection** markdown above is the target for pronouns like "this", "it", and "this part".',
+          '- Copy the `find` text exactly from that excerpt unless the user explicitly asked to change the whole document.',
           `- **Instruction they typed in the canvas UI:** ${snapshot.selectionUserInstruction.trim()}`,
           '',
         ].join('\n')
@@ -465,25 +459,39 @@ export async function buildTanStackChatTurnArgs(
 
   const systemSections: ChatSystemSectionDisplay[] = []
 
+  const workspaceScoped =
+    ctx?.workspaceId != null &&
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
+
+  const routingText = [
+    buildBraianRoutingPrompt({
+      hasSwitchToAppBuilder: switchToAppTool != null,
+      hasSwitchToCodeAgent: switchToCodeTool != null,
+      hasDashboardTools: dashboardTools.length > 0,
+      hasCodeTools: codingTools.length > 0,
+      hasCanvasTools: canvasTools.length > 0,
+      hasCanvasSnapshot: snapshotText.length > 0,
+      hasSkillTools: skillTools.length > 0,
+      hasMcpTools: mcpTools.length > 0,
+    }),
+    isCodeMode ? CODE_MODE_ROUTING_ADDENDUM : DOC_MODE_ROUTING_ADDENDUM,
+  ].join('\n\n')
+
   if (isCodeMode) {
     systemSections.push({
       id: 'routing-code',
       label: 'Routing (code agent)',
       source: SOURCE_ROUTING_CODE,
-      text: CODE_AGENT_SYSTEM,
+      text: routingText,
     })
   } else {
     systemSections.push({
       id: 'routing-doc',
       label: 'Routing (document / triage)',
       source: SOURCE_ROUTING_DOC,
-      text: TRIAGE_SYSTEM,
+      text: routingText,
     })
   }
-
-  const workspaceScoped =
-    ctx?.workspaceId != null &&
-    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
 
   if (workspaceScoped && ctx.workspaceId != null) {
     const createBody = await loadCreateSkillBodyMarkdown(
@@ -496,8 +504,6 @@ export async function buildTanStackChatTurnArgs(
       source: SOURCE_SKILLS_CREATE,
       text: [
         '## create-skill',
-        '',
-        'Always follow these instructions when creating or editing skills under `.braian/skills/`:',
         '',
         createBody,
       ].join('\n'),

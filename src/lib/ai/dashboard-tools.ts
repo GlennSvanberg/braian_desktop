@@ -100,21 +100,24 @@ export function buildDashboardTools(
 
   const readTool = toolDefinition({
     name: 'read_workspace_dashboard',
-    description: `Read and validate the workspace main dashboard (.braian/dashboard/board.json) and list page ids under .braian/dashboard/pages/. Use before apply_workspace_dashboard to merge carefully.`,
+    description:
+      'Read and validate the workspace main dashboard (.braian/dashboard/board.json) and list page ids under .braian/dashboard/pages/.',
     inputSchema: readDashboardSchema,
     ...lazyOpt,
   })
 
   const applyTool = toolDefinition({
     name: 'apply_workspace_dashboard',
-    description: `Replace the entire dashboard manifest on disk. Pass argument manifestJson: a single string containing valid JSON (schemaVersion: 1, regions). Sets updatedAtMs on write. Read the board first with read_workspace_dashboard, merge your changes into the full manifest, then stringify once for manifestJson.`,
+    description:
+      'Replace the entire dashboard manifest on disk. Pass manifestJson as one valid JSON string (schemaVersion: 1, regions).',
     inputSchema: applyDashboardSchema,
     ...lazyOpt,
   })
 
   const upsertPageTool = toolDefinition({
     name: 'upsert_workspace_page',
-    description: `Create or replace .braian/dashboard/pages/<pageId>.json. Pass pageJson: one string of valid JSON (schemaVersion, pageId, title, tiles). Opens at /dashboard/page/<pageId>.`,
+    description:
+      'Create or replace .braian/dashboard/pages/<pageId>.json. Pass pageJson as one valid JSON string (schemaVersion, pageId, title, tiles).',
     inputSchema: upsertPageSchema,
     ...lazyOpt,
   })

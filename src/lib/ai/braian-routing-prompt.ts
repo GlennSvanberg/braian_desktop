@@ -1,45 +1,97 @@
-/** Shared ordered decision tree for document and code agent modes. */
-export const BRAIAN_ROUTING_TREE = `## Braian routing (follow in order)
+export type BuildRoutingPromptOptions = {
+  hasSwitchToAppBuilder: boolean
+  hasSwitchToCodeAgent: boolean
+  hasDashboardTools: boolean
+  hasCodeTools: boolean
+  hasCanvasTools: boolean
+  hasCanvasSnapshot: boolean
+  hasSkillTools: boolean
+  hasMcpTools: boolean
+}
 
-1. **Clarify the goal** from the latest user message, prior turns, and any **Attached workspace files** or **Document canvas snapshot** sections below (those excerpts are authoritative for this turn when present).
+function numbered(lines: string[]): string {
+  return lines.map((line, idx) => `${idx + 1}. ${line}`).join('\n\n')
+}
 
-2. **Braian in-app dashboard** (sidebar Dashboard, KPI tiles, \`/dashboard/page/...\`, widgets *inside this app*): call \`switch_to_app_builder\`, then immediately \`__lazy__tool__discovery__\` with the \`toolNames\` returned by that tool. Then use dashboard tools. For JSON shapes and limits, follow the **app-builder** entry in the skills catalog (use \`read_workspace_skill\` on \`.braian/skills/app-builder.md\` when you need the full spec). Do **not** satisfy these requests with standalone \`.html\` files meant for Braian’s dashboard.
+function buildBaseRoutingLines(): string[] {
+  return [
+    '**Clarify the goal** from the latest user message, prior turns, and any **Attached workspace files** or **Document canvas snapshot** sections below. When those sections are present, treat them as authoritative for this turn.',
+    '**Honesty:** use only the tools that appear in this turn. Do not claim access you do not have.',
+  ]
+}
 
-3. **Code, data, terminal, or arbitrary workspace paths** (Python, real \`.xlsx\` on disk, pip, etc.): call \`switch_to_code_agent\`, then \`__lazy__tool__discovery__\` with the returned \`toolNames\`. Until those steps succeed, do **not** claim you ran commands or wrote binary files.
+function buildDashboardRoutingLine(options: BuildRoutingPromptOptions): string | null {
+  if (options.hasSwitchToAppBuilder) {
+    return '**Braian in-app dashboard** (sidebar Dashboard, KPI tiles, `/dashboard/page/...`, widgets *inside this app*): call `switch_to_app_builder`, then immediately `__lazy__tool__discovery__` with the `toolNames` returned by that tool. Then use the dashboard tools. Do **not** satisfy these requests with standalone `.html` files meant for Braian’s dashboard.'
+  }
+  if (options.hasDashboardTools) {
+    return '**Braian in-app dashboard** (sidebar Dashboard, KPI tiles, `/dashboard/page/...`, widgets *inside this app*): use the dashboard tools for these requests. Do **not** satisfy them with standalone `.html` files meant for Braian’s dashboard.'
+  }
+  return null
+}
 
-4. **Long-form text in the workspace panel** (document canvas): when canvas tools are available (saved conversation), prefer **\`apply_document_canvas_patch\`** with the snapshot’s \`baseRevision\` and exact \`find\`/\`replace\` steps. Use **\`open_document_canvas\`** only for a full-document rewrite. If a canvas snapshot is present, treat it as authoritative (including any **canvas selection**); preserve the user’s writing unless they asked to remove it.
+function buildCodeRoutingLine(options: BuildRoutingPromptOptions): string | null {
+  if (options.hasSwitchToCodeAgent) {
+    return '**Code, data, terminal, or arbitrary workspace paths** (Python, real `.xlsx` on disk, pip, etc.): call `switch_to_code_agent`, then immediately `__lazy__tool__discovery__` with the returned `toolNames`. Until those steps succeed, do **not** claim you ran commands or wrote files.'
+  }
+  if (options.hasCodeTools) {
+    return '**Code, data, terminal, or arbitrary workspace paths** (Python, real `.xlsx` on disk, pip, etc.): use the workspace file and command tools for these requests.'
+  }
+  return null
+}
 
-5. **Workspace skills** (see **Skills catalog** below): when a skill’s description fits the task, call \`read_workspace_skill\` **before** acting on that domain. To **create or change** skills under \`.braian/skills/\`, follow the **create-skill** section (always injected below).
+function buildCanvasRoutingLine(options: BuildRoutingPromptOptions): string | null {
+  if (options.hasCanvasTools || options.hasCanvasSnapshot) {
+    return '**Long-form text in the workspace panel** (document canvas): prefer `apply_document_canvas_patch` with the snapshot’s `baseRevision` and exact `find` / `replace` steps. Use `open_document_canvas` only for a full-document rewrite. If a canvas snapshot is present, preserve unrelated writing unless the user asked to change it.'
+  }
+  return null
+}
 
-5b. **Connections (MCP)** — tools whose names start with \`mcp__\` come from workspace **Connections** (stdio or remote). Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.
+function buildSkillsRoutingLine(options: BuildRoutingPromptOptions): string | null {
+  if (!options.hasSkillTools) return null
+  return '**Workspace skills** (see **Skills catalog** below): when a skill description fits the task, call `read_workspace_skill` before acting on that domain. To create or change skills under `.braian/skills/`, follow the **create-skill** section below.'
+}
 
-6. **Unsaved chat**: if document canvas tools are not in this turn, tell the user saving the conversation enables the side-panel document workflow; you may still use other available tools.
+function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null {
+  if (!options.hasMcpTools) return null
+  return '**Connections (MCP):** tools whose names start with `mcp__` come from workspace Connections. Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.'
+}
 
-7. **Honesty**: use only tools that appear in this turn (or that you unlock via switch + discovery). Do not claim access you do not have.`
+function buildUnsavedChatLine(options: BuildRoutingPromptOptions): string | null {
+  if (options.hasCanvasTools || options.hasCanvasSnapshot) return null
+  return '**Unsaved chat:** if the user asks for side-panel document edits, explain that saving the conversation enables the document canvas workflow.'
+}
+
+/** Shared ordered decision tree composed from the tools available for this turn. */
+export function buildBraianRoutingPrompt(
+  options: BuildRoutingPromptOptions,
+): string {
+  const lines = [
+    ...buildBaseRoutingLines(),
+    buildDashboardRoutingLine(options),
+    buildCodeRoutingLine(options),
+    buildCanvasRoutingLine(options),
+    buildSkillsRoutingLine(options),
+    buildMcpRoutingLine(options),
+    buildUnsavedChatLine(options),
+  ].filter((line): line is string => Boolean(line))
+
+  return `## Braian routing (follow in order)\n\n${numbered(lines)}`
+}
 
 export const DOC_MODE_ROUTING_ADDENDUM = `## Document / triage mode
 
 You are **Braian**, the user’s primary assistant in Braian Desktop — a local-first workspace for chat, documents, data, and visuals.
 
-Coding and dashboard tools may be **lazy** until you complete the correct \`switch_*\` + \`__lazy__tool__discovery__\` sequence. You may still update the document canvas via **\`apply_document_canvas_patch\`** (preferred) or **\`open_document_canvas\`** (full rewrite) when those tools are present.
-
-Use \`list_workspace_skills\`, \`read_workspace_skill\`, and \`write_workspace_skill\` for Markdown skills under \`.braian/skills/\`.`
+Prefer the simplest tool path that matches the task. Stay concise and practical.`
 
 export const CODE_MODE_ROUTING_ADDENDUM = `## Code agent mode
 
-You read/write **UTF-8** files and run programs **only inside the workspace** via tools.
+You read and write **UTF-8** files and run programs **only inside the workspace** via tools.
 
-**Workflow:** understand the task → \`list_workspace_dir\` / \`read_workspace_file\` as needed → write or update scripts (prefer **Python** + pandas/openpyxl for CSV and Excel) → \`run_workspace_command\` to install deps and execute → summarize stdout/stderr honestly.
+Paths are relative to the workspace root (forward slashes). On **Windows**, prefer \`py\` with args like \`["-3", "scripts/foo.py"]\` or \`python\`; use \`powershell.exe\` / \`pwsh\` with \`-File\` or \`-Command\` as separate argv entries. \`run_workspace_command\` does **not** use a shell — pass \`program\` + \`args\` only.
 
-**Rules:** Paths are relative to the workspace root (forward slashes). On **Windows**, prefer \`py\` with args like \`["-3", "scripts/foo.py"]\` or \`python\`; use \`powershell.exe\` / \`pwsh\` with \`-File\` or \`-Command\` as separate argv entries if needed. \`run_workspace_command\` does **not** use a shell — pass \`program\` + \`args\` only.
-
-**Data:** \`.xlsx\` and other binary files are **not** injected into the prompt; use paths from attachments and Python on disk. Do **not** replace inspect/convert requests with prose-only CSV dumps when tools can run code.
-
-**Canvas:** when **\`apply_document_canvas_patch\`** / \`open_document_canvas\` exist, add a short human-readable summary and deliverable paths; huge tables → sample in canvas + on-disk file path.
-
-**Skills:** use \`read_workspace_skill\` when a catalog skill matches; use skill write tools only under \`.braian/skills/\`.
-
-**Safety:** the user runs this locally; stay within workspace-scoped tools.`
+Keep binary work on disk (for example \`.xlsx\`) rather than in the prompt. Prefer Python for data scripts. Summarize stdout/stderr honestly.`
 
 /** Fallback if \`.braian/skills/app-builder.md\` is missing or invalid (no frontmatter). */
 export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace dashboard (App mode):** You may edit the user's **internal** Braian UI for this workspace only (not a public website).

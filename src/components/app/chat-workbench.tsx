@@ -30,7 +30,6 @@ import {
   ChatUserMessageBody,
 } from '@/components/app/chat-message-body'
 import { ArtifactPanel } from '@/components/app/artifact-panel'
-import { WorkspaceFilesPanel } from '@/components/app/workspace-files-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -795,40 +794,26 @@ export function ChatWorkbench({
     [sessionKey, setChatAgentMode, setChatAppHarnessEnabled],
   )
 
+  const isThinking = reasoningMode === 'thinking'
+
   const reasoningModeGroup = (
-    <div
-      className="border-border bg-muted/25 flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border"
-      role="group"
-      aria-label="Reasoning depth"
+    <button
+      type="button"
+      className={cn(
+        'focus-visible:ring-ring flex h-8 items-center justify-center rounded-full border px-3.5 text-[13px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2',
+        isThinking
+          ? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
+          : 'border-border/50 bg-transparent text-text-3 hover:bg-muted/50 hover:text-text-2'
+      )}
+      onClick={() => setChatReasoningMode(sessionKey, isThinking ? 'fast' : 'thinking')}
+      title={
+        isThinking
+          ? 'Thinking mode: More reasoning time; may show thinking when the model supports it'
+          : 'Fast mode: Lower latency; minimal or no visible chain-of-thought'
+      }
     >
-      {(
-        [
-          { id: 'fast' as const, label: 'Fast' },
-          { id: 'thinking' as const, label: 'Thinking' },
-        ] as const
-      ).map((seg, i) => (
-        <button
-          key={seg.id}
-          type="button"
-          className={cn(
-            'text-text-2 hover:bg-muted/70 focus-visible:ring-ring px-2.5 text-xs font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none',
-            i > 0 && 'border-border border-l',
-            reasoningMode === seg.id
-              ? 'bg-primary text-primary-foreground hover:bg-primary'
-              : 'bg-transparent',
-          )}
-          aria-pressed={reasoningMode === seg.id}
-          title={
-            seg.id === 'fast'
-              ? 'Lower latency; minimal or no visible chain-of-thought (provider-dependent)'
-              : 'More reasoning time; may show thinking when the model supports it'
-          }
-          onClick={() => setChatReasoningMode(sessionKey, seg.id)}
-        >
-          {seg.label}
-        </button>
-      ))}
-    </div>
+      {isThinking ? 'Thinking' : 'Fast'}
+    </button>
   )
 
   const agentModeGroup = (
@@ -1156,17 +1141,6 @@ export function ChatWorkbench({
           if (paths.length > 0) void onNativeFileDrop(paths)
         }}
       >
-        {isTauriRuntime &&
-        activeWorkspace?.rootPath &&
-        !isDetachedSession &&
-        !isProfileSession ? (
-          <WorkspaceFilesPanel
-            className="mb-2"
-            workspaceId={activeWorkspaceId}
-            workspaceRootPath={activeWorkspace.rootPath}
-            sessionKey={sessionKey}
-          />
-        ) : null}
         {contextFiles.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {contextFiles.map((f) => (
@@ -1197,7 +1171,7 @@ export function ChatWorkbench({
         ) : null}
         <div
           className={cn(
-            'bg-card border-border focus-within:ring-ring/40 relative rounded-xl border shadow-sm focus-within:ring-2',
+            'bg-background border-border/40 focus-within:ring-ring/20 relative rounded-[20px] border shadow-sm focus-within:ring-2 transition-all duration-200',
             fileDragHighlight &&
               'ring-accent-500/50 border-accent-500/60 ring-2',
           )}
@@ -1249,10 +1223,10 @@ export function ChatWorkbench({
             ref={textareaRef}
             placeholder={
               isProfileSession
-                ? 'Message Braian… (this chat only updates your saved profile)'
+                ? 'Message Braian…'
                 : isDetachedSession
-                  ? 'Message Braian… (move to a workspace to attach files and use the project folder)'
-                  : 'Message Braian… (drop files here, or @ to attach)'
+                  ? 'Message Braian…'
+                  : 'Message Braian…'
             }
             value={draft}
             onChange={(e) => {
@@ -1263,46 +1237,51 @@ export function ChatWorkbench({
             onKeyUp={syncCaretFromTextarea}
             onClick={syncCaretFromTextarea}
             onSelect={syncCaretFromTextarea}
-            className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 text-sm shadow-none focus-visible:ring-0"
+            className="min-h-[120px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-sm shadow-none focus-visible:ring-0"
           />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <div className="text-text-3 flex min-w-0 flex-wrap items-center gap-2 px-1.5 text-xs leading-relaxed">
-              <p className="shrink-0">Enter to send · Shift+Enter for newline</p>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span className="text-text-3 hidden sm:inline">Reasoning</span>
-                {reasoningModeGroup}
-              </div>
+          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between">
+            <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
               {isTauriRuntime &&
               activeWorkspace?.rootPath &&
               !isDetachedSession &&
               !isProfileSession ? (
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-text-2 h-7 gap-1 px-2 text-xs"
+                  variant="ghost"
+                  size="icon"
+                  className="text-text-3 hover:text-text-2 hover:bg-muted/50 size-8 shrink-0 rounded-full transition-colors"
                   onClick={() => void onAttachFiles()}
+                  aria-label="Attach files"
+                  title="Attach files to this chat"
                 >
-                  <Paperclip className="size-3.5" aria-hidden />
-                  Attach files
+                  <Paperclip className="size-4" aria-hidden />
                 </Button>
               ) : null}
+              {reasoningModeGroup}
               {queuedCount > 0 ? (
-                <p className="text-accent-600 font-medium">
+                <p className="text-accent-600 font-medium text-xs">
                   {queuedCount} message{queuedCount === 1 ? '' : 's'} queued
                 </p>
               ) : null}
             </div>
-            <Button
-              type="button"
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={sendMessage}
-              disabled={!draft.trim()}
-            >
-              Send
-              <CornerDownLeft className="size-3.5 opacity-80" />
-            </Button>
+            <div className="pointer-events-auto pr-1">
+              <Button
+                type="button"
+                size="icon"
+                className={cn(
+                  "size-8 shrink-0 rounded-full transition-all duration-200",
+                  draft.trim() 
+                    ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90" 
+                    : "bg-muted text-text-3 opacity-50"
+                )}
+                onClick={sendMessage}
+                disabled={!draft.trim()}
+                aria-label="Send message"
+                title="Send message"
+              >
+                <CornerDownLeft className="size-4" aria-hidden />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

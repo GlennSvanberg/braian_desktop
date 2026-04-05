@@ -55,13 +55,15 @@ const openDocumentCanvasInputSchema = z.object({
 
 const applyDocumentCanvasPatchTool = toolDefinition({
   name: 'apply_document_canvas_patch',
-  description: `Update the side-panel document canvas with targeted find/replace steps (preferred). Uses the latest canvas markdown and revision from the system prompt snapshot. Each replacement runs in order on the result of the previous step. Preserve text outside the edited spans. If the user selected text in the canvas (section-only context), limit changes to that region. On revision mismatch or ambiguous matches, fix find strings and retry.`,
+  description:
+    'Update the side-panel document canvas with targeted find/replace steps. Each replacement runs in order on the result of the previous step.',
   inputSchema: applyDocumentCanvasPatchInputSchema,
 })
 
 const openDocumentCanvasTool = toolDefinition({
   name: 'open_document_canvas',
-  description: `Replace the entire document canvas markdown in one shot. Prefer **apply_document_canvas_patch** for most edits. Use full rewrite only for large restructuring, new documents, or when patch steps would be unwieldy.`,
+  description:
+    'Replace the entire document canvas markdown in one shot. Use for full rewrites or new documents.',
   inputSchema: openDocumentCanvasInputSchema,
 })
 

@@ -58,7 +58,7 @@ export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
 
   const listTool = toolDefinition({
     name: 'list_workspace_skills',
-    description: `List workspace skills under \`${SKILLS_DIR_RELATIVE_PATH}/\` (name, description, path). Same metadata as the system catalog; use for refresh mid-conversation.`,
+    description: `List workspace skills under \`${SKILLS_DIR_RELATIVE_PATH}/\` (name, description, path).`,
     inputSchema: listSchema,
   }).server(async () => {
     listSchema.parse({})
@@ -119,7 +119,7 @@ export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
 
   const writeTool = toolDefinition({
     name: 'write_workspace_skill',
-    description: `Create or replace a UTF-8 Markdown skill under \`${SKILLS_DIR_RELATIVE_PATH}/\`. Content must include valid YAML frontmatter (\`name\`, \`description\`) and a Markdown body. Parent directories are created if needed.`,
+    description: `Create or replace a UTF-8 Markdown skill under \`${SKILLS_DIR_RELATIVE_PATH}/\`. Content must include valid YAML frontmatter (\`name\`, \`description\`) and a Markdown body.`,
     inputSchema: writeSchema,
   }).server(async (args) => {
     const { path: rawPath, content } = writeSchema.parse(args)

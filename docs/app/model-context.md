@@ -8,7 +8,7 @@ In the chat toolbar, **Context** opens the **Model context** dialog: **Last sent
 
 For a normal chat attached to a **workspace folder** (not “new chat” without a folder, and not the **You** profile coach), sections are assembled in this order:
 
-1. **Routing (Core)** — A numbered **decision tree** shared by all modes, plus a short addendum for **document/triage** or **code** mode. It tells the model how to choose dashboard tools, code tools, the document canvas, and workspace skills.
+1. **Routing (Core)** — A numbered **decision tree** assembled for the current turn, plus a short addendum for **document/triage** or **code** mode. It tells the model how to choose dashboard tools, code tools, the document canvas, workspace skills, and MCP tools **without mentioning workflows that are unavailable in that scenario**.
 2. **Skills** — The **create-skill** instructions (always included so the model knows how to author `.braian/skills/*.md`), and a **catalog** listing every skill file’s `name`, `description`, and path (metadata only; full bodies load on demand).
 3. **User context** — Your saved **profile** (sidebar → **You**) and the app’s **current client time** (for tone and scheduling; the model is told not to read the clock aloud unless you ask).
 4. **Workspace memory** — Excerpt from **`.braian/MEMORY.md`** when that file exists and is non-empty (subject to size limits). See [Memory](/docs/memory).
@@ -34,7 +34,7 @@ See [Tools](/docs/tools) for a short summary of those tools.
 
 ## Tools vs system text
 
-- **Lazy tools** (document mode): coding and dashboard tools may appear as “lazy” until the model calls the right **`switch_to_*`** tool and completes **tool discovery**—the routing section explains this.
+- **Lazy tools** (document mode): coding and dashboard tools may appear as “lazy” until the model calls the right **`switch_to_*`** tool and completes **tool discovery**. Those unlock steps are only mentioned in the prompt when the corresponding switch tool is actually available that turn.
 - **Code** mode: workspace file/command tools are available immediately for that chat.
 - **App** mode: dashboard tools are eager; detailed JSON schema for tiles and pages is reinforced via the **app-builder** section (from the skill file when possible). See [Dashboard & in-app pages](/docs/dashboard).
 
@@ -42,7 +42,7 @@ See [Tools](/docs/tools) for a short summary of those tools.
 
 - [Overview](/docs/overview)
 - [Tools](/docs/tools)
-- [Connections (MCP)](/docs/mcp) — workspace `.braian/mcp.json` (not yet merged into this prompt pipeline)
+- [Connections (MCP)](/docs/mcp) — workspace `.braian/mcp.json`, injected when MCP tools are available for that workspace
 - [Memory](/docs/memory)
 - [Dashboard & in-app pages](/docs/dashboard)
 - [Capabilities](/docs/capabilities)

@@ -151,7 +151,8 @@ export function buildCodingTools(
 
   const runCommandTool = toolDefinition({
     name: 'run_workspace_command',
-    description: `Run a program with argv (no shell). Prefer Python for scripts: on Windows use program "py" with args ["-3", "path/to/script.py"] or "python". Use powershell.exe / pwsh with -File or -Command as separate args. Stdout/stderr are captured; output may be truncated for very large runs.`,
+    description:
+      'Run a program with argv (no shell). Stdout and stderr are captured; very large output may be truncated.',
     inputSchema: runCommandSchema,
     lazy,
   })

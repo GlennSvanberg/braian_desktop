@@ -30,11 +30,11 @@ export function buildSwitchToCodeAgentTool(context: ChatTurnContext | undefined)
 
   return toolDefinition({
     name: 'switch_to_code_agent',
-    description: `Enable **workspace code capabilities** for this chat (run programs, read/write files under the workspace, CSV/Excel conversion scripts, pip installs, etc.). The user does not need to change any UI setting — you switch modes by calling this tool.
+    description: `Enable **workspace code capabilities** for this chat (run programs, read/write files under the workspace, CSV/Excel conversion scripts, pip installs, and similar tasks). The user does not need to change any UI setting.
 
 **Required workflow after this tool returns successfully:** immediately call the tool \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use read_workspace_file, write_workspace_file, list_workspace_dir, and run_workspace_command as needed.
 
-Call this when the task cannot be completed with the markdown canvas alone (open_document_canvas). Do not tell the user to flip a "Code mode" toggle.`,
+Call this when the task needs workspace files or commands. Do not tell the user to flip a "Code mode" toggle.`,
     inputSchema: switchInputSchema,
   }).server(async (args) => {
     switchInputSchema.parse(args)

@@ -31,7 +31,7 @@ Paths are always **relative to the workspace root**. On Windows, follow the app�
 In a **saved** workspace chat (desktop app), the header includes **Document** | **Code** | **App**:
 
 - **Code** — Workspace read/write/list/run tools are **on** for that chat immediately (no extra “switch” step).
-- **Document** — Default assistant behavior; file tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** and completes the tool-discovery step the app describes.
+- **Document** — Default assistant behavior; file tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** and completes the tool-discovery step. The model is only told about that workflow when the switch tool is available in the current turn.
 - **App** — Keeps document-style behavior but **always** exposes the **workspace dashboard** tools (`read_workspace_dashboard`, `apply_workspace_dashboard`, `upsert_workspace_page`) so the model can edit `.braian/dashboard/board.json` and page JSON under `.braian/dashboard/pages/`. See [Dashboard & in-app pages](/docs/dashboard).
 
 You can switch modes yourself, or stay on **Document** and ask the assistant to enable dashboard or code capabilities through its tools when needed.

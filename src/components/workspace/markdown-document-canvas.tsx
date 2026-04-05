@@ -37,7 +37,6 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   clearDocumentCanvasLiveGetter,
   setDocumentCanvasLiveGetter,
@@ -364,10 +363,15 @@ export function MarkdownDocumentCanvas({
     ) : null
 
   return (
-    <ScrollArea className={cn('min-h-0 flex-1', className)}>
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col overflow-hidden',
+        className,
+      )}
+    >
       <div
         className={cn(
-          'markdown-document-canvas text-text-2 flex flex-col min-h-full w-full',
+          'markdown-document-canvas text-text-2 flex min-h-0 flex-1 flex-col',
           isDark ? 'dark-theme' : 'light-theme',
         )}
       >
@@ -383,12 +387,12 @@ export function MarkdownDocumentCanvas({
             onChange={handleChange}
             readOnly={readOnly}
             placeholder={placeholder}
-            className="!border-0 !bg-transparent flex flex-col min-h-full flex-1"
+            className="braian-mdx-canvas !border-0 !bg-transparent flex min-h-0 flex-1 flex-col"
             contentEditableClassName="prose-markdown-canvas outline-none px-2 py-3 md:px-4 md:py-4 flex-1"
             plugins={plugins}
           />
         )}
       </div>
-    </ScrollArea>
+    </div>
   )
 }
