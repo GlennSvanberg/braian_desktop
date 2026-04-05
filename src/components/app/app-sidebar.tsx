@@ -9,6 +9,7 @@ import {
   PanelLeftIcon,
   Pin,
   Plus,
+  Plug,
   Settings,
   Trash2,
   UserRound,
@@ -304,6 +305,22 @@ function WorkspaceConversationGroup({
   setActiveWorkspaceId: (id: string) => void
 }) {
   const [newPending, setNewPending] = useState(false)
+  const [dashboardPageIds, setDashboardPageIds] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!isTauriRuntime) {
+      setDashboardPageIds([])
+      return
+    }
+    let cancelled = false
+    void listWorkspaceDashboardPageIds(workspace.id).then((ids) => {
+      if (!cancelled) setDashboardPageIds(ids)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace.id, isTauriRuntime, pathname])
+
   const chatsExpanded = expandedChats
   const sortedConversations = useMemo(() => {
     return [...conversations].sort((a, b) => {
@@ -361,7 +378,7 @@ function WorkspaceConversationGroup({
               size="icon"
               className="text-sidebar-foreground/75 size-7 shrink-0 data-[state=open]:bg-sidebar-accent/35"
               aria-label={
-                chatsExpanded ? 'Collapse chats' : 'Expand chats'
+                chatsExpanded ? 'Collapse workspace' : 'Expand workspace'
               }
             >
               <ChevronDown
@@ -410,7 +427,38 @@ function WorkspaceConversationGroup({
         </div>
         <CollapsibleContent>
           <SidebarMenu className="border-sidebar-border mx-1 ml-2.5 mt-0.5 border-l pl-2">
-            {sortedConversations.length === 0 ? (
+            {dashboardPageIds.map((pageId) => (
+              <SidebarMenuItem key={`page-${pageId}`}>
+                <SidebarMenuButton
+                  asChild
+                  tooltip={pageId}
+                  isActive={
+                    pathname === `/dashboard/page/${pageId}` &&
+                    workspace.id === activeWorkspaceId
+                  }
+                >
+                  <Link
+                    to="/dashboard/page/$pageId"
+                    params={{ pageId }}
+                    className="truncate"
+                    onClick={() => {
+                      if (workspace.id !== activeWorkspaceId) {
+                        setActiveWorkspaceId(workspace.id)
+                      }
+                    }}
+                  >
+                    <FileText className="size-4 shrink-0 opacity-70" aria-hidden />
+                    <span className="truncate">{pageId}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+            {dashboardPageIds.length === 0 &&
+            sortedConversations.length === 0 ? (
+              <p className="text-sidebar-foreground/55 px-2 py-1.5 text-[11px] leading-snug">
+                No app pages or saved threads yet.
+              </p>
+            ) : sortedConversations.length === 0 ? (
               <p className="text-sidebar-foreground/55 px-2 py-1.5 text-[11px] leading-snug">
                 No saved threads yet.
               </p>
@@ -475,21 +523,6 @@ export function AppSidebar() {
   const [expandedChatsByWs, setExpandedChatsByWs] = useState<
     Record<string, boolean>
   >({})
-  const [dashboardPageIds, setDashboardPageIds] = useState<string[]>([])
-
-  useEffect(() => {
-    if (!isTauriRuntime || !activeWorkspaceId) {
-      setDashboardPageIds([])
-      return
-    }
-    let cancelled = false
-    void listWorkspaceDashboardPageIds(activeWorkspaceId).then((ids) => {
-      if (!cancelled) setDashboardPageIds(ids)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [activeWorkspaceId, isTauriRuntime, pathname])
 
   const visibleWorkspaces = showAllWorkspaces
     ? workspaces
@@ -619,36 +652,21 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === '/connections'}
+                  tooltip="Workspace connections"
+                >
+                  <Link to="/connections">
+                    <Plug />
+                    <span>Connections</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        {dashboardPageIds.length > 0 ? (
-          <SidebarGroup>
-            <SidebarGroupLabel>App pages</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {dashboardPageIds.map((pageId) => (
-                  <SidebarMenuItem key={pageId}>
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={pageId}
-                      isActive={pathname === `/dashboard/page/${pageId}`}
-                    >
-                      <Link
-                        to="/dashboard/page/$pageId"
-                        params={{ pageId }}
-                        className="truncate"
-                      >
-                        <FileText className="size-4 shrink-0 opacity-70" aria-hidden />
-                        <span className="truncate">{pageId}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ) : null}
         <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
           <SidebarGroupContent className="min-h-0">

@@ -11,6 +11,13 @@ export type UserProfileDto = {
 
 const listeners = new Set<() => void>()
 
+/** Stable empty profile for `useSyncExternalStore` / `userProfileGet` snapshots. */
+const EMPTY_PROFILE: UserProfileDto = Object.freeze({})
+
+let readCacheProfile: UserProfileDto = EMPTY_PROFILE
+/** `false` means cache must be refreshed (e.g. after a write). */
+let readCacheLsRaw: string | null | false = false
+
 export function userProfileSubscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
@@ -19,15 +26,12 @@ export function userProfileSubscribe(listener: () => void): () => void {
 }
 
 function emitProfileChange() {
+  readCacheLsRaw = false
   for (const l of listeners) l()
 }
 
-function defaultProfile(): UserProfileDto {
-  return {}
-}
-
 function normalize(raw: unknown): UserProfileDto {
-  if (!raw || typeof raw !== 'object') return defaultProfile()
+  if (!raw || typeof raw !== 'object') return EMPTY_PROFILE
   const r = raw as Record<string, unknown>
   const displayName =
     typeof r.displayName === 'string' ? r.displayName : undefined
@@ -49,17 +53,39 @@ function normalize(raw: unknown): UserProfileDto {
   if (preferredLanguages !== undefined && preferredLanguages.length > 0) {
     out.preferredLanguages = preferredLanguages
   }
-  return out
+  return Object.keys(out).length === 0 ? EMPTY_PROFILE : out
+}
+
+function isEmptyProfile(p: UserProfileDto): boolean {
+  return (
+    (p.displayName == null || p.displayName.trim() === '') &&
+    (p.location == null || p.location.trim() === '') &&
+    (p.timezoneNote == null || p.timezoneNote.trim() === '') &&
+    (p.notes == null || p.notes.trim() === '') &&
+    (p.preferredLanguages == null || p.preferredLanguages.length === 0)
+  )
 }
 
 function readLocal(): UserProfileDto {
-  if (typeof localStorage === 'undefined') return defaultProfile()
+  if (typeof localStorage === 'undefined') return EMPTY_PROFILE
+  const raw = localStorage.getItem(LS_KEY)
   try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (!raw) return defaultProfile()
-    return normalize(JSON.parse(raw))
+    if (readCacheLsRaw !== false && raw === readCacheLsRaw) {
+      return readCacheProfile
+    }
+    if (!raw) {
+      readCacheLsRaw = null
+      readCacheProfile = EMPTY_PROFILE
+      return readCacheProfile
+    }
+    const parsed = normalize(JSON.parse(raw))
+    readCacheLsRaw = raw
+    readCacheProfile = isEmptyProfile(parsed) ? EMPTY_PROFILE : parsed
+    return readCacheProfile
   } catch {
-    return defaultProfile()
+    readCacheLsRaw = raw
+    readCacheProfile = EMPTY_PROFILE
+    return readCacheProfile
   }
 }
 
@@ -120,19 +146,10 @@ export function userProfileApplyPatch(
   const nextJson = JSON.stringify(next)
   if (prevJson === nextJson) return prev
 
-  writeLocal(next)
+  const stored: UserProfileDto = isEmptyProfile(next) ? {} : next
+  writeLocal(stored)
   emitProfileChange()
-  return next
-}
-
-function isEmptyProfile(p: UserProfileDto): boolean {
-  return (
-    (p.displayName == null || p.displayName.trim() === '') &&
-    (p.location == null || p.location.trim() === '') &&
-    (p.timezoneNote == null || p.timezoneNote.trim() === '') &&
-    (p.notes == null || p.notes.trim() === '') &&
-    (p.preferredLanguages == null || p.preferredLanguages.length === 0)
-  )
+  return isEmptyProfile(next) ? EMPTY_PROFILE : next
 }
 
 /** Compact text for system prompts (global agents and profile coach). */

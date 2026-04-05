@@ -4,6 +4,7 @@ mod db;
 mod workspace;
 mod workspace_agent;
 mod workspace_files;
+mod workspace_mcp_config;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -53,6 +54,8 @@ pub fn run() {
       braian_store::canvas_document_write,
       ai_settings::ai_settings_get,
       ai_settings::ai_settings_set,
+      workspace_mcp_config::workspace_mcp_config_get,
+      workspace_mcp_config::workspace_mcp_config_set,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

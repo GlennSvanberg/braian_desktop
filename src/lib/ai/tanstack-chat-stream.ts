@@ -39,7 +39,6 @@ export async function* streamTanStackChatTurn(
     )
   }
 
-  const fetchImpl = resolveFetch()
   const ac = new AbortController()
   if (signal) {
     if (signal.aborted) {
@@ -57,6 +56,8 @@ export async function* streamTanStackChatTurn(
     priorMessages,
     skipSettingsValidation: false,
   })
+
+  const fetchImpl = resolveFetch(args.provider)
 
   const stream = chat({
     adapter: buildChatAdapter(

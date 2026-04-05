@@ -47,7 +47,7 @@ export function buildUserProfileTools() {
   return [
     updateUserProfileTool.server(async (args) => {
       const input = updateUserProfileInputSchema.parse(args)
-      const patch: Parameters<typeof userProfileApplyPatch>[0] = {}
+      const patch: Record<string, any> = {}
       if ('displayName' in input) patch.displayName = input.displayName ?? null
       if ('location' in input) patch.location = input.location ?? null
       if ('timezoneNote' in input) patch.timezoneNote = input.timezoneNote ?? null
@@ -56,7 +56,7 @@ export function buildUserProfileTools() {
         patch.preferredLanguages = input.preferredLanguages
       }
 
-      const next: UserProfileDto = userProfileApplyPatch(patch)
+      const next: UserProfileDto = userProfileApplyPatch(patch as any)
 
       return {
         ok: true as const,

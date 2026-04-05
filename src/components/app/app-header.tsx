@@ -4,7 +4,6 @@ import { useMatches, useRouterState } from '@tanstack/react-router'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { isTauri } from '@/lib/tauri-env'
-import { cn } from '@/lib/utils'
 import type { ConversationDto } from '@/lib/workspace-api'
 
 import { useWorkspace } from './workspace-context'
@@ -34,11 +33,13 @@ export function AppHeader() {
   const isDashboard = pathname.startsWith('/dashboard')
   const isHome = pathname === '/'
   const isSettings = pathname === '/settings'
+  const isConnections = pathname === '/connections'
 
   const title = (() => {
     if (isHome) return 'Welcome'
     if (isDashboard) return 'Dashboard'
     if (isSettings) return 'Settings'
+    if (isConnections) return 'Connections'
     if (isNewChatRoute) return 'New agent'
     if (
       conversationIdFromPath &&
@@ -61,6 +62,7 @@ export function AppHeader() {
     const wsName = activeWorkspace?.name ?? 'Workspace'
     if (isHome) return wsName
     if (isSettings) return 'AI provider & API key'
+    if (isConnections) return `${wsName} · Tools & integrations`
     if (isDashboard) return `${wsName} · Overview`
     if (isNewChatRoute) return 'No workspace · move when ready'
     if (routeConversation) return `${wsName} · Chat`

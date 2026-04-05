@@ -216,7 +216,7 @@ Durable notes for this workspace (preferences, decisions, names). Braian may app
 
 "#;
 
-fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
+pub(crate) fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   let b = braian_dir(workspace_root);
   fs::create_dir_all(conversations_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(artifacts_dir(workspace_root)).map_err(|e| e.to_string())?;
@@ -241,6 +241,15 @@ fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   if !mem_path.exists() {
     fs::create_dir_all(&b).map_err(|e| e.to_string())?;
     fs::write(&mem_path, MEMORY_MD_TEMPLATE).map_err(|e| e.to_string())?;
+  }
+  let mcp_path = b.join("mcp.json");
+  if !mcp_path.exists() {
+    fs::create_dir_all(&b).map_err(|e| e.to_string())?;
+    fs::write(
+      &mcp_path,
+      "{\n  \"mcpServers\": {}\n}\n",
+    )
+    .map_err(|e| e.to_string())?;
   }
   Ok(())
 }
