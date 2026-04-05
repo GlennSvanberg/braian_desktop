@@ -251,10 +251,26 @@ export function documentCanvasSnapshotPrompt(
         ].join('\n')
       : ''
 
+  const selectionBinding =
+    snapshot.selection?.selectedMarkdown?.trim() &&
+    snapshot.selectionUserInstruction?.trim()
+      ? [
+          '',
+          '---',
+          '**Canvas selection turn — follow this binding:**',
+          "- The user's **latest user message** includes the same excerpt and their instruction; treat them as one request.",
+          '- **Do not** ask whether they mean the canvas selection vs chat—the fenced **Canvas selection** markdown above is the **only** target for pronouns like "this", "it", "this part".',
+          '- Apply **`apply_document_canvas_patch`** with a `find` string copied exactly from that excerpt (unless they explicitly asked to change the whole document).',
+          `- **Instruction they typed in the canvas UI:** ${snapshot.selectionUserInstruction.trim()}`,
+          '',
+        ].join('\n')
+      : ''
+
   return (
     `${titleNote}${revisionNote}${patchRules}Document canvas snapshot (latest markdown from the editor — includes changes not yet saved to the conversation file):\n${truncNote}\n` +
     body
     + (selectionNote ? `\n\n${selectionNote}` : '')
+    + selectionBinding
   )
 }
 

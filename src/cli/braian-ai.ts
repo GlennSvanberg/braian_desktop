@@ -41,6 +41,7 @@ const documentCanvasSnapshotSchema = z
     body: z.string(),
     title: z.string().optional(),
     revision: z.number().int().optional(),
+    selectionUserInstruction: z.string().optional(),
     selection: z
       .object({
         selectedMarkdown: z.string(),

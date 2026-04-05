@@ -177,7 +177,17 @@ export function MarkdownDocumentCanvas({
 
   useEffect(() => {
     if (readOnly || !onCanvasSelectionAsk || !mounted) return
-    const onMouseUp = () => {
+    const onMouseUp = (ev: MouseEvent) => {
+      const target = ev.target
+      const barEl =
+        target instanceof Node
+          ? document.getElementById('braian-canvas-selection-bar')
+          : null
+      // Clicking the inline prompt clears the editor selection; don't treat that as "dismiss".
+      if (target instanceof Node && barEl?.contains(target)) {
+        return
+      }
+
       window.setTimeout(() => {
         const md = editorRef.current?.getSelectionMarkdown?.() ?? ''
         const trimmed = md.trim()
@@ -319,6 +329,14 @@ export function MarkdownDocumentCanvas({
         <p className="text-text-3 px-0.5 text-xs">
           Ask about this selection (assistant will prefer patching this region).
         </p>
+        <div
+          className="border-border bg-muted/30 text-text-2 max-h-28 overflow-y-auto rounded-md border px-2 py-1.5 font-mono text-[11px] leading-snug break-words whitespace-pre-wrap"
+          aria-label="Selected text preview"
+        >
+          {selectionBar.selectedMarkdown.length > 2500
+            ? `${selectionBar.selectedMarkdown.slice(0, 2500)}…`
+            : selectionBar.selectedMarkdown}
+        </div>
         <div className="flex gap-2">
           <Input
             value={selectionInstruction}

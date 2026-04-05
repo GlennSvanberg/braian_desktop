@@ -38,6 +38,8 @@ html.light {
   --sidebar-accent-foreground: var(--app-text-1);
   --sidebar-border: var(--app-border);
   --sidebar-ring: var(--app-accent-500);
+  --sidebar-chat-selected: color-mix(in srgb, var(--app-accent-500) 42%, var(--sidebar));
+  --sidebar-chat-selected-hover: color-mix(in srgb, var(--app-accent-500) 56%, var(--sidebar));
 }
 
 html.dark {
@@ -67,6 +69,8 @@ html.dark {
   --sidebar-accent-foreground: var(--app-text-1);
   --sidebar-border: var(--app-border);
   --sidebar-ring: var(--app-accent-500);
+  --sidebar-chat-selected: color-mix(in srgb, var(--app-accent-500) 42%, var(--sidebar));
+  --sidebar-chat-selected-hover: color-mix(in srgb, var(--app-accent-500) 56%, var(--sidebar));
 }
 
 /* Before theme script runs, prefer dark (prototype default). */
@@ -97,6 +101,8 @@ html:not(.light):not(.dark) {
   --sidebar-accent-foreground: var(--app-text-1);
   --sidebar-border: var(--app-border);
   --sidebar-ring: var(--app-accent-500);
+  --sidebar-chat-selected: color-mix(in srgb, var(--app-accent-500) 42%, var(--sidebar));
+  --sidebar-chat-selected-hover: color-mix(in srgb, var(--app-accent-500) 56%, var(--sidebar));
 }
 
 @theme inline {
@@ -146,6 +152,8 @@ html:not(.light):not(.dark) {
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-sidebar-chat-selected: var(--sidebar-chat-selected);
+  --color-sidebar-chat-selected-hover: var(--sidebar-chat-selected-hover);
 }
 
 @layer base {

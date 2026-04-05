@@ -7,6 +7,7 @@ import {
 } from '@/lib/ai/chat-turn-args'
 import { discoveryResultIncludesCodeTools } from '@/lib/ai/coding-tools'
 import { discoveryResultIncludesDashboardTools } from '@/lib/ai/dashboard-tools'
+import { formatCanvasSelectionUserMessage } from '@/lib/ai/canvas-selection-message'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
 import type {
   ChatStreamChunk,
@@ -459,13 +460,24 @@ export function seedCanvasPreviewIfEmpty(
 function startChatTurnInternal(sessionKey: string, trimmed: string) {
   const prev = getThread(sessionKey)
 
+  const selectionForTurn =
+    pendingDocumentCanvasSelectionBySession.get(sessionKey) ?? undefined
+  if (selectionForTurn) {
+    pendingDocumentCanvasSelectionBySession.delete(sessionKey)
+  }
+
+  const userContent =
+    selectionForTurn != null
+      ? formatCanvasSelectionUserMessage(trimmed, selectionForTurn)
+      : trimmed
+
   const ac = new AbortController()
   abortBySession.set(sessionKey, ac)
 
   const userMsg = {
     id: createId(),
     role: 'user' as const,
-    content: trimmed,
+    content: userContent,
   }
   const assistantId = createId()
   const assistantMsg: AssistantChatMessage = {
@@ -498,11 +510,6 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const appHarnessEnabled = threadNow.appHarnessEnabled ?? false
       const ap = threadNow.artifactPayload
       const live = getDocumentCanvasLivePayload(sessionKey)
-      const pendingSelection =
-        pendingDocumentCanvasSelectionBySession.get(sessionKey) ?? undefined
-      if (pendingSelection) {
-        pendingDocumentCanvasSelectionBySession.delete(sessionKey)
-      }
       const documentCanvasSnapshot =
         isUserProfileSessionId(workspaceId)
           ? null
@@ -513,7 +520,12 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
                   ? { title: ap.title }
                   : {}),
                 revision: ap.canvasRevision ?? 0,
-                ...(pendingSelection ? { selection: pendingSelection } : {}),
+                ...(selectionForTurn
+                  ? {
+                      selection: selectionForTurn,
+                      selectionUserInstruction: trimmed,
+                    }
+                  : {}),
               }
             : null
 
@@ -582,19 +594,19 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
 
       const argsBuildStart = nowMs()
       const streamArgs = await buildTanStackChatTurnArgs({
-        userText: trimmed,
+        userText: userContent,
         context: chatTurnContext,
         priorMessages,
         skipSettingsValidation: false,
       })
       logChatPerf(sessionKey, 'turn args built', argsBuildStart)
       patchThread(sessionKey, {
-        lastModelRequestSnapshot: tanStackTurnArgsToSnapshot(streamArgs, trimmed),
+        lastModelRequestSnapshot: tanStackTurnArgsToSnapshot(streamArgs, userContent),
       })
       logChatPerf(sessionKey, 'snapshot ready', turnStartAt)
 
       for await (const chunk of streamChatTurn(
-        trimmed,
+        userContent,
         ac.signal,
         chatTurnContext,
         priorMessages,

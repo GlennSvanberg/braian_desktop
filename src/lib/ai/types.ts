@@ -17,6 +17,11 @@ export type DocumentCanvasSnapshot = {
   revision: number
   /** Selection from inline canvas prompt, if any. */
   selection?: DocumentCanvasSelectionContext
+  /**
+   * Short instruction from the selection UI (before composition into full user message).
+   * Binds pronouns in the instruction to `selection`.
+   */
+  selectionUserInstruction?: string
 }
 
 /** Resolved UTF-8 text for one workspace file passed to the model this turn. */

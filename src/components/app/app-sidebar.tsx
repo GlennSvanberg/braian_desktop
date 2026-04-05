@@ -165,7 +165,9 @@ function ConversationSidebarItem({
       className={cn(
         'rounded-md transition-colors',
         'hover:bg-sidebar-accent focus-within:bg-sidebar-accent',
-        'has-[[data-slot=sidebar-menu-button][data-active=true]]:bg-sidebar-accent',
+        'has-[[data-slot=sidebar-menu-button][data-active=true]]:bg-sidebar-chat-selected',
+        'has-[[data-slot=sidebar-menu-button][data-active=true]]:hover:bg-sidebar-chat-selected-hover',
+        'has-[[data-slot=sidebar-menu-button][data-active=true]]:focus-within:bg-sidebar-chat-selected-hover',
       )}
     >
       <SidebarMenuAction
@@ -240,6 +242,9 @@ function ConversationSidebarItem({
           'pointer-events-none absolute inset-y-0 right-0 z-[15] w-[5.5rem]',
           // Feather into the label (no hard vertical edge); solid under the icons on the right.
           'bg-gradient-to-r from-transparent via-sidebar-accent to-sidebar-accent',
+          'group-has-[[data-slot=sidebar-menu-button][data-active=true]]/menu-item:via-sidebar-chat-selected group-has-[[data-slot=sidebar-menu-button][data-active=true]]/menu-item:to-sidebar-chat-selected',
+          'group-has-[[data-slot=sidebar-menu-button][data-active=true]]/menu-item:group-hover/menu-item:via-sidebar-chat-selected-hover group-has-[[data-slot=sidebar-menu-button][data-active=true]]/menu-item:group-hover/menu-item:to-sidebar-chat-selected-hover',
+          'group-has-[[data-slot=sidebar-menu-button][data-active=true]]/menu-item:group-has-[[data-slot=sidebar-menu-action]:focus]/menu-item:via-sidebar-chat-selected-hover group-has-[[data-slot=sidebar-menu-button][data-active=true]]/menu-item:group-has-[[data-slot=sidebar-menu-action]:focus]/menu-item:to-sidebar-chat-selected-hover',
           'transition-opacity duration-150',
           'max-md:opacity-100',
           'md:opacity-0 md:group-hover/menu-item:opacity-100 md:group-has-[[data-slot=sidebar-menu-action]:focus]/menu-item:opacity-100',

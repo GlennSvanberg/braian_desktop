@@ -111,6 +111,18 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(text).toContain('snippet')
   })
 
+  it('documentCanvasSnapshotPrompt adds binding when selectionUserInstruction is set', () => {
+    const text = documentCanvasSnapshotPrompt({
+      body: '# Doc',
+      revision: 1,
+      selection: { selectedMarkdown: 'hello', sectionOnly: true },
+      selectionUserInstruction: 'reverse it',
+    })
+    expect(text).toContain('Canvas selection turn')
+    expect(text).toContain('reverse it')
+    expect(text).toMatch(/\*\*Do not\*\* ask whether/i)
+  })
+
   it('document mode uses lazy coding tools and switch_to_code_agent', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
