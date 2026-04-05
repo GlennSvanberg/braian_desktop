@@ -140,15 +140,35 @@ export function ChatWorkbench({
   const lastSerializedRef = useRef<string | null>(null)
   const initialThreadRef = useRef(initialThread)
   initialThreadRef.current = initialThread
-  const hydratedSessionKeyRef = useRef<string | null>(null)
+  /** Must match sidebar / disk: thread is owned by the conversation's workspace, not the UI-selected workspace. */
+  const threadWorkspaceId = useMemo(() => {
+    if (isProfileSession || isDetachedSession) return activeWorkspaceId
+    if (conversationId != null && conversationMeta?.workspaceId) {
+      return conversationMeta.workspaceId
+    }
+    return activeWorkspaceId
+  }, [
+    isProfileSession,
+    isDetachedSession,
+    conversationId,
+    conversationMeta?.workspaceId,
+    activeWorkspaceId,
+  ])
+  const initialThreadHydrationMark = useMemo(() => {
+    const t = initialThread
+    if (!t?.messages?.length) return '0'
+    const m = t.messages
+    return `${m.length}:${m[0]?.id ?? ''}:${m.at(-1)?.id ?? ''}`
+  }, [initialThread])
+  const hydrationMarkRef = useRef<string | null>(null)
   const sessionKey = useMemo(
     () =>
       isProfileSession
         ? PROFILE_CHAT_SESSION_KEY
         : isDetachedSession
           ? chatSessionKey(DETACHED_WORKSPACE_SESSION_ID, null)
-          : chatSessionKey(activeWorkspaceId, conversationId),
-    [isProfileSession, isDetachedSession, activeWorkspaceId, conversationId],
+          : chatSessionKey(threadWorkspaceId, conversationId),
+    [isProfileSession, isDetachedSession, threadWorkspaceId, conversationId],
   )
   const thread = useChatThread(sessionKey)
   const {
@@ -526,8 +546,9 @@ export function ChatWorkbench({
     if (conversationId == null || !metaForSave) return
     const init = initialThreadRef.current
     if (!init) return
-    if (hydratedSessionKeyRef.current === sessionKey) return
-    hydratedSessionKeyRef.current = sessionKey
+    const mark = `${sessionKey}|${initialThreadHydrationMark}`
+    if (hydrationMarkRef.current === mark) return
+    hydrationMarkRef.current = mark
     replaceThread(sessionKey, init)
     if (isTauriRuntime) {
       lastSerializedRef.current = JSON.stringify(
@@ -539,7 +560,14 @@ export function ChatWorkbench({
     } else {
       lastSerializedRef.current = null
     }
-  }, [conversationId, isProfileSession, isTauriRuntime, metaForSave, sessionKey])
+  }, [
+    conversationId,
+    initialThreadHydrationMark,
+    isProfileSession,
+    isTauriRuntime,
+    metaForSave,
+    sessionKey,
+  ])
 
   useEffect(() => {
     if (isProfileSession) return

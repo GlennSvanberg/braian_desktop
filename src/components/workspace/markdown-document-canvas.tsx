@@ -366,7 +366,7 @@ export function MarkdownDocumentCanvas({
     <ScrollArea className={cn('min-h-0 flex-1', className)}>
       <div
         className={cn(
-          'markdown-document-canvas bg-background border-border text-text-2 mx-auto max-w-2xl rounded-lg border px-2 py-3 shadow-sm md:px-4 md:py-4',
+          'markdown-document-canvas text-text-2 h-full w-full px-2 py-3 md:px-4 md:py-4',
           isDark ? 'dark-theme' : 'light-theme',
         )}
       >
@@ -382,8 +382,8 @@ export function MarkdownDocumentCanvas({
             onChange={handleChange}
             readOnly={readOnly}
             placeholder={placeholder}
-            className="!border-0 !bg-transparent"
-            contentEditableClassName="prose-markdown-canvas"
+            className="!border-0 !bg-transparent h-full"
+            contentEditableClassName="prose-markdown-canvas min-h-full outline-none"
             plugins={plugins}
           />
         )}

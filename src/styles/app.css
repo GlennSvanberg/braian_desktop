@@ -229,6 +229,27 @@ html:not(.light):not(.dark) {
   --basePageBg: transparent;
 }
 
+/* Override CodeMirror theme for MDXEditor code blocks to match app theme */
+.markdown-document-canvas .cm-editor {
+  background-color: var(--app-bg-2) !important;
+  color: var(--app-text-1) !important;
+}
+
+.markdown-document-canvas .cm-gutters {
+  background-color: var(--app-bg-2) !important;
+  color: var(--app-text-3) !important;
+  border-right: 1px solid var(--app-border) !important;
+}
+
+.markdown-document-canvas .cm-activeLine,
+.markdown-document-canvas .cm-activeLineGutter {
+  background-color: var(--app-bg-1) !important;
+}
+
+.markdown-document-canvas .cm-cursor {
+  border-left-color: var(--app-text-1) !important;
+}
+
 /* Chat column: streamed Markdown (react-markdown); tokens only. */
 .chat-message-markdown {
   color: var(--app-text-2);
