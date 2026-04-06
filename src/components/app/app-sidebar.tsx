@@ -194,6 +194,7 @@ function ConversationSidebarItem({
         'has-[[data-slot=sidebar-menu-button][data-active=true]]:bg-sidebar-chat-selected',
         'has-[[data-slot=sidebar-menu-button][data-active=true]]:hover:bg-sidebar-chat-selected-hover',
         'has-[[data-slot=sidebar-menu-button][data-active=true]]:focus-within:bg-sidebar-chat-selected-hover',
+        'relative before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-sidebar-primary before:opacity-0 has-[[data-slot=sidebar-menu-button][data-active=true]]:before:opacity-100 before:transition-opacity',
       )}
     >
       <SidebarMenuAction
@@ -412,10 +413,23 @@ function WorkspaceConversationGroup({
       defaultOpen={workspace.id === activeWorkspaceId}
       className="group/collapsible"
     >
-      <li className="group/workspace-row relative min-w-0 list-none">
+      <li className={cn(
+        'group/workspace-row relative min-w-0 list-none',
+        'before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-sidebar-primary before:opacity-0 before:transition-opacity',
+        workspace.id === activeWorkspaceId &&
+          (pathname === `/workspace/${workspace.id}/webapp` ||
+            pathname === `/workspace/${workspace.id}/webapp/settings` ||
+            pathname.startsWith('/dashboard') ||
+            pathname.startsWith('/chat/')) &&
+          'before:opacity-100',
+      )}>
         <CollapsibleTrigger asChild>
           <SidebarMenuAction
-            className="text-sidebar-foreground/75 left-1.5 right-auto z-20 size-7 bg-transparent hover:bg-sidebar-accent/35 data-[state=open]:bg-sidebar-accent/35"
+            className={cn(
+              'text-sidebar-foreground/75 left-1.5 right-auto z-20 size-7 bg-transparent hover:bg-sidebar-accent/35 data-[state=open]:bg-sidebar-accent/35',
+              'group-has-[[data-slot=sidebar-menu-button][data-active=true]]/workspace-row:text-sidebar-accent-foreground',
+              'group-has-[[data-slot=sidebar-menu-button][data-active=true]]/workspace-row:hover:text-sidebar-accent-foreground',
+            )}
             aria-label="Show or hide workspace pages and chats"
           >
             <ChevronDown
@@ -431,7 +445,8 @@ function WorkspaceConversationGroup({
             workspace.id === activeWorkspaceId &&
             (pathname === `/workspace/${workspace.id}/webapp` ||
               pathname === `/workspace/${workspace.id}/webapp/settings` ||
-              pathname.startsWith('/dashboard'))
+              pathname.startsWith('/dashboard') ||
+              pathname.startsWith('/chat/'))
           }
           tooltip={workspace.name}
           className={cn(

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import { useWorkspace } from '@/components/app/workspace-context'
 import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { requestConversationListRefresh } from '@/lib/conversation-list-refresh'
 import { isTauri } from '@/lib/tauri-env'
@@ -12,15 +13,29 @@ export const Route = createFileRoute('/_shell/chat/new')({
 
 function NewChatPage() {
   const navigate = useNavigate()
+  const {
+    activeWorkspaceId,
+    workspaces,
+    loading: workspacesLoading,
+    setActiveWorkspaceId,
+  } = useWorkspace()
   const [error, setError] = useState<string | null>(null)
+  const workspacePickRef = useRef({ activeWorkspaceId, workspaces })
+  workspacePickRef.current = { activeWorkspaceId, workspaces }
 
   useEffect(() => {
     if (!isTauri()) return
+    if (workspacesLoading) return
     let cancelled = false
     void (async () => {
       try {
-        const c = await conversationCreate(PERSONAL_WORKSPACE_SESSION_ID)
+        const { activeWorkspaceId: wid, workspaces: list } =
+          workspacePickRef.current
+        const inList = Boolean(wid) && list.some((w) => w.id === wid)
+        const workspaceId = inList ? wid : PERSONAL_WORKSPACE_SESSION_ID
+        const c = await conversationCreate(workspaceId)
         if (cancelled) return
+        setActiveWorkspaceId(workspaceId)
         await requestConversationListRefresh()
         navigate({
           to: '/chat/$conversationId',
@@ -36,7 +51,7 @@ function NewChatPage() {
     return () => {
       cancelled = true
     }
-  }, [navigate])
+  }, [navigate, workspacesLoading, setActiveWorkspaceId])
 
   if (!isTauri()) {
     return (

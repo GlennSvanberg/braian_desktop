@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { useWorkspace } from '@/components/app/workspace-context'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
@@ -72,6 +73,7 @@ export function WorkspaceHubOverview({
   conversations,
 }: Props) {
   const navigate = useNavigate()
+  const { setActiveWorkspaceId } = useWorkspace()
   const [snapshot, setSnapshot] = useState<WorkspaceHubSnapshot | null>(() =>
     isTauri()
       ? null
@@ -229,8 +231,16 @@ export function WorkspaceHubOverview({
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Button type="button" variant="default" size="sm" asChild>
-                  <Link to="/chat/new">New agent</Link>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    setActiveWorkspaceId(workspaceId)
+                    void navigate({ to: '/chat/new' })
+                  }}
+                >
+                  New agent
                 </Button>
               </div>
             </div>
