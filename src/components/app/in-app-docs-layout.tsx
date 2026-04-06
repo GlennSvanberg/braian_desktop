@@ -50,8 +50,8 @@ export function InAppDocsShell({
         </nav>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-        <div className="mx-auto w-full max-w-3xl flex-1 px-5 py-8 md:px-8 md:py-10">
-          <header className="mb-8 space-y-2">
+        <div className="w-full flex-1 px-5 py-8 sm:px-8 md:px-10 md:py-10 lg:px-12">
+          <header className="mb-8 max-w-4xl space-y-2">
             <p className="text-text-3 text-xs font-medium tracking-widest uppercase">
               Documentation
             </p>
@@ -59,7 +59,7 @@ export function InAppDocsShell({
               {title}
             </h1>
             {description ? (
-              <p className="text-text-2 max-w-2xl text-sm leading-relaxed md:text-base">
+              <p className="text-text-2 text-sm leading-relaxed md:text-base">
                 {description}
               </p>
             ) : null}

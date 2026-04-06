@@ -102,7 +102,7 @@ export function AiSettingsPanel({ embedded, className }: Props) {
       <div
         className={cn(
           'space-y-6',
-          embedded ? 'w-full max-w-lg' : 'mx-auto w-full max-w-lg',
+          embedded ? 'w-full' : 'mx-auto w-full max-w-lg',
         )}
       >
         {!embedded ? (

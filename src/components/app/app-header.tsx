@@ -155,7 +155,7 @@ export function AppHeader() {
         {...noDrag}
       />
       <div
-        className="flex min-w-0 max-w-[min(100%,40%)] flex-1 flex-col justify-center gap-0.5 py-1 sm:max-w-[min(100%,50%)]"
+        className="flex min-w-0 max-w-[min(100%,40%)] shrink-0 flex-col justify-center gap-0.5 py-1 sm:max-w-[min(100%,50%)]"
         onDoubleClick={
           tauriChrome
             ? () => {
@@ -169,19 +169,21 @@ export function AppHeader() {
         </h1>
         <p className="text-text-3 truncate text-xs">{subtitle}</p>
       </div>
-      {shellToolbar ? (
-        <div
-          className="flex min-w-0 flex-1 items-center justify-end overflow-x-auto overscroll-x-contain py-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80"
-          {...noDrag}
-        >
-          {shellToolbar}
-        </div>
-      ) : null}
-      {tauriChrome ? (
-        <div className="shrink-0" {...noDrag}>
-          <WindowControls />
-        </div>
-      ) : null}
+      <div
+        className="flex min-h-0 min-w-0 flex-1 items-center justify-end gap-2 py-0.5"
+        {...noDrag}
+      >
+        {shellToolbar ? (
+          <div className="flex min-w-0 max-w-full flex-1 items-center justify-end overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80">
+            {shellToolbar}
+          </div>
+        ) : null}
+        {tauriChrome ? (
+          <div className="shrink-0">
+            <WindowControls />
+          </div>
+        ) : null}
+      </div>
     </header>
   )
 }

@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { AiSettingsPanel } from '@/components/app/ai-settings-panel'
 import { ChatWorkbench } from '@/components/app/chat-workbench'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useMinWidthXl } from '@/hooks/use-min-width-xl'
 import { useThemePreference } from '@/hooks/use-theme-preference'
 import {
   formatUserProfileForPrompt,
@@ -76,10 +77,46 @@ function UserPage() {
   const navigate = useNavigate()
   const profile = useUserProfileSnapshot()
   const summary = formatUserProfileForPrompt(profile)
+  const isWide = useMinWidthXl()
+
+  const profileBlurb = isWide ? (
+    <p className="text-text-3 text-sm leading-relaxed">
+      Chat below to teach Braian about yourself (name, location, languages,
+      notes). API keys and models are configured in the column to the right.
+    </p>
+  ) : (
+    <p className="text-text-3 text-sm leading-relaxed">
+      Chat below to teach Braian about yourself (name, location, languages,
+      notes). API keys and models live under{' '}
+      <span className="text-text-2 font-medium">AI &amp; models</span>.
+    </p>
+  )
+
+  const profileBody = (
+    <>
+      {profileBlurb}
+      <AppearanceSection />
+      <div
+        className={cn(
+          'border-border bg-card/50 rounded-xl border p-4 md:p-5',
+        )}
+      >
+        <h2 className="text-text-2 mb-2 text-xs font-semibold tracking-wide uppercase">
+          Saved profile summary
+        </h2>
+        <pre className="text-text-2 font-sans text-sm leading-relaxed whitespace-pre-wrap">
+          {summary}
+        </pre>
+      </div>
+      <div className="border-border flex min-h-[min(70dvh,640px)] flex-1 flex-col overflow-hidden rounded-xl border md:min-h-[min(72dvh,720px)]">
+        <ChatWorkbench conversationId={null} variant="profile" />
+      </div>
+    </>
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:p-6">
-      <div className="mx-auto w-full max-w-4xl space-y-4">
+      <div className="w-full space-y-4 md:space-y-6">
         <header className="space-y-1">
           <h1 className="text-text-1 text-xl font-semibold tracking-tight md:text-2xl">
             You
@@ -90,50 +127,50 @@ function UserPage() {
           </p>
         </header>
 
-        <Tabs
-          value={tab}
-          onValueChange={(v) => {
-            void navigate({
-              to: '/user',
-              search: { tab: v as UserPageTab },
-              replace: true,
-            })
-          }}
-        >
-          <TabsList
-            variant="line"
-            className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0"
-          >
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="ai">AI &amp; models</TabsTrigger>
-          </TabsList>
-          <TabsContent value="profile" className="mt-4 space-y-4">
-            <p className="text-text-3 text-sm leading-relaxed">
-              Chat below to teach Braian about yourself (name, location,
-              languages, notes). API keys and models live under{' '}
-              <span className="text-text-2 font-medium">AI &amp; models</span>.
-            </p>
-            <AppearanceSection />
-            <div
-              className={cn(
-                'border-border bg-card/50 rounded-xl border p-4 md:p-5',
-              )}
-            >
-              <h2 className="text-text-2 mb-2 text-xs font-semibold tracking-wide uppercase">
-                Saved profile summary
+        {isWide ? (
+          <div className="grid min-h-0 grid-cols-2 items-start gap-10">
+            <section className="min-w-0 space-y-4" aria-labelledby="you-profile-heading">
+              <h2
+                id="you-profile-heading"
+                className="text-text-1 text-base font-semibold tracking-tight"
+              >
+                Profile
               </h2>
-              <pre className="text-text-2 font-sans text-sm leading-relaxed whitespace-pre-wrap">
-                {summary}
-              </pre>
-            </div>
-            <div className="border-border flex min-h-[min(70dvh,640px)] flex-1 flex-col overflow-hidden rounded-xl border md:min-h-[min(72dvh,720px)]">
-              <ChatWorkbench conversationId={null} variant="profile" />
-            </div>
-          </TabsContent>
-          <TabsContent value="ai" className="mt-4">
-            <AiSettingsPanel embedded />
-          </TabsContent>
-        </Tabs>
+              {profileBody}
+            </section>
+            <section
+              className="border-border min-w-0 space-y-4 border-l pl-10"
+              aria-label="AI and models"
+            >
+              <AiSettingsPanel embedded />
+            </section>
+          </div>
+        ) : (
+          <Tabs
+            value={tab}
+            onValueChange={(v) => {
+              void navigate({
+                to: '/user',
+                search: { tab: v as UserPageTab },
+                replace: true,
+              })
+            }}
+          >
+            <TabsList
+              variant="line"
+              className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0"
+            >
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="ai">AI &amp; models</TabsTrigger>
+            </TabsList>
+            <TabsContent value="profile" className="mt-4 space-y-4">
+              {profileBody}
+            </TabsContent>
+            <TabsContent value="ai" className="mt-4">
+              <AiSettingsPanel embedded />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </div>
   )
