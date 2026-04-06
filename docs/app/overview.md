@@ -13,6 +13,8 @@ A **workspace** is a folder you choose as the active project root. The assistant
 
 Some assistant actions only work after the conversation is **saved** (a real thread, not only “new chat”). If something is unavailable, start or open a saved chat and try again.
 
+**Workspace snapshots** (optional): **Workspace → Settings** can turn on **automatic Git checkpoints** of the workspace folder for local restore. See [Workspace snapshots](/docs/workspace-history).
+
 ## Where things run
 
 - **Desktop app (Tauri):** Full experience—AI with your keys, workspace tools, file access.
@@ -25,4 +27,5 @@ Some assistant actions only work after the conversation is **saved** (a real thr
 - [Tools the assistant can use](/docs/tools)
 - [Connections (MCP)](/docs/mcp) — `.braian/mcp.json`, Cursor-style servers, status checks
 - [Workspace memory](/docs/memory)
+- [Workspace snapshots](/docs/workspace-history)
 - [Capabilities and limits](/docs/capabilities)

@@ -27,9 +27,9 @@ Tracked items from product notes (`NOTES.md`), repo review, and MCP gaps. Use `-
 
 ## Workspace history & sync (`NOTES.md` §6)
 
-- Decide Git model (per-workspace repo, init/opt-in UX, `.gitignore` for secrets and large binaries)
+- [x] Per-workspace **opt-in Git snapshots** (libgit2, `.braian/git-history.json`, Settings UI, auto + manual checkpoints, restore) — see `docs/app/workspace-history.md`
 - Optional remote (e.g. GitHub): auth, friction, and conflict story
-- App-level **schema version** for on-disk conversation/artifact/manifest formats
+- App-level **schema version** for on-disk conversation/artifact/manifest formats (ties to file-first §7)
 
 ## QA & polish
 

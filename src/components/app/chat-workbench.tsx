@@ -74,6 +74,7 @@ import {
   useChatThread,
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
+import { generateConversationTitleFromUserMessage } from '@/lib/ai/conversation-title-generate'
 import {
   DEFAULT_AGENT_TITLE,
   DEFAULT_CHAT_TITLE,
@@ -226,6 +227,8 @@ export function ChatWorkbench({
         (isDetachedSession ? DEFAULT_AGENT_TITLE : DEFAULT_CHAT_TITLE)),
   )
   const autoTitleAppliedRef = useRef<string | null>(null)
+  const conversationTitleRef = useRef(conversationTitle)
+  conversationTitleRef.current = conversationTitle
   const isNewChat = conversationId === null
 
   useEffect(() => {
@@ -241,8 +244,24 @@ export function ChatWorkbench({
       (m) => m.role === 'user' && m.content.trim().length > 0,
     )
     if (!firstUser) return
-    setConversationTitle(deriveConversationTitle(firstUser.content))
-    autoTitleAppliedRef.current = 'detached-title'
+
+    const heuristic = deriveConversationTitle(firstUser.content)
+    setConversationTitle(heuristic)
+
+    const ac = new AbortController()
+    void generateConversationTitleFromUserMessage(firstUser.content, {
+      signal: ac.signal,
+    }).then((ai) => {
+      if (ac.signal.aborted) return
+      if (conversationTitleRef.current !== heuristic) return
+      setConversationTitle(ai)
+    }).finally(() => {
+      if (!ac.signal.aborted) {
+        autoTitleAppliedRef.current = 'detached-title'
+      }
+    })
+
+    return () => ac.abort()
   }, [isDetachedSession, isProfileSession, conversationTitle, thread.messages])
 
   useEffect(() => {
@@ -285,8 +304,25 @@ export function ChatWorkbench({
       (m) => m.role === 'user' && m.content.trim().length > 0,
     )
     if (!firstUser) return
-    setConversationTitle(deriveConversationTitle(firstUser.content))
-    autoTitleAppliedRef.current = conversationId
+
+    const heuristic = deriveConversationTitle(firstUser.content)
+    setConversationTitle(heuristic)
+
+    const mark = conversationId
+    const ac = new AbortController()
+    void generateConversationTitleFromUserMessage(firstUser.content, {
+      signal: ac.signal,
+    }).then((ai) => {
+      if (ac.signal.aborted) return
+      if (conversationTitleRef.current !== heuristic) return
+      setConversationTitle(ai)
+    }).finally(() => {
+      if (!ac.signal.aborted) {
+        autoTitleAppliedRef.current = mark
+      }
+    })
+
+    return () => ac.abort()
   }, [
     conversationId,
     conversationMeta,
@@ -841,19 +877,19 @@ export function ChatWorkbench({
         const threadNow = getThreadSnapshot(sessionKey)
         const created = await conversationCreate(targetWorkspaceId)
         const trimmedTitle = conversationTitle.trim()
+        const firstUserForTitle = threadNow.messages.find(
+          (m) => m.role === 'user' && m.content.trim().length > 0,
+        )
         const title =
           trimmedTitle &&
           trimmedTitle !== DEFAULT_AGENT_TITLE &&
           trimmedTitle !== DEFAULT_CHAT_TITLE
             ? trimmedTitle
-            : (() => {
-                const firstUser = threadNow.messages.find(
-                  (m) => m.role === 'user' && m.content.trim().length > 0,
+            : firstUserForTitle
+              ? await generateConversationTitleFromUserMessage(
+                  firstUserForTitle.content,
                 )
-                return firstUser
-                  ? deriveConversationTitle(firstUser.content)
-                  : created.title
-              })()
+              : created.title
         const meta = {
           id: created.id,
           workspaceId: targetWorkspaceId,

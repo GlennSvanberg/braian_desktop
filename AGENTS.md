@@ -46,6 +46,7 @@ There is **no** Convex/cloud backend in this repo yet.
 - `src/lib/` — shared TS utilities (`cn`, etc.)
 - `src/styles/app.css` — **only** global CSS entry (imported from `__root.tsx`)
 - `src-tauri/src/` — Rust entry (`lib.rs`, commands, plugins)
+- **Workspace Git snapshots:** `src-tauri/src/workspace_git.rs` (libgit2 via `git2`), toggled per workspace with `.braian/git-history.json`; TS bridge `src/lib/workspace/git-history-api.ts`, debounced auto-checkpoints `src/lib/workspace/workspace-activity.ts`. User-facing doc: `docs/app/workspace-history.md`.
 
 ## SQLite notes
 

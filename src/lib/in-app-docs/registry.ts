@@ -5,6 +5,7 @@ import capabilitiesMd from '../../../docs/app/capabilities.md?raw'
 import dashboardMd from '../../../docs/app/dashboard.md?raw'
 import modelContextMd from '../../../docs/app/model-context.md?raw'
 import mcpMd from '../../../docs/app/mcp.md?raw'
+import workspaceHistoryMd from '../../../docs/app/workspace-history.md?raw'
 
 export type InAppDocSlug =
   | 'overview'
@@ -14,6 +15,7 @@ export type InAppDocSlug =
   | 'dashboard'
   | 'model-context'
   | 'mcp'
+  | 'workspace-history'
 
 export type InAppDocMeta = {
   slug: InAppDocSlug
@@ -61,6 +63,13 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     title: 'Memory',
     description: 'Workspace MEMORY.md, injection, and how it updates.',
     body: memoryMd,
+  },
+  {
+    slug: 'workspace-history',
+    title: 'Workspace snapshots',
+    description:
+      'Optional Git checkpoints per workspace: config, automatic commits, restore, and limits.',
+    body: workspaceHistoryMd,
   },
   {
     slug: 'capabilities',

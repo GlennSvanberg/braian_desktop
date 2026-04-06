@@ -213,7 +213,14 @@ const toolCallPreVariants = {
 } as const
 
 /** Pretty-print when the payload is a JSON object or array; otherwise return unchanged. */
+/** Pretty-printing huge tool payloads can freeze or OOM the webview (e.g. apply_tabular_canvas). */
+const TOOL_PAYLOAD_PRETTY_MAX_LEN = 200_000
+
 function formatToolPayloadText(raw: string): string {
+  if (raw.length > TOOL_PAYLOAD_PRETTY_MAX_LEN) {
+    const head = raw.slice(0, 8000)
+    return `${head}\n\n… truncated (${raw.length} characters total).`
+  }
   const t = raw.trim()
   if (t.length === 0) return raw
   const c = t[0]

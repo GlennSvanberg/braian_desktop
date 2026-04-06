@@ -80,6 +80,9 @@ const applyTabularCanvasInputSchema = z.object({
     .describe('Optional source label (e.g. "from Budget.xlsx").'),
 })
 
+/** Keeps UI + Tauri save payloads from exhausting memory or IPC limits. */
+const TABULAR_CANVAS_MAX_ROWS = 25_000
+
 const applyVisualCanvasInputSchema = z.object({
   title: z.string().optional().describe('Optional title for the visual.'),
   prompt: z
@@ -251,42 +254,54 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
     }),
 
     applyTabularCanvasTool.server(async (args, toolCtx) => {
-      const input = applyTabularCanvasInputSchema.parse(args)
-      let rows: Record<string, unknown>[]
       try {
-        rows = JSON.parse(input.rowsJson) as Record<string, unknown>[]
-      } catch {
-        return { ok: false as const, error: 'rowsJson is not valid JSON.' }
-      }
-      if (!Array.isArray(rows)) {
-        return { ok: false as const, error: 'rowsJson must encode a JSON array.' }
-      }
-      const normalizedRows: Record<string, string | number | boolean | null>[] = []
-      for (const row of rows) {
-        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        const input = applyTabularCanvasInputSchema.parse(args)
+        let rows: Record<string, unknown>[]
+        try {
+          rows = JSON.parse(input.rowsJson) as Record<string, unknown>[]
+        } catch {
+          return { ok: false as const, error: 'rowsJson is not valid JSON.' }
+        }
+        if (!Array.isArray(rows)) {
+          return { ok: false as const, error: 'rowsJson must encode a JSON array.' }
+        }
+        if (rows.length > TABULAR_CANVAS_MAX_ROWS) {
           return {
             ok: false as const,
-            error: 'rowsJson must be an array of objects (one object per row).',
+            error: `Too many rows (${rows.length}). Maximum is ${TABULAR_CANVAS_MAX_ROWS}. Summarize or split the data.`,
           }
         }
-        const o = row as Record<string, unknown>
-        const out: Record<string, string | number | boolean | null> = {}
-        for (const k of Object.keys(o)) {
-          out[k] = coerceTabularCellValue(o[k])
+        const normalizedRows: Record<string, string | number | boolean | null>[] = []
+        for (const row of rows) {
+          if (!row || typeof row !== 'object' || Array.isArray(row)) {
+            return {
+              ok: false as const,
+              error: 'rowsJson must be an array of objects (one object per row).',
+            }
+          }
+          const o = row as Record<string, unknown>
+          const out: Record<string, string | number | boolean | null> = {}
+          for (const k of Object.keys(o)) {
+            out[k] = coerceTabularCellValue(o[k])
+          }
+          normalizedRows.push(out)
         }
-        normalizedRows.push(out)
-      }
-      toolCtx?.emitCustomEvent('braian-artifact', {
-        kind: 'tabular',
-        columns: input.columns,
-        rows: normalizedRows,
-        ...(input.title ? { title: input.title } : {}),
-        ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
-      })
-      return {
-        ok: true as const,
-        message:
-          'Data canvas updated. Reply briefly in chat; the table is in the side panel.',
+        toolCtx?.emitCustomEvent('braian-artifact', {
+          kind: 'tabular',
+          columns: input.columns,
+          rows: normalizedRows,
+          ...(input.title ? { title: input.title } : {}),
+          ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
+        })
+        return {
+          ok: true as const,
+          message:
+            'Data canvas updated. Reply briefly in chat; the table is in the side panel.',
+        }
+      } catch (e) {
+        console.error('[braian] apply_tabular_canvas', e)
+        const msg = e instanceof Error ? e.message : String(e)
+        return { ok: false as const, error: msg }
       }
     }),
 

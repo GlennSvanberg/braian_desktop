@@ -5,6 +5,7 @@
 - **Workspace scope:** File access and commands are limited to the **active workspace** folder. The assistant cannot browse arbitrary paths on your PC outside that root.
 - **Attachments:** When you attach or reference workspace files, the app may include excerpts in context; large files can be truncated.
 - **Workspace webapp:** The Vite app under `.braian/webapp/` runs as a **local dev server** in Braian. It is not a public site by default. See [Workspace webapp](/docs/dashboard).
+- **Workspace snapshots:** You can opt in to **automatic Git checkpoints** at the workspace folder root (restore recent trees from **Settings**). This uses **libgit2** inside the desktop app, not your system `git` binary. See [Workspace snapshots](/docs/workspace-history).
 - **Connections (MCP):** Optional **Model Context Protocol** servers are listed per workspace in **`.braian/mcp.json`** (Cursor-compatible `mcpServers`). The UI can **probe** stdio or remote entries for a quick health check; attaching those tools to chat is separate from built-in workspace tools. See [Connections (MCP)](/docs/mcp).
 
 ## What the assistant can and cannot do
@@ -19,7 +20,7 @@
 ## What this app is not
 
 - There is **no** built-in cloud backend or shared database for your chats in this repository version—data is local (SQLite and files under your machine / workspace as implemented).
-- It is not a replacement for source control, deployment pipelines, or IT policy tools; use normal practices for sensitive code and secrets.
+- Optional workspace snapshots are for **local rollback convenience**, not team policy, CI, or remote collaboration; use normal Git hosting and review practices for that, and keep secrets out of tracked files (`.gitignore` helps, but is not a guarantee).
 
 ## Related
 
@@ -29,3 +30,4 @@
 - [Tools](/docs/tools)
 - [Connections (MCP)](/docs/mcp)
 - [Memory](/docs/memory)
+- [Workspace snapshots](/docs/workspace-history)

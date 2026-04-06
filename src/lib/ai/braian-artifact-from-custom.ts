@@ -82,6 +82,17 @@ function parseTabularSection(raw: unknown): TabularSection | null {
 export function braianArtifactFromCustomValue(
   value: unknown,
 ): WorkspaceArtifactPayload | null {
+  try {
+    return braianArtifactFromCustomValueInner(value)
+  } catch (e) {
+    console.error('[braian] braianArtifactFromCustomValue', e)
+    return null
+  }
+}
+
+function braianArtifactFromCustomValueInner(
+  value: unknown,
+): WorkspaceArtifactPayload | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
   const kind = v.kind
@@ -146,3 +157,4 @@ export function braianArtifactFromCustomValue(
 
   return null
 }
+

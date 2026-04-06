@@ -102,7 +102,12 @@ export async function* iterateTanStackFromArgs(
           yield { type: 'text-delta', text: delta }
         }
       } else if (chunk.type === 'CUSTOM' && chunk.name === 'braian-artifact') {
-        const payload = braianArtifactFromCustomValue(chunk.value)
+        let payload: ReturnType<typeof braianArtifactFromCustomValue> = null
+        try {
+          payload = braianArtifactFromCustomValue(chunk.value)
+        } catch (e) {
+          console.error('[braian] braian-artifact payload failed', e)
+        }
         if (payload) {
           yield { type: 'artifact', payload }
         }

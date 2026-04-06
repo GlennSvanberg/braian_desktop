@@ -63,13 +63,23 @@ Component Modularity: Build dashboard widgets as highly modular, state-driven Re
 
 Current Focus: Implementing the Tauri + TanStack Start foundation with local file system read/write capabilities.
 
-6. Versioning & workspace history (plan / investigation)
+6. Versioning & workspace history
 
-- **Product need:** Users (and agents) should be able to see what changed over time, roll back mistakes, and optionally share or back up a workspace without a proprietary dump format.
-- **Git per workspace:** Treat each Braian **workspace** as a folder on disk that *may* be a Git repository (initialize on first save or when the user opts in). Commits could snapshot conversation files, artifact JSON, linked data paths, and workspace config—subject to `.gitignore` for secrets, API keys, and large binaries.
-- **GitHub (or any remote):** Investigate optional `git remote add` + push/pull so a workspace can sync to GitHub for backup, collaboration, or CI. Consider friction: auth (PAT, SSH), LFS for big files, and clear UX so we never commit credentials.
-- **App-level versioning:** Even without Git, define a **schema version** for on-disk formats (conversations JSON, artifact JSON, workspace manifest) so migrations stay explicit—similar spirit to `_schema_version` in SQLite today, but for files.
-- **Open questions:** One repo per workspace vs. monorepo-style multi-root; default branch naming; whether the app runs `git` via bundled binary vs. system Git; conflict resolution when sync and local edits diverge.
+**Implemented (workspace snapshots):** Optional **Git checkpoints per workspace** (desktop only). The user enables **automatic checkpoints** in **Workspace → Settings** (`WorkspaceHistoryPanel`). Persistence:
+
+- **Config:** `.braian/git-history.json` (`enabled` flag).
+- **Repo:** `.git` at the **workspace root**; initialization uses **libgit2** (`git2` in Rust), **not** the system `git` CLI.
+- **Commits:** Messages prefixed with `braian:` are treated as Braian snapshots; the UI lists recent ones and supports **full-tree restore** (detached HEAD at target; dirty state snapshotted and a `braian-recovery-*` branch kept for the previous HEAD).
+- **`.gitignore`:** Braian merges default ignore lines (e.g. `.env`, `node_modules/`) without wiping user rules.
+- **Auto timing:** Debounced after durable file activity (`emitWorkspaceDurableActivity` → `workspace-activity.ts`: ~45s idle, ~90s minimum between successful checkpoint commits). **Manual** checkpoint from saved chat via `workspaceGitTryCommit(..., 'manual')`.
+
+Code: `src-tauri/src/workspace_git.rs`, `src/lib/workspace/git-history-api.ts`, `src/lib/workspace/workspace-activity.ts`. User-facing write-up: `docs/app/workspace-history.md` (in-app docs slug `workspace-history`).
+
+**Still planned / open:**
+
+- **Remotes:** Optional `git remote` + push/pull from the app (auth, LFS, conflict UX) — not built into snapshots today; users can use normal Git clients alongside the same repo.
+- **App-level file schema versioning:** Explicit **schema version** fields for on-disk conversation/artifact/manifest formats (parallel spirit to `_schema_version` in SQLite) as file-first persistence lands (section 7).
+- **Product polish:** Clearer coexistence when the workspace is already a team repo; richer diff/inspect UX; limits today (e.g. snapshot list depth) may evolve.
 
 7. File-first persistence (plan)
 

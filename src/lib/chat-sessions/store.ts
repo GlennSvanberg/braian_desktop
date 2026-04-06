@@ -277,6 +277,9 @@ function appendToolArgs(
   )
 }
 
+/** Avoid multi‑MB JSON.parse in chat UI (formatToolPayloadText) after tabular canvas tools. */
+const TABULAR_CANVAS_TOOL_ARGS_ELIDE_LEN = 12_000
+
 function finalizeToolPart(
   parts: AssistantPart[] | undefined,
   chunk: Extract<ChatStreamChunk, { type: 'tool-end' }>,
@@ -289,16 +292,23 @@ function finalizeToolPart(
         ? chunk.input
         : JSON.stringify(chunk.input)
       : undefined)
-  return parts.map((p) =>
-    p.type === 'tool' && p.toolCallId === chunk.toolCallId
-      ? {
-          ...p,
-          toolName: chunk.toolName || p.toolName,
-          status: 'done' as const,
-          ...(resultSummary ? { result: resultSummary } : {}),
-        }
-      : p,
-  )
+  return parts.map((p) => {
+    if (p.type !== 'tool' || p.toolCallId !== chunk.toolCallId) return p
+    const resolvedToolName = chunk.toolName || p.toolName
+    return {
+      ...p,
+      toolName: resolvedToolName,
+      status: 'done' as const,
+      ...(resultSummary ? { result: resultSummary } : {}),
+      ...(resolvedToolName === 'apply_tabular_canvas' &&
+      (p.argsText?.length ?? 0) > TABULAR_CANVAS_TOOL_ARGS_ELIDE_LEN
+        ? {
+            argsText:
+              '{"note":"Large apply_tabular_canvas arguments omitted; see the Data side panel."}',
+          }
+        : {}),
+    }
+  })
 }
 
 function updateAssistantMessage(
