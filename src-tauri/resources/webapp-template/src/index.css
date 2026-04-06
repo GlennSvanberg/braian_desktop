@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Semantic palette aligned with Braian Desktop (src/styles/app.css). */
+html.light {
+  color-scheme: light;
+  --app-bg-0: #f4f3ef;
+  --app-bg-1: #eceae4;
+  --app-bg-2: #e3e0d8;
+  --app-border: #d4d0c6;
+  --app-text-1: #1a1c18;
+  --app-text-2: #3d3f3a;
+  --app-text-3: #6b6e66;
+  --app-accent-500: #3e8e6c;
+  --app-accent-600: #347a5d;
+}
+
+html.dark {
+  color-scheme: dark;
+  --app-bg-0: #0f1114;
+  --app-bg-1: #151a1f;
+  --app-bg-2: #1b2229;
+  --app-border: #222a32;
+  --app-text-1: #f2f2ee;
+  --app-text-2: #cbc7be;
+  --app-text-3: #8f8a80;
+  --app-accent-500: #3e8e6c;
+  --app-accent-600: #347a5d;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  background-color: var(--app-bg-0);
+  color: var(--app-text-2);
+}
+
+@theme inline {
+  --color-app-bg-0: var(--app-bg-0);
+  --color-app-bg-1: var(--app-bg-1);
+  --color-app-bg-2: var(--app-bg-2);
+  --color-app-border: var(--app-border);
+  --color-app-text-1: var(--app-text-1);
+  --color-app-text-2: var(--app-text-2);
+  --color-app-text-3: var(--app-text-3);
+  --color-app-accent-500: var(--app-accent-500);
+  --color-app-accent-600: var(--app-accent-600);
+}

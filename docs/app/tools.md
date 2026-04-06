@@ -43,11 +43,11 @@ Paths are always **relative to the workspace root**. The shell tool provides ful
 
 In a **saved** workspace chat (desktop app), the header includes **Document** | **Code** | **App**:
 
-- **Code** — All workspace **coding** tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. Dashboard tools stay **lazy** until the assistant uses **`switch_to_app_builder`** and discovery (same as Document). The routing prompt includes a tool selection guide for files and commands.
-- **Document** — Default assistant behavior; coding and dashboard tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** or **`switch_to_app_builder`** and completes the tool-discovery step. The model is only told about each workflow when the corresponding switch tool is available in the current turn.
-- **App** — **Full code mode** (eager coding tools) **plus** eager **workspace dashboard** tools (`read_workspace_dashboard`, `apply_workspace_dashboard`, `upsert_workspace_page`) and the **app-builder** instructions so the model can edit `.braian/dashboard/board.json` and page JSON under `.braian/dashboard/pages/`. The chat side panel shows a **live preview** of the dashboard. See [Dashboard & in-app pages](/docs/dashboard).
+- **Code** — All workspace **coding** tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. **Webapp helper** tools (`init_workspace_webapp`, `read_workspace_webapp_dev_logs`) stay **lazy** until the assistant uses **`switch_to_app_builder`** and discovery (same as Document). The routing prompt includes a tool selection guide for files and commands.
+- **Document** — Default assistant behavior; coding and webapp helpers are loaded **lazily** when the assistant calls **`switch_to_code_agent`** or **`switch_to_app_builder`** and completes the tool-discovery step. The model is only told about each workflow when the corresponding switch tool is available in the current turn.
+- **App** — **Full code mode** (eager coding tools) **plus** eager **webapp helpers** (`init_workspace_webapp`, `read_workspace_webapp_dev_logs`) and the **app-builder** instructions so the model can edit **`.braian/webapp/`**. The chat side panel shows a **live Vite preview** (same idea as the Webapp route). See [Workspace webapp](/docs/dashboard).
 
-You can switch modes yourself, or stay on **Document** and ask the assistant to enable dashboard or code capabilities through its tools when needed.
+You can switch modes yourself, or stay on **Document** and ask the assistant to enable webapp or code capabilities through its tools when needed.
 
 ## Workspace skills (`.braian/skills`)
 
@@ -61,23 +61,22 @@ In a **real workspace** on the **desktop app**, the assistant also gets tools to
 
 These tools are **not** available in the **You** profile coach, detached "new chat" without a folder, or in the browser-only dev preview.
 
-## Workspace dashboard tools
+## Workspace webapp helpers
 
-When dashboard tools are active for a turn, the assistant can:
+When webapp helpers are active for a turn, the assistant can:
 
 | Tool | What it does |
 |------|----------------|
-| `read_workspace_dashboard` | Read `board.json` and list page ids under `.braian/dashboard/pages/`. |
-| `apply_workspace_dashboard` | Replace the entire board manifest (argument is a **JSON string** `manifestJson`). |
-| `upsert_workspace_page` | Create or replace one page file (argument is a **JSON string** `pageJson`). |
+| `init_workspace_webapp` | Copy the bundled Vite template into `.braian/webapp/` (optional `overwrite`). |
+| `read_workspace_webapp_dev_logs` | Read recent stdout/stderr from the Braian-managed Vite dev server (ring buffer). |
 
-The assistant should read before overwriting and merge carefully so tiles are not lost.
+The dev server itself is started from the UI, not via `npm run dev` in the shell tool.
 
 ## Related
 
 - [Model context](/docs/model-context)
 - [Overview](/docs/overview)
-- [Dashboard & in-app pages](/docs/dashboard)
+- [Workspace webapp](/docs/dashboard)
 - [Connections (MCP)](/docs/mcp)
 - [Memory](/docs/memory)
 - [Capabilities](/docs/capabilities)

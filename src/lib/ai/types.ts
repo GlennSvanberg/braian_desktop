@@ -51,12 +51,10 @@ export type ChatTurnContext = {
   conversationId: string | null
   /** Profile coach chat (sidebar → You): only `update_user_profile` tool. */
   turnKind?: ChatTurnKind
-  /** Document vs coding vs in-app UI builder (App = full code + dashboard tools). */
+  /** Document vs coding vs workspace webapp builder (App = full code + webapp helper tools). */
   agentMode?: AgentMode
   /** Called when the model switches agent mode (e.g. `switch_to_code_agent`, `switch_to_app_builder`). */
   onAgentModeChange?: (mode: AgentMode) => void
-  /** After dashboard tools successfully write `board.json` or a page file (preview refresh). */
-  onDashboardWorkspaceFilesChanged?: () => void
   /** When set, the model must treat this as the latest canvas markdown for this turn. */
   documentCanvasSnapshot?: DocumentCanvasSnapshot | null
   /** Workspace files loaded for this user turn (paths relative to workspace root). */

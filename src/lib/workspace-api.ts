@@ -618,3 +618,94 @@ export async function workspaceSearchText(input: {
     maxResults: input.maxResults ?? null,
   })
 }
+
+// --- Layer C: workspace Vite webapp (`.braian/webapp`)
+
+export type WorkspaceWebappDevStartResult = {
+  port: number
+  url: string
+}
+
+export type WorkspaceWebappDevStatus = {
+  running: boolean
+  port?: number
+  /** Base dev server URL (`http://127.0.0.1:<port>/`). */
+  url?: string
+  /** Stored iframe path (e.g. `/calculator`). */
+  previewPath?: string
+  /** Full URL for the preview iframe when the dev server is running. */
+  previewUrl?: string
+  lastError?: string
+}
+
+export type WorkspaceWebappInitResult = {
+  copiedFiles: number
+  skippedExisting: boolean
+}
+
+export async function workspaceWebappInit(input: {
+  workspaceId: string
+  overwrite?: boolean
+}): Promise<WorkspaceWebappInitResult> {
+  if (!isTauri()) {
+    throw new Error('Workspace webapp requires the desktop app.')
+  }
+  return invoke<WorkspaceWebappInitResult>('webapp_init_from_template', {
+    workspaceId: input.workspaceId,
+    overwrite: input.overwrite ?? null,
+  })
+}
+
+export async function workspaceWebappDevStart(
+  workspaceId: string,
+): Promise<WorkspaceWebappDevStartResult> {
+  if (!isTauri()) {
+    throw new Error('Starting the dev server requires the desktop app.')
+  }
+  return invoke<WorkspaceWebappDevStartResult>('webapp_dev_start', {
+    workspaceId,
+  })
+}
+
+export async function workspaceWebappDevStop(workspaceId: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error('Stopping the dev server requires the desktop app.')
+  }
+  await invoke('webapp_dev_stop', { workspaceId })
+}
+
+export async function workspaceWebappDevStatus(
+  workspaceId: string,
+): Promise<WorkspaceWebappDevStatus> {
+  if (!isTauri()) {
+    return {
+      running: false,
+      lastError: 'Open Braian Desktop to use the workspace webapp preview.',
+    }
+  }
+  return invoke<WorkspaceWebappDevStatus>('webapp_dev_status', {
+    workspaceId,
+  })
+}
+
+export async function workspaceWebappDevLogs(
+  workspaceId: string,
+): Promise<{ text: string }> {
+  if (!isTauri()) {
+    return { text: '' }
+  }
+  return invoke<{ text: string }>('webapp_dev_logs', { workspaceId })
+}
+
+export async function workspaceWebappPreviewPathSet(input: {
+  workspaceId: string
+  path: string
+}): Promise<{ previewPath: string }> {
+  if (!isTauri()) {
+    throw new Error('Setting webapp preview path requires the desktop app.')
+  }
+  return invoke<{ previewPath: string }>('webapp_preview_path_set', {
+    workspaceId: input.workspaceId,
+    path: input.path,
+  })
+}

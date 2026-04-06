@@ -1,6 +1,6 @@
 import { ImageIcon } from 'lucide-react'
 
-import { WorkspaceAppPreview } from '@/components/app/workspace-app-preview'
+import { WorkspaceWebappPreviewCore } from '@/components/app/workspace-webapp-preview-core'
 import {
   MarkdownDocumentCanvas,
   type CanvasSelectionSubmitPayload,
@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 
 type ArtifactPanelProps = {
   payload: WorkspaceArtifactPayload | null
-  /** When `app`, the panel shows the live workspace dashboard preview when workspace + session are set. */
+  /** When `app`, the panel shows the workspace Vite webapp preview when workspace + session are set. */
   agentMode?: AgentMode
   appPreviewWorkspaceId?: string | null
   appPreviewSessionKey?: string | null
@@ -198,11 +198,11 @@ export function ArtifactPanel({
 
   if (showAppPreviewFromMode) {
     return (
-      <WorkspaceAppPreview
+      <WorkspaceWebappPreviewCore
         workspaceId={appPreviewWorkspaceId}
-        sessionKey={appPreviewSessionKey}
-        generating={appPreviewGenerating}
         isTauriRuntime={isTauriRuntime}
+        variant="embedded"
+        generating={appPreviewGenerating}
         className="h-full min-h-0"
       />
     )
@@ -222,11 +222,11 @@ export function ArtifactPanel({
     appPreviewSessionKey != null
   ) {
     return (
-      <WorkspaceAppPreview
+      <WorkspaceWebappPreviewCore
         workspaceId={appPreviewWorkspaceId}
-        sessionKey={appPreviewSessionKey}
-        generating={appPreviewGenerating}
         isTauriRuntime={isTauriRuntime}
+        variant="embedded"
+        generating={appPreviewGenerating}
         className="h-full min-h-0"
       />
     )

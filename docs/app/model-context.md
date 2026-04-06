@@ -8,16 +8,16 @@ In the chat toolbar, **Context** opens the **Model context** dialog: **Last sent
 
 For a normal chat attached to a **workspace folder** (not "new chat" without a folder, and not the **You** profile coach), sections are assembled in this order:
 
-1. **Routing (Core)** — A numbered **decision tree** assembled for the current turn, plus a short addendum for **document/triage** or **code** mode, and in **App** mode an extra **App mode** subsection (in-app UI, live preview). It tells the model how to choose dashboard tools, code tools, the document canvas, workspace skills, and MCP tools **without mentioning workflows that are unavailable in that scenario**.
+1. **Routing (Core)** — A numbered **decision tree** assembled for the current turn, plus a short addendum for **document/triage** or **code** mode, and in **App** mode an extra **App mode** subsection (workspace webapp, live preview). It tells the model how to choose webapp helpers, code tools, the document canvas, workspace skills, and MCP tools **without mentioning workflows that are unavailable in that scenario**.
 2. **Skills** — A **catalog** listing every skill file's `name`, `description`, and path (metadata only). Full skill bodies — including create-skill instructions — load **on demand** via `read_workspace_skill`, keeping the default prompt compact.
 3. **User context** — Your saved **profile** (sidebar → **You**) and the app's **current client time** (for tone and scheduling; the model is told not to read the clock aloud unless you ask).
 4. **Workspace memory** — Excerpt from **`.braian/MEMORY.md`** when that file exists and is non-empty (subject to size limits). See [Memory](/docs/memory).
 5. **This turn** — Optional blocks appended when relevant:
    - **Attached workspace files** (excerpts from @-attachments),
    - **Document canvas snapshot** (latest side-panel markdown + **revision**, optional **selection** excerpt),
-   - **Workspace dashboard builder** — When **App** mode is on for that chat, the app injects the full **app-builder** instructions (loaded from **`.braian/skills/app-builder.md`**, with an in-app fallback if the file is missing).
+   - **Workspace webapp builder** — When **App** mode is on for that chat, the app injects the full **app-builder** instructions (loaded from **`.braian/skills/app-builder.md`**, with an in-app fallback if the file is missing).
 
-Detached chats (no workspace folder yet) and synthetic sessions skip workspace-only sections (memory, skills on disk, dashboard files) where the app cannot resolve paths.
+Detached chats (no workspace folder yet) and synthetic sessions skip workspace-only sections (memory, skills on disk, webapp files) where the app cannot resolve paths.
 
 ## Profile coach (**You**)
 
@@ -35,9 +35,9 @@ See [Tools](/docs/tools) for a short summary of those tools.
 
 ## Tools vs system text
 
-- **Lazy tools** (document mode): coding and dashboard tools may appear as "lazy" until the model calls the right **`switch_to_*`** tool and completes **tool discovery**. Those unlock steps are only mentioned in the prompt when the corresponding switch tool is actually available that turn. The **Context** dialog shows each tool tagged as **eager** or **lazy**.
-- **Code** mode: all **coding** workspace tools are available immediately — `read_workspace_file`, `write_workspace_file`, `patch_workspace_file`, `list_workspace_dir`, `search_workspace`, `run_workspace_command`, and `run_workspace_shell`. Dashboard tools remain **lazy** until `switch_to_app_builder` + discovery. The routing addendum includes a **tool selection guide** and guidelines for search-before-read, patch-over-rewrite, and shell usage. `maxIterations` is higher (40 base, up to 48 with MCP) to accommodate the richer tool surface.
-- **App** mode: same eager **coding** tools as Code mode, and dashboard tools are **eager** too. Detailed JSON schema for tiles and pages is reinforced via the **app-builder** section (from the skill file when possible) plus the **App mode** routing subsection. `maxIterations` is slightly higher than Code-only (44 base) to cover dashboard edits. See [Dashboard & in-app pages](/docs/dashboard).
+- **Lazy tools** (document mode): coding and **webapp helper** tools may appear as "lazy" until the model calls the right **`switch_to_*`** tool and completes **tool discovery**. Those unlock steps are only mentioned in the prompt when the corresponding switch tool is actually available that turn. The **Context** dialog shows each tool tagged as **eager** or **lazy**.
+- **Code** mode: all **coding** workspace tools are available immediately — `read_workspace_file`, `write_workspace_file`, `patch_workspace_file`, `list_workspace_dir`, `search_workspace`, `run_workspace_command`, and `run_workspace_shell`. Webapp helpers remain **lazy** until `switch_to_app_builder` + discovery. The routing addendum includes a **tool selection guide** and guidelines for search-before-read, patch-over-rewrite, and shell usage. `maxIterations` is higher (40 base, up to 48 with MCP) to accommodate the richer tool surface.
+- **App** mode: same eager **coding** tools as Code mode, and **`init_workspace_webapp`** / **`read_workspace_webapp_dev_logs`** are **eager** too. The **app-builder** section (from the skill file when possible) plus the **App mode** routing subsection describe `.braian/webapp/`. `maxIterations` is slightly higher than Code-only (44 base) to cover webapp edits. See [Workspace webapp](/docs/dashboard).
 - **MCP issues**: when MCP connections fail or are slow, warnings are injected into a dedicated **"Connections (MCP) issues"** system section so the model is aware of unavailable tools. Active MCP server names are listed in the routing text.
 
 ## Related
@@ -46,5 +46,5 @@ See [Tools](/docs/tools) for a short summary of those tools.
 - [Tools](/docs/tools)
 - [Connections (MCP)](/docs/mcp) — workspace `.braian/mcp.json`, injected when MCP tools are available for that workspace
 - [Memory](/docs/memory)
-- [Dashboard & in-app pages](/docs/dashboard)
+- [Workspace webapp](/docs/dashboard)
 - [Capabilities](/docs/capabilities)

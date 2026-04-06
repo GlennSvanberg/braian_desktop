@@ -80,7 +80,7 @@ struct ConversationFileV1 {
   /// `"document"` | `"code"` — persisted chat agent mode.
   #[serde(default = "default_agent_mode")]
   agent_mode: String,
-  /// When true, the model receives workspace dashboard builder tools and instructions.
+  /// Legacy: when true, App-mode harness was enabled (workspace webapp builder).
   #[serde(default = "default_app_harness_enabled")]
   app_harness_enabled: bool,
   /// `"fast"` | `"thinking"` — provider-native reasoning depth for this chat.
@@ -198,14 +198,6 @@ fn canvas_dir(workspace_root: &Path) -> PathBuf {
   braian_dir(workspace_root).join("canvas")
 }
 
-fn dashboard_dir(workspace_root: &Path) -> PathBuf {
-  braian_dir(workspace_root).join("dashboard")
-}
-
-fn dashboard_pages_dir(workspace_root: &Path) -> PathBuf {
-  dashboard_dir(workspace_root).join("pages")
-}
-
 fn skills_dir(workspace_root: &Path) -> PathBuf {
   braian_dir(workspace_root).join("skills")
 }
@@ -248,7 +240,6 @@ pub(crate) fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> 
   fs::create_dir_all(conversations_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(artifacts_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(canvas_dir(workspace_root)).map_err(|e| e.to_string())?;
-  fs::create_dir_all(dashboard_pages_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(skills_dir(workspace_root)).map_err(|e| e.to_string())?;
   let create_skill_path = skills_dir(workspace_root).join("create-skill.md");
   if !create_skill_path.exists() {

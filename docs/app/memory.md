@@ -21,6 +21,6 @@ Memory updates are produced by the model merging new information with the existi
 
 - [Overview](/docs/overview)
 - [Model context](/docs/model-context)
-- [Dashboard & in-app pages](/docs/dashboard)
+- [Workspace webapp](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Capabilities](/docs/capabilities)

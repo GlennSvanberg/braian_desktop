@@ -1,9 +1,10 @@
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 
-import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
+import { WORKSPACE_CODE_TOOL_NAMES } from '@/lib/ai/coding-tools'
+import { WORKSPACE_WEBAPP_TOOL_NAMES } from '@/lib/ai/webapp-tools'
 
-import { DASHBOARD_TOOL_NAMES } from './dashboard-tools'
+import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 
 import type { ChatTurnContext } from './types'
 
@@ -11,14 +12,19 @@ const switchInputSchema = z.object({
   reason: z
     .string()
     .optional()
-    .describe('Brief note on why workspace dashboard tools are needed.'),
+    .describe('Brief note on why workspace webapp tools are needed.'),
 })
 
-const discoveryNamesJson = JSON.stringify([...DASHBOARD_TOOL_NAMES])
+const APP_BUILDER_DISCOVERY_NAMES = [
+  ...WORKSPACE_CODE_TOOL_NAMES,
+  ...WORKSPACE_WEBAPP_TOOL_NAMES,
+] as const
+
+const discoveryNamesJson = JSON.stringify([...APP_BUILDER_DISCOVERY_NAMES])
 
 /**
  * Eager tool when App mode is off: enables persisted app harness and tells the model
- * how to unlock lazy dashboard tools (same pattern as switch_to_code_agent).
+ * how to unlock lazy workspace code + webapp helper tools (same pattern as switch_to_code_agent).
  */
 export function buildSwitchToAppBuilderTool(context: ChatTurnContext | undefined) {
   if (
@@ -31,13 +37,13 @@ export function buildSwitchToAppBuilderTool(context: ChatTurnContext | undefined
 
   return toolDefinition({
     name: 'switch_to_app_builder',
-    description: `Switch this chat to **App agent mode**: full workspace coding tools plus **workspace dashboard / in-app page** tools (Braian sidebar Dashboard and \`/dashboard/page/...\`). The user does not need to select App mode in the UI manually.
+    description: `Switch this chat to **App agent mode**: workspace **Vite + React** app at \`.braian/webapp\` (preview in sidebar **Webapp** and the chat artifact). The user does not need to select App mode in the UI manually.
 
-**Required workflow after this tool returns successfully:** immediately call \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use read_workspace_dashboard, apply_workspace_dashboard, and upsert_workspace_page.
+**Required workflow after this tool returns successfully:** immediately call \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use file/shell tools for \`.braian/webapp/\`, \`init_workspace_webapp\` when the template is missing, and \`read_workspace_webapp_dev_logs\` when diagnosing the managed dev server.
 
-**Do not** satisfy "add to my dashboard", "hello world app in Braian", KPI tiles, or in-app pages by pasting standalone \`index.html\` or raw HTML — Braian renders **JSON manifests** and markdown tiles via those tools.
+**Interactive UI:** Implement real components under **\`.braian/webapp/src/**\`. **Do not** run \`npm run dev\` via the shell tool. The user starts the dev preview from Braian.
 
-Call this when the user wants anything on the workspace overview dashboard, a page inside Braian, or widgets/tiles (including simple "hello world" / lorem content as markdown or a page JSON file).`,
+Call this when the user wants an in-workspace webapp or Vite-based UI.`,
     inputSchema: switchInputSchema,
   }).server(async (args) => {
     switchInputSchema.parse(args)
@@ -45,8 +51,8 @@ Call this when the user wants anything on the workspace overview dashboard, a pa
     return {
       ok: true as const,
       message:
-        'App agent mode is enabled for this conversation (full code + dashboard tools). Next: call __lazy__tool__discovery__ with the toolNames array below.',
-      discoveryToolNames: [...DASHBOARD_TOOL_NAMES],
+        'App agent mode is enabled for this conversation. Next: call __lazy__tool__discovery__ with the toolNames array below.',
+      discoveryToolNames: [...APP_BUILDER_DISCOVERY_NAMES],
     }
   })
 }

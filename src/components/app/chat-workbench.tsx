@@ -309,16 +309,31 @@ export function ChatWorkbench({
     (artifactOpen || agentMode === 'app') && !isProfileSession
 
   const chatScrollViewportRef = useRef<HTMLDivElement | null>(null)
-  const prevGeneratingForPinScrollRef = useRef<boolean | null>(null)
-  /** User message id for the turn we are pinning (set on generate start; avoids pinning on hydrate). */
+  const chatPinSpacerRef = useRef<HTMLDivElement | null>(null)
+  const prevGeneratingForPinScrollRef = useRef(false)
+  /** User message id for the turn we are pinning (set when a streaming tail turn starts). */
   const pinTurnUserIdRef = useRef<string | null>(null)
+  /**
+   * Bottom slack must not shrink while the assistant grows; otherwise scrollHeight drops,
+   * maxScroll clamps scrollTop down, and older messages re-enter the viewport.
+   */
+  const pinSlackMonotonicPxRef = useRef(0)
+  const [chatViewportResizeTick, setChatViewportResizeTick] = useState(0)
+
   useLayoutEffect(() => {
-    if (prevGeneratingForPinScrollRef.current === null) {
-      prevGeneratingForPinScrollRef.current = generating
-      return
-    }
+    const viewport = chatScrollViewportRef.current
+    if (!viewport || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() =>
+      setChatViewportResizeTick((t) => t + 1),
+    )
+    ro.observe(viewport)
+    return () => ro.disconnect()
+  }, [sessionKey])
+
+  useLayoutEffect(() => {
+    const viewport = chatScrollViewportRef.current
+    const spacer = chatPinSpacerRef.current
     const wasGenerating = prevGeneratingForPinScrollRef.current
-    prevGeneratingForPinScrollRef.current = generating
 
     const n = messages.length
     const last = n >= 1 ? messages[n - 1] : null
@@ -329,38 +344,71 @@ export function ChatWorkbench({
       last?.role === 'assistant' &&
       last.status === 'streaming'
 
-    if (shouldPinTail && !wasGenerating) {
+    if (shouldPinTail && (!wasGenerating || pinTurnUserIdRef.current == null)) {
+      if (pinTurnUserIdRef.current !== secondLast!.id) {
+        pinSlackMonotonicPxRef.current = 0
+        if (chatPinSpacerRef.current) {
+          chatPinSpacerRef.current.style.minHeight = ''
+        }
+      }
       pinTurnUserIdRef.current = secondLast!.id
     }
+
     if (!generating || !shouldPinTail) {
+      // Do not clear the bottom spacer here: collapsing scrollHeight makes the browser
+      // clamp scrollTop and the view jumps back to the top of the thread. The spacer is
+      // cleared when the next user message starts a new pin (see block above).
       pinTurnUserIdRef.current = null
+      pinSlackMonotonicPxRef.current = 0
+      prevGeneratingForPinScrollRef.current = generating
       return
     }
+
     if (pinTurnUserIdRef.current !== secondLast!.id) {
+      if (spacer) spacer.style.minHeight = ''
+      pinSlackMonotonicPxRef.current = 0
+      prevGeneratingForPinScrollRef.current = generating
       return
     }
 
     const userMessageId = secondLast!.id
 
-    const pinUserMessageToTop = () => {
-      const viewport = chatScrollViewportRef.current
+    const applyPin = () => {
+      const vp = chatScrollViewportRef.current
+      const sp = chatPinSpacerRef.current
       const el = document.getElementById(`chat-message-${userMessageId}`)
-      if (!viewport || !el) return
-      // Radix ScrollArea: scroll the viewport. Use absolute scrollTop so clamping tracks as
-      // scrollHeight grows while the assistant streams (first frame often maxes out too low).
+      if (!vp || !sp || !el) return
+
       const topMarginPx = 16
-      const nextTop =
-        viewport.scrollTop +
-        (el.getBoundingClientRect().top -
-          viewport.getBoundingClientRect().top) -
-        topMarginPx
-      const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
-      viewport.scrollTop = Math.min(Math.max(0, nextTop), maxScroll)
+      const desiredScrollTop = Math.max(
+        0,
+        vp.scrollTop +
+          el.getBoundingClientRect().top -
+          vp.getBoundingClientRect().top -
+          topMarginPx,
+      )
+      const v = vp.clientHeight
+      const spacerH = sp.offsetHeight
+      const scrollH = vp.scrollHeight
+      const contentExSpacer = scrollH - spacerH
+      const slackNeeded = Math.max(
+        0,
+        Math.ceil(desiredScrollTop + v - contentExSpacer),
+      )
+      const slack = Math.max(slackNeeded, pinSlackMonotonicPxRef.current)
+      pinSlackMonotonicPxRef.current = slack
+      sp.style.minHeight = `${slack}px`
+      void sp.offsetHeight
+
+      const maxScroll = Math.max(0, vp.scrollHeight - vp.clientHeight)
+      vp.scrollTop = Math.min(desiredScrollTop, maxScroll)
     }
 
-    pinUserMessageToTop()
-    requestAnimationFrame(pinUserMessageToTop)
-  }, [generating, messages])
+    applyPin()
+    requestAnimationFrame(applyPin)
+
+    prevGeneratingForPinScrollRef.current = generating
+  }, [generating, messages, chatViewportResizeTick])
 
   const mention = useMemo(
     () => getMentionQuery(draft, caretPos),
@@ -1213,6 +1261,11 @@ export function ChatWorkbench({
                   </div>
                 )
               })}
+              <div
+                ref={chatPinSpacerRef}
+                className="shrink-0"
+                aria-hidden
+              />
             </div>
           )}
         </div>

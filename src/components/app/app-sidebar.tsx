@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   BookOpen,
   ChevronDown,
-  FileText,
-  LayoutDashboard,
   Loader2,
+  MonitorPlay,
   MoreHorizontal,
   PanelLeftIcon,
   Pin,
@@ -56,7 +55,6 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { listWorkspaceDashboardPageIds } from '@/lib/workspace-dashboard'
 import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
@@ -325,21 +323,6 @@ function WorkspaceConversationGroup({
   setActiveWorkspaceId: (id: string) => void
 }) {
   const [newPending, setNewPending] = useState(false)
-  const [dashboardPageIds, setDashboardPageIds] = useState<string[]>([])
-
-  useEffect(() => {
-    if (!isTauriRuntime) {
-      setDashboardPageIds([])
-      return
-    }
-    let cancelled = false
-    void listWorkspaceDashboardPageIds(workspace.id).then((ids) => {
-      if (!cancelled) setDashboardPageIds(ids)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [workspace.id, isTauriRuntime, pathname])
 
   const chatsExpanded = expandedChats
   const sortedConversations = useMemo(() => {
@@ -403,7 +386,8 @@ function WorkspaceConversationGroup({
           type="button"
           isActive={
             workspace.id === activeWorkspaceId &&
-            pathname.startsWith('/dashboard')
+            (pathname === `/workspace/${workspace.id}/webapp` ||
+              pathname.startsWith('/dashboard'))
           }
           tooltip={workspace.name}
           className={cn(
@@ -412,7 +396,10 @@ function WorkspaceConversationGroup({
           )}
           onClick={() => {
             setActiveWorkspaceId(workspace.id)
-            navigate({ to: '/dashboard' })
+            navigate({
+              to: '/workspace/$workspaceId/webapp',
+              params: { workspaceId: workspace.id },
+            })
           }}
         >
           <span className="min-w-0 flex-1 overflow-hidden text-clip whitespace-nowrap">
@@ -467,38 +454,31 @@ function WorkspaceConversationGroup({
 
         <CollapsibleContent asChild>
           <SidebarMenu className="border-sidebar-border mx-1 ml-1 mt-0.5 border-l pl-1.5">
-            {dashboardPageIds.map((pageId) => (
-              <SidebarMenuItem key={`page-${pageId}`}>
-                <SidebarMenuButton
-                  asChild
-                  tooltip={pageId}
-                  isActive={
-                    pathname === `/dashboard/page/${pageId}` &&
-                    workspace.id === activeWorkspaceId
-                  }
+            <SidebarMenuItem key="workspace-webapp">
+              <SidebarMenuButton
+                asChild
+                tooltip="Vite workspace webapp preview"
+                isActive={
+                  pathname === `/workspace/${workspace.id}/webapp` &&
+                  workspace.id === activeWorkspaceId
+                }
+              >
+                <Link
+                  to="/workspace/$workspaceId/webapp"
+                  params={{ workspaceId: workspace.id }}
+                  className="truncate"
+                  onClick={() => {
+                    if (workspace.id !== activeWorkspaceId) {
+                      setActiveWorkspaceId(workspace.id)
+                    }
+                  }}
                 >
-                  <Link
-                    to="/dashboard/page/$pageId"
-                    params={{ pageId }}
-                    className="truncate"
-                    onClick={() => {
-                      if (workspace.id !== activeWorkspaceId) {
-                        setActiveWorkspaceId(workspace.id)
-                      }
-                    }}
-                  >
-                    <FileText className="size-4 shrink-0 opacity-70" aria-hidden />
-                    <span className="truncate">{pageId}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-            {dashboardPageIds.length === 0 &&
-            sortedConversations.length === 0 ? (
-              <p className="text-sidebar-foreground/55 px-2 py-1.5 text-[11px] leading-snug">
-                No app pages or saved threads yet.
-              </p>
-            ) : sortedConversations.length === 0 ? (
+                  <MonitorPlay className="size-4 shrink-0 opacity-70" aria-hidden />
+                  <span className="truncate">Webapp</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            {sortedConversations.length === 0 ? (
               <p className="text-sidebar-foreground/55 px-2 py-1.5 text-[11px] leading-snug">
                 No saved threads yet.
               </p>
@@ -721,12 +701,16 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname.startsWith('/dashboard')}
-                  tooltip="Dashboard"
+                  isActive={
+                    pathname.startsWith('/dashboard') ||
+                    (!!activeWorkspaceId &&
+                      pathname === `/workspace/${activeWorkspaceId}/webapp`)
+                  }
+                  tooltip="Workspace webapp (Vite preview)"
                 >
                   <Link to="/dashboard">
-                    <LayoutDashboard />
-                    <span>Dashboard</span>
+                    <MonitorPlay />
+                    <span>Webapp</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

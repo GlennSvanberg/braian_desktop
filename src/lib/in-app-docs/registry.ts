@@ -39,7 +39,7 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'tools',
     title: 'Tools',
     description:
-      'Canvas, workspace files, commands, skills, dashboard, and code-agent tools.',
+      'Canvas, workspace files, commands, skills, webapp helpers, and code-agent tools.',
     body: toolsMd,
   },
   {
@@ -51,9 +51,9 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
   },
   {
     slug: 'dashboard',
-    title: 'Dashboard & in-app pages',
+    title: 'Workspace webapp',
     description:
-      'Workspace board.json, pages, tile types, and Document / Code / App chat modes (App = full code + dashboard preview).',
+      'Vite app under .braian/webapp, App mode preview, and webapp helper tools.',
     body: dashboardMd,
   },
   {

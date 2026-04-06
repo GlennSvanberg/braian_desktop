@@ -85,6 +85,13 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 5 {
+    conn.execute_batch(
+      "ALTER TABLE workspaces ADD COLUMN webapp_preview_path TEXT NOT NULL DEFAULT '/';
+      UPDATE _schema_version SET version = 5 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 

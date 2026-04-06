@@ -28,20 +28,21 @@ import {
 } from './braian-routing-prompt'
 import { buildCanvasTools } from './canvas-tools'
 import { buildCodingTools } from './coding-tools'
-import { buildDashboardTools } from './dashboard-tools'
 import { isMockAiMode } from './mock-mode'
 import { buildMcpTools } from './mcp-tools'
 import { buildSkillTools } from './skill-tools'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import { buildUserProfileTools } from './user-profile-tools'
+import { buildProviderNativeSearchTools } from './provider-native-search-tools'
+import { buildWorkspaceWebappTools } from './webapp-tools'
 import { buildReasoningModelOptions } from './reasoning-model-options'
 import type { ChatTurnContext, PriorChatMessage, ReasoningMode } from './types'
 import type { ReasoningModelOptions } from './reasoning-model-options'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
 
-/** Fallback dashboard instructions if `.braian/skills/app-builder.md` is unavailable. */
+/** Fallback webapp instructions if `.braian/skills/app-builder.md` is unavailable. */
 export const APP_BUILDER_SYSTEM = APP_BUILDER_INSTRUCTIONS_FALLBACK
 
 export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Desktop. Your job is to get to know the user in a friendly, efficient way and to keep their **global profile** up to date.
@@ -50,7 +51,7 @@ export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Des
 - Ask short, natural questions (name, where they are, languages they prefer for answers, timezone or locale if relevant, role or context that helps assistants across workspaces).
 - When the user shares something they want remembered, call **update_user_profile** with only the fields that changed. Do not invent facts.
 - If they clear or correct something, use the tool with null or empty string for that field, or an updated list for languages.
-- You have **no** workspace files, code, document canvas, or dashboard tools — only **update_user_profile**. If they ask for other work, say that normal chats in a workspace handle that, and stay focused on profile here.
+- You have **no** workspace files, code, document canvas, or webapp tools — only **update_user_profile**. If they ask for other work, say that normal chats in a workspace handle that, and stay focused on profile here.
 
 **Privacy:** Only store what they explicitly give you or clearly confirm.`
 
@@ -135,13 +136,15 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   switch_to_code_agent: 'src/lib/ai/switch-code-agent-tool.ts',
   switch_to_app_builder: 'src/lib/ai/switch-app-builder-tool.ts',
   __lazy__tool__discovery__: '@tanstack/ai (lazy tool discovery)',
-  read_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
-  apply_workspace_dashboard: 'src/lib/ai/dashboard-tools.ts',
-  upsert_workspace_page: 'src/lib/ai/dashboard-tools.ts',
+  init_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
+  read_workspace_webapp_dev_logs: 'src/lib/ai/webapp-tools.ts',
+  set_workspace_webapp_preview_path: 'src/lib/ai/webapp-tools.ts',
   update_user_profile: 'src/lib/ai/user-profile-tools.ts',
   list_workspace_skills: 'src/lib/ai/skill-tools.ts',
   read_workspace_skill: 'src/lib/ai/skill-tools.ts',
   write_workspace_skill: 'src/lib/ai/skill-tools.ts',
+  web_search: 'src/lib/ai/provider-native-search-tools.ts',
+  google_search: 'src/lib/ai/provider-native-search-tools.ts',
 }
 
 /** User profile lines plus automatic local time (injected on every default agent turn). */
@@ -403,8 +406,13 @@ export async function buildTanStackChatTurnArgs(
   }))
   history.push({ role: 'user', content: options.userText })
 
+  const nativeSearchTools = buildProviderNativeSearchTools({
+    provider: settings.provider as AiProviderId,
+    modelId: settings.modelId.trim(),
+  })
+
   if (ctx?.turnKind === 'profile') {
-    const tools = buildUserProfileTools()
+    const tools = [...buildUserProfileTools(), ...nativeSearchTools]
     const profileText = formatUserProfileForPrompt(userProfileGet())
     const systemSections: ChatSystemSectionDisplay[] = [
       {
@@ -449,7 +457,7 @@ export async function buildTanStackChatTurnArgs(
   const switchToCodeTool =
     agentMode === 'document' ? buildSwitchToCodeAgentTool(ctx) : null
   const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
-  const dashboardTools = buildDashboardTools(ctx)
+  const webappTools = buildWorkspaceWebappTools(ctx)
   const skillTools = buildSkillTools(ctx)
   const mcpToolsStart = nowMs()
   const { tools: mcpTools, warnings: mcpWarnings, serverNames: mcpServerNames } = await buildMcpTools(ctx)
@@ -463,8 +471,9 @@ export async function buildTanStackChatTurnArgs(
     ...skillTools,
     ...(switchToCodeTool ? [switchToCodeTool] : []),
     ...(switchToAppTool ? [switchToAppTool] : []),
-    ...dashboardTools,
+    ...webappTools,
     ...mcpTools,
+    ...nativeSearchTools,
   ]
 
   const memoryBlockStart = nowMs()
@@ -499,12 +508,13 @@ export async function buildTanStackChatTurnArgs(
     buildBraianRoutingPrompt({
       hasSwitchToAppBuilder: switchToAppTool != null,
       hasSwitchToCodeAgent: switchToCodeTool != null,
-      hasDashboardTools: dashboardTools.length > 0,
+      hasWebappTools: webappTools.length > 0,
       hasCodeTools: codingTools.length > 0,
       hasCanvasTools: canvasTools.length > 0,
       hasCanvasSnapshot: snapshotText.length > 0,
       hasSkillTools: skillTools.length > 0,
       hasMcpTools: mcpTools.length > 0,
+      hasProviderWebSearch: nativeSearchTools.length > 0,
       mcpServerNames,
     }),
     isCodeMode ? CODE_MODE_ROUTING_ADDENDUM : DOC_MODE_ROUTING_ADDENDUM,
@@ -593,7 +603,7 @@ export async function buildTanStackChatTurnArgs(
     )
     systemSections.push({
       id: 'app-builder',
-      label: 'Workspace dashboard builder',
+      label: 'Workspace webapp builder',
       source: SOURCE_APP_BUILDER,
       text: appBuilderText,
     })
@@ -618,15 +628,12 @@ export async function buildTanStackChatTurnArgs(
   const maxIterations =
     tools.length > 0
       ? (() => {
-          let base = isCodeMode
-            ? isAppMode
-              ? 44
-              : 40
-            : dashboardTools.length > 0
-              ? 28
-              : 24
+          let base = isCodeMode ? (isAppMode ? 44 : 40) : 24
           if (mcpTools.length > 0) {
             base = Math.min(base + 8, 48)
+          }
+          if (nativeSearchTools.length > 0) {
+            base = Math.min(base + 4, 48)
           }
           return base
         })()

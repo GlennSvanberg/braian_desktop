@@ -1,12 +1,14 @@
 export type BuildRoutingPromptOptions = {
   hasSwitchToAppBuilder: boolean
   hasSwitchToCodeAgent: boolean
-  hasDashboardTools: boolean
+  hasWebappTools: boolean
   hasCodeTools: boolean
   hasCanvasTools: boolean
   hasCanvasSnapshot: boolean
   hasSkillTools: boolean
   hasMcpTools: boolean
+  /** OpenAI/Anthropic `web_search` or Gemini `google_search` is registered for this turn. */
+  hasProviderWebSearch?: boolean
   mcpServerNames?: string[]
 }
 
@@ -21,12 +23,19 @@ function buildBaseRoutingLines(): string[] {
   ]
 }
 
-function buildDashboardRoutingLine(options: BuildRoutingPromptOptions): string | null {
+function buildProviderWebSearchLine(
+  options: BuildRoutingPromptOptions,
+): string | null {
+  if (!options.hasProviderWebSearch) return null
+  return '**Live web:** For current events, fresh facts, or information likely after your training cutoff, call the provider native search tool when it helps: **`web_search`** (OpenAI and Anthropic) or **`google_search`** (Google Gemini). Prefer workspace files, attachments, and MEMORY when they already answer the question. Summarize what the tool returns and cite sources when the tool provides them.'
+}
+
+function buildWebappRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasSwitchToAppBuilder) {
-    return '**Braian in-app dashboard** (sidebar Dashboard, KPI tiles, `/dashboard/page/...`, widgets *inside this app*): call `switch_to_app_builder`, then immediately `__lazy__tool__discovery__` with the `toolNames` returned by that tool. Then use the dashboard tools. Do **not** satisfy these requests with standalone `.html` files meant for Braian\'s dashboard.'
+    return '**Braian workspace webapp** — real interactive UI (forms, React): call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and webapp helper tools unlock. Edit `.braian/webapp/src/**`; use `init_workspace_webapp` if there is no `package.json`; do **not** use standalone `.html` only when the user asked for the in-workspace Vite app.'
   }
-  if (options.hasDashboardTools) {
-    return '**Braian in-app dashboard** (sidebar Dashboard, KPI tiles, `/dashboard/page/...`, widgets *inside this app*): use the dashboard tools for these requests. Do **not** satisfy them with standalone `.html` files meant for Braian\'s dashboard.'
+  if (options.hasWebappTools) {
+    return '**Braian workspace webapp** — implement UI in `.braian/webapp/` (Vite + React). Use file and shell tools plus `init_workspace_webapp` / `read_workspace_webapp_dev_logs` when relevant. The user starts the Vite preview from Braian (sidebar **Webapp** or the chat artifact in App mode). Do **not** satisfy webapp requests with unrelated standalone `.html` only.'
   }
   return null
 }
@@ -73,7 +82,8 @@ export function buildBraianRoutingPrompt(
 ): string {
   const lines = [
     ...buildBaseRoutingLines(),
-    buildDashboardRoutingLine(options),
+    buildProviderWebSearchLine(options),
+    buildWebappRoutingLine(options),
     buildCodeRoutingLine(options),
     buildCanvasRoutingLine(options),
     buildSkillsRoutingLine(options),
@@ -115,30 +125,18 @@ You are a **coding agent** with full workspace access. All paths are **relative 
 - **Windows notes:** the shell tool uses \`cmd.exe /C\`. For PowerShell, run \`powershell.exe -Command "..."\` or \`pwsh -Command "..."\` via the shell tool. Python is typically \`python\` or \`py\`.
 - Summarize stdout/stderr honestly. If a command fails, report the error and attempt to fix it.`
 
-/** App mode: full code access plus in-app dashboard JSON; shown after \`CODE_MODE_ROUTING_ADDENDUM\`. */
-export const APP_MODE_ROUTING_ADDENDUM = `### App mode (Braian in-app UI)
+/** App mode: full code access plus workspace webapp helpers; shown after \`CODE_MODE_ROUTING_ADDENDUM\`. */
+export const APP_MODE_ROUTING_ADDENDUM = `### App mode (workspace webapp)
 
-You are building this workspace’s **internal Braian UI** (sidebar Dashboard and \`/dashboard/page/...\` pages), not a public website.
+You build the workspace **Vite + React** app under \`.braian/webapp/\`.
 
-- Prefer **dashboard tools** (\`read_workspace_dashboard\`, \`apply_workspace_dashboard\`, \`upsert_workspace_page\`) for board layout and tiles; use workspace file and shell tools when you need supporting scripts or assets.
-- Follow the **Workspace dashboard builder** section for manifest shape, allowed tile \`kind\` values, and styling rules (no raw hex colors in JSON; use short labels and markdown bodies).
-- The user sees a **live preview** of the dashboard in the chat side panel. After you save dashboard JSON, assume they can see updates there.
-- If a **Document canvas snapshot** is also present, still prioritize dashboard JSON work when the user is clearly iterating on the in-app UI.`
+- The template is a **multi-page SPA**: \`/\` is the **My apps** landing; each feature lives on its own route (e.g. \`/calculator\`). Add pages under \`src/pages/\`, register them in \`src/app-routes.tsx\`, and **do not** replace the whole app with a single screen when the user asks for a new small app.
+- After you add or edit a sub-page, call \`set_workspace_webapp_preview_path\` with that path (e.g. \`/calculator\`) so the preview iframe opens the right route; use \`/\` for the landing page.
+- Edit \`.braian/webapp/src/**\` with file tools. Run \`npm install\` / \`npm run build\` via \`run_workspace_shell\` with \`cwd: ".braian/webapp"\`. **Do not** run \`npm run dev\` in the shell tool (long-running).
+- Use \`init_workspace_webapp\` when \`package.json\` is missing or the user wants the template reset (\`overwrite: true\`).
+- Use \`read_workspace_webapp_dev_logs\` for output from the Braian-managed Vite dev process after preview issues.
+- The user starts the dev **preview** from Braian (sidebar **Webapp** or the **artifact** panel in App mode). Vite hot-reloads; they can stop/start preview if the iframe is stale.
+- If a **document canvas snapshot** is present, focus on the surface the user is clearly iterating on.`
 
 /** Fallback if \`.braian/skills/app-builder.md\` is missing or invalid (no frontmatter). */
-export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace dashboard (App mode):** You may edit the user's **internal** Braian UI for this workspace only (not a public website).
-
-**Paths (relative to workspace root):**
-- Main board: \`.braian/dashboard/board.json\`
-- Full-screen pages: \`.braian/dashboard/pages/<pageId>.json\` — opened inside Braian at \`/dashboard/page/<pageId>\`.
-
-**Manifest (\`board.json\`):** \`schemaVersion\` must be \`1\`. Top-level optional \`title\`. Required \`regions\`:
-- \`insights\`: array of KPI tiles: \`{ "id", "kind": "kpi", "label", "value", "hint?" }\` (max 8).
-- \`links\`: shortcuts — \`page_link\` \`{ "id", "kind": "page_link", "pageId", "label", "description?" }\` or \`external_link\` \`{ "id", "kind": "external_link", "label", "href" }\` (full URL, max 16).
-- \`main\`: larger tiles — \`markdown\` \`{ "id", "kind": "markdown", "body" }\` (GFM, prose only — no scripts), \`kpi\`, or \`page_link\` (max 24).
-
-**Page file:** \`schemaVersion\`: \`1\`, \`pageId\`, \`title\`, optional \`description\`, \`tiles\` (same tile shapes as \`main\`, max 32). \`pageId\` must match the filename (e.g. \`reports\` → \`reports.json\`).
-
-**Styling:** The shell renders tiles with Braian/shadcn components. Do **not** invent new tile \`kind\` values — only those above. Do not use raw hex colors in JSON; rely on short labels and markdown text. For external URLs use \`external_link\`.
-
-**Workflow:** Call \`read_workspace_dashboard\` before overwriting. \`apply_workspace_dashboard\` takes \`manifestJson\`: one string of **valid JSON** for the full manifest (stringify the object). \`upsert_workspace_page\` takes \`pageJson\`: one string of valid JSON for a single page. Prefer stable \`pageId\` slugs (lowercase, hyphens).`
+export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). Multi-page SPA: landing at \`/\`, sub-apps on routes like \`/calculator\` (\`src/pages/\`, \`src/app-routes.tsx\`). Do not replace the entire app for one new feature. After editing a sub-page, call \`set_workspace_webapp_preview_path\` so the preview opens that route. Edit \`.braian/webapp/src/**\`. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` and \`npm run build\` — not \`npm run dev\`. Use \`init_workspace_webapp\` to copy the bundled template when needed. Use \`read_workspace_webapp_dev_logs\` after dev-server issues. The user starts the preview from Braian (Webapp route or App-mode artifact).`

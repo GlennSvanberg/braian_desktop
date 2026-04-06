@@ -261,7 +261,7 @@ describe('buildTanStackChatTurnArgs', () => {
     ).toBe(true)
   })
 
-  it('code mode maxIterations is 40 base', async () => {
+  it('code mode maxIterations is 40 base plus native web search headroom', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -272,7 +272,7 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    expect(r.maxIterations).toBe(40)
+    expect(r.maxIterations).toBe(44)
   })
 
   it('appends user message to prior messages', async () => {
@@ -288,7 +288,7 @@ describe('buildTanStackChatTurnArgs', () => {
     ])
   })
 
-  it('uses lazy dashboard tools and switch_to_app_builder in document mode', async () => {
+  it('uses lazy webapp tools and switch_to_app_builder in document mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -299,10 +299,14 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const dashRead = r.toolsDisplay.find(
-      (t) => t.name === 'read_workspace_dashboard',
+    const initWebapp = r.toolsDisplay.find(
+      (t) => t.name === 'init_workspace_webapp',
     )
-    expect(dashRead?.lazy).toBe(true)
+    expect(initWebapp?.lazy).toBe(true)
+    const setPreviewPath = r.toolsDisplay.find(
+      (t) => t.name === 'set_workspace_webapp_preview_path',
+    )
+    expect(setPreviewPath?.lazy).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)
@@ -310,7 +314,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.text).toContain('switch_to_app_builder')
   })
 
-  it('app mode: eager coding + eager dashboard, app-builder section, no switch tools', async () => {
+  it('app mode: eager coding + eager webapp helpers, app-builder section, no switch tools', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -321,18 +325,25 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const dashRead = r.toolsDisplay.find(
-      (t) => t.name === 'read_workspace_dashboard',
+    const initWebapp = r.toolsDisplay.find(
+      (t) => t.name === 'init_workspace_webapp',
     )
-    expect(dashRead?.lazy).toBeUndefined()
+    expect(initWebapp?.lazy).toBeUndefined()
     const readFile = r.toolsDisplay.find((t) => t.name === 'read_workspace_file')
     expect(readFile?.lazy).toBeUndefined()
-    expect(
-      r.toolsDisplay.some((t) => t.name === 'apply_workspace_dashboard'),
-    ).toBe(true)
-    expect(r.toolsDisplay.some((t) => t.name === 'upsert_workspace_page')).toBe(
+    expect(r.toolsDisplay.some((t) => t.name === 'init_workspace_webapp')).toBe(
       true,
     )
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'read_workspace_webapp_dev_logs'),
+    ).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'set_workspace_webapp_preview_path'),
+    ).toBe(true)
+    const setPreviewPath = r.toolsDisplay.find(
+      (t) => t.name === 'set_workspace_webapp_preview_path',
+    )
+    expect(setPreviewPath?.lazy).toBeUndefined()
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
@@ -342,12 +353,13 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(true)
     expect(r.systemSections[0]?.id).toBe('routing-code')
     expect(r.systemSections[0]?.label).toBe('Routing (App agent)')
-    expect(r.systemSections[0]?.text).toContain('live preview')
+    expect(r.systemSections[0]?.text).toContain('workspace webapp')
+    expect(r.systemSections[0]?.text).toContain('.braian/webapp')
     expect(r.isCodeMode).toBe(true)
-    expect(r.maxIterations).toBe(44)
+    expect(r.maxIterations).toBe(48)
   })
 
-  it('code mode keeps dashboard tools lazy', async () => {
+  it('code mode keeps webapp tools lazy', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -358,10 +370,10 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const dashRead = r.toolsDisplay.find(
-      (t) => t.name === 'read_workspace_dashboard',
+    const initWebapp = r.toolsDisplay.find(
+      (t) => t.name === 'init_workspace_webapp',
     )
-    expect(dashRead?.lazy).toBe(true)
+    expect(initWebapp?.lazy).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)
@@ -413,7 +425,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(think.modelOptions).toEqual({ reasoning: { effort: 'medium' } })
   })
 
-  it('profile turnKind uses coach prompt and only update_user_profile', async () => {
+  it('profile turnKind uses coach prompt, update_user_profile, and native web_search when supported', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -424,7 +436,10 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    expect(r.toolsDisplay.map((t) => t.name)).toEqual(['update_user_profile'])
+    expect(r.toolsDisplay.map((t) => t.name)).toEqual([
+      'update_user_profile',
+      'web_search',
+    ])
     expect(r.systemSections[0]?.text).toBe(PROFILE_COACH_SYSTEM)
     expect(
       r.systemSections.some((s) => s.id === 'profile-state'),
@@ -434,7 +449,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.maxIterations).toBe(16)
   })
 
-  it('omits dashboard tools when workspace is detached even in app mode', async () => {
+  it('omits webapp tools when workspace is detached even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -446,7 +461,7 @@ describe('buildTanStackChatTurnArgs', () => {
       skipSettingsValidation: true,
     })
     expect(
-      r.toolsDisplay.some((t) => t.name === 'read_workspace_dashboard'),
+      r.toolsDisplay.some((t) => t.name === 'init_workspace_webapp'),
     ).toBe(false)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
@@ -489,7 +504,7 @@ describe('buildTanStackChatTurnArgs', () => {
     vi.mocked(workspaceReadTextFile).mockRejectedValue(new Error('no file'))
   })
 
-  it('omits dashboard tools for user profile workspace id even in app mode', async () => {
+  it('omits webapp tools for user profile workspace id even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -501,11 +516,107 @@ describe('buildTanStackChatTurnArgs', () => {
       skipSettingsValidation: true,
     })
     expect(
-      r.toolsDisplay.some((t) => t.name === 'read_workspace_dashboard'),
+      r.toolsDisplay.some((t) => t.name === 'init_workspace_webapp'),
     ).toBe(false)
     expect(
       r.systemSections.some((s) => s.id === 'app-builder'),
     ).toBe(false)
     expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
+  })
+
+  it('OpenAI gpt-5.4 registers native web_search', async () => {
+    vi.mocked(aiSettingsGet).mockResolvedValue({
+      ...validSettings,
+      modelId: 'gpt-5.4',
+    })
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.toolsDisplay.some((t) => t.name === 'web_search')).toBe(true)
+    expect(r.systemSections[0]?.text).toMatch(/Live web/)
+  })
+
+  it('OpenAI *-chat-latest omits native web_search', async () => {
+    vi.mocked(aiSettingsGet).mockResolvedValue({
+      ...validSettings,
+      modelId: 'gpt-5.2-chat-latest',
+    })
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.toolsDisplay.some((t) => t.name === 'web_search')).toBe(false)
+  })
+
+  it('Anthropic registers native web_search', async () => {
+    vi.mocked(aiSettingsGet).mockResolvedValue({
+      ...validSettings,
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-6',
+    })
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.toolsDisplay.some((t) => t.name === 'web_search')).toBe(true)
+  })
+
+  it('Gemini registers native google_search', async () => {
+    vi.mocked(aiSettingsGet).mockResolvedValue({
+      ...validSettings,
+      provider: 'gemini',
+      modelId: 'gemini-2.5-pro',
+    })
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.toolsDisplay.some((t) => t.name === 'google_search')).toBe(true)
+  })
+
+  it('openai_compatible omits native web search tools', async () => {
+    vi.mocked(aiSettingsGet).mockResolvedValue({
+      ...validSettings,
+      provider: 'openai_compatible',
+      modelId: 'some-model',
+      baseUrl: 'https://openrouter.ai/api/v1',
+    })
+    const r = await buildTanStackChatTurnArgs({
+      userText: 'hi',
+      context: {
+        workspaceId: 'ws',
+        conversationId: 'c1',
+        agentMode: 'document',
+      },
+      priorMessages: [],
+      skipSettingsValidation: true,
+    })
+    expect(r.toolsDisplay.some((t) => t.name === 'web_search')).toBe(false)
+    expect(r.toolsDisplay.some((t) => t.name === 'google_search')).toBe(false)
   })
 })

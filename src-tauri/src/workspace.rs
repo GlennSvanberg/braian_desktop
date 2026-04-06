@@ -270,3 +270,33 @@ pub fn workspace_rename(app: AppHandle, id: String, name: String) -> Result<(), 
   Ok(())
 }
 
+/// Path suffix for the workspace webapp preview iframe (e.g. `/calculator`). Stored per workspace row.
+pub fn webapp_preview_path_get(app: &AppHandle, workspace_id: &str) -> Result<String, String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  conn
+    .query_row(
+      "SELECT webapp_preview_path FROM workspaces WHERE id = ?1",
+      params![workspace_id],
+      |r| r.get(0),
+    )
+    .map_err(|_| "Workspace not found.".to_string())
+}
+
+pub fn webapp_preview_path_set(
+  app: &AppHandle,
+  workspace_id: &str,
+  path: &str,
+) -> Result<(), String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  let n = conn
+    .execute(
+      "UPDATE workspaces SET webapp_preview_path = ?1 WHERE id = ?2",
+      params![path, workspace_id],
+    )
+    .map_err(|e| e.to_string())?;
+  if n == 0 {
+    return Err("Workspace not found.".to_string());
+  }
+  Ok(())
+}
+

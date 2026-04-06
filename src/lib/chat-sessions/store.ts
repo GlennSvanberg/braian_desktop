@@ -5,8 +5,6 @@ import {
   buildTanStackChatTurnArgs,
   tanStackTurnArgsToSnapshot,
 } from '@/lib/ai/chat-turn-args'
-import { discoveryResultIncludesCodeTools } from '@/lib/ai/coding-tools'
-import { discoveryResultIncludesDashboardTools } from '@/lib/ai/dashboard-tools'
 import { formatCanvasSelectionUserMessage } from '@/lib/ai/canvas-selection-message'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
 import type {
@@ -151,18 +149,6 @@ const threadListeners = new Set<() => void>()
 /** Separate from thread body updates so sidebar does not re-render on every token. */
 let generatingSnapshot: Record<string, boolean> = {}
 const generatingListeners = new Set<() => void>()
-
-const dashboardMutateListeners = new Set<(sessionKey: string) => void>()
-
-/** Subscribe to successful dashboard tool writes for a session (app preview refresh). */
-export function subscribeDashboardWorkspaceMutate(
-  cb: (sessionKey: string) => void,
-) {
-  dashboardMutateListeners.add(cb)
-  return () => {
-    dashboardMutateListeners.delete(cb)
-  }
-}
 
 function emitThreads() {
   for (const l of threadListeners) l()
@@ -652,15 +638,6 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         onAgentModeChange: (mode: AgentMode) => {
           setChatAgentMode(sessionKey, mode)
         },
-        onDashboardWorkspaceFilesChanged: () => {
-          dashboardMutateListeners.forEach((fn) => {
-            try {
-              fn(sessionKey)
-            } catch (e) {
-              console.error('[braian] dashboardMutate listener', e)
-            }
-          })
-        },
         ...(contextFiles != null && contextFiles.length > 0
           ? { contextFiles }
           : {}),
@@ -767,14 +744,6 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
             })),
           }))
         } else if (chunk.type === 'tool-end') {
-          if (chunk.toolName === '__lazy__tool__discovery__') {
-            if (discoveryResultIncludesCodeTools(chunk.result)) {
-              setChatAgentMode(sessionKey, 'code')
-            }
-            if (discoveryResultIncludesDashboardTools(chunk.result)) {
-              setChatAgentMode(sessionKey, 'app')
-            }
-          }
           patchThread(sessionKey, (p) => ({
             ...p,
             messages: updateAssistantMessage(p.messages, assistantId, (m) => ({

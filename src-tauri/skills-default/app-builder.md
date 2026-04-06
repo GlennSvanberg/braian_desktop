@@ -1,33 +1,40 @@
 ---
 name: app-builder
-description: Braian workspace dashboard and in-app pages (.braian/dashboard JSON). Use after switch_to_app_builder and lazy tool discovery.
+description: Braian workspace webapp (Vite in .braian/webapp). Use after switch_to_app_builder and lazy tool discovery.
 ---
 
-## Workspace dashboard (App mode)
+## Workspace webapp (Vite + React + TypeScript)
 
-You may edit the user's **internal** Braian UI for this workspace only (not a public website).
+The interactive UI for this workspace lives under **`.braian/webapp/`** (bundled template: Vite 7, React 19, Tailwind v4, **react-router-dom**). The user previews it in the chat **artifact** (App mode) and in the sidebar **Webapp** route.
 
-### Paths (relative to workspace root)
+### Multi-page app (important)
 
-- Main board: `.braian/dashboard/board.json`
-- Full-screen pages: `.braian/dashboard/pages/<pageId>.json` — opened inside Braian at `/dashboard/page/<pageId>`.
+- **One Vite app, many routes.** **`/`** is the **My apps** landing (links to sub-apps). Each feature lives on its own path (e.g. **`/calculator`**).
+- Add page components under **`src/pages/`**, register the route in **`src/app-routes.tsx`** (single source of truth for both the router and landing links), and wire **`App.tsx`** if you add a new route file.
+- When the user asks for a **new** small app or screen, **add a route and page** — **do not** replace the whole **`App.tsx`** tree with only that screen.
+- After you create or edit a sub-page, call **`set_workspace_webapp_preview_path`** with that path (e.g. `/calculator`) so the Braian preview iframe opens the right page. Use **`/`** for the landing page.
 
-### Manifest (`board.json`)
+### Edit
 
-`schemaVersion` must be `1`. Top-level optional `title`. Required `regions`:
+- Change **`src/**`** (`App.tsx`, `app-routes.tsx`, `pages/`, `index.css`). Use `read_workspace_file`, `write_workspace_file`, `patch_workspace_file`.
+- Paths are relative to the **workspace root**; webapp files use prefix `.braian/webapp/...`.
 
-- `insights`: array of KPI tiles: `{ "id", "kind": "kpi", "label", "value", "hint?" }` (max 8).
-- `links`: shortcuts — `page_link` `{ "id", "kind": "page_link", "pageId", "label", "description?" }` or `external_link` `{ "id", "kind": "external_link", "label", "href" }` (full URL, max 16).
-- `main`: larger tiles — `markdown` `{ "id", "kind": "markdown", "body" }` (GFM, prose only — no scripts), `kpi`, or `page_link` (max 24).
+### Scaffold
 
-### Page file
+- If **`package.json`** is missing (or the user wants a clean template), call **`init_workspace_webapp`** (`overwrite: true` only when replacing an existing app).
 
-`schemaVersion`: `1`, `pageId`, `title`, optional `description`, `tiles` (same tile shapes as `main`, max 32). `pageId` must match the filename (e.g. `reports` → `reports.json`).
+### One-shot commands (not the dev server)
 
-### Styling
+- Use **`run_workspace_shell`** with **`cwd: ".braian/webapp"`** for `npm install`, `npm run build`, typecheck, etc.
+- **Do not** run **`npm run dev`** via the shell tool — it is long-running. Braian starts the dev server via **Start preview** in the UI or the same controls in the artifact panel.
 
-The shell renders tiles with Braian/shadcn components. Do **not** invent new tile `kind` values — only those above. Do not use raw hex colors in JSON; rely on short labels and markdown text. For external URLs use `external_link`.
+### Dev server and preview
 
-### Workflow
+- The user (or you, by asking them) uses **Start preview** in Braian so the iframe loads the dev server. The **Preview path** field (and **`set_workspace_webapp_preview_path`**) choose which client route is shown (e.g. `/calculator`). After you change source files, Vite hot-reloads; if the iframe looks stale, the user can **Stop** then **Start** preview again.
+- To inspect server output after a start failure or runtime errors, call **`read_workspace_webapp_dev_logs`** (ring buffer from the managed dev process).
 
-Call `read_workspace_dashboard` before overwriting. `apply_workspace_dashboard` takes `manifestJson`: one string of **valid JSON** for the full manifest (stringify the object). `upsert_workspace_page` takes `pageJson`: one string of valid JSON for a single page. Prefer stable `pageId` slugs (lowercase, hyphens).
+### Troubleshooting
+
+- **`npm run build`** in `.braian/webapp` surfaces compile errors in shell output.
+- **`read_workspace_webapp_dev_logs`** for Vite/npm messages from the preview process.
+- Ensure **`npm install`** completed successfully before starting preview.

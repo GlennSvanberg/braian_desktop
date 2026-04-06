@@ -9,6 +9,9 @@ mod workspace_mcp_http;
 mod workspace_mcp_runtime;
 mod workspace_mcp_stdio;
 mod workspace_mcp_probe;
+mod workspace_webapp_dev;
+
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +34,7 @@ pub fn run() {
       if let Err(e) = workspace::ensure_default_workspace(app.handle()) {
         log::error!("Failed to ensure default workspace: {e}");
       }
+      app.manage(workspace_webapp_dev::WebappDevState::default());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -66,7 +70,18 @@ pub fn run() {
       workspace_mcp_runtime::workspace_mcp_list_tools,
       workspace_mcp_runtime::workspace_mcp_call_tool,
       workspace_mcp_runtime::workspace_mcp_sessions_disconnect,
+      workspace_webapp_dev::webapp_dev_start,
+      workspace_webapp_dev::webapp_dev_stop,
+      workspace_webapp_dev::webapp_dev_status,
+      workspace_webapp_dev::webapp_dev_logs,
+      workspace_webapp_dev::webapp_preview_path_set,
+      workspace_webapp_dev::webapp_init_from_template,
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app_handle, event| {
+      if let tauri::RunEvent::Exit = event {
+        workspace_webapp_dev::webapp_dev_stop_all(&app_handle);
+      }
+    });
 }

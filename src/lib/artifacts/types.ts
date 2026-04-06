@@ -66,7 +66,7 @@ export type VisualArtifactPayload = {
   alt?: string
 }
 
-/** Live workspace dashboard preview (App agent mode); reads `.braian/dashboard` from disk. */
+/** Live workspace webapp preview (App agent mode); managed Vite dev server + iframe. */
 export type AppPreviewArtifactPayload = {
   kind: 'app-preview'
 }
