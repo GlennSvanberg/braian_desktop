@@ -13,6 +13,8 @@ import {
   userProfileGet,
 } from '@/lib/user-profile-api'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
+import { workspaceMcpConfigGet } from '@/lib/connections-api'
+import { disabledSetFromDoc } from '@/lib/mcp-config-types'
 import {
   formatSkillCatalogSystemText,
   loadAppBuilderSkillMarkdown,
@@ -470,6 +472,24 @@ export async function buildTanStackChatTurnArgs(
     await buildMcpTools(ctx, {
       useLooseMcpInputSchemaForOpenAi: useLooseMcpForOpenAi,
     })
+  const activeMcpRequested = Array.from(
+    new Set((ctx?.activeMcpServers ?? []).map((s) => s.trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b))
+  let inactiveMcpServerNames: string[] = []
+  if (ctx?.workspaceId && !isNonWorkspaceScopedSessionId(ctx.workspaceId)) {
+    try {
+      const cfg = await workspaceMcpConfigGet(ctx.workspaceId)
+      const disabled = disabledSetFromDoc(cfg)
+      const configuredEnabled = Object.keys(cfg.mcpServers)
+        .filter((name) => !disabled.has(name))
+        .sort((a, b) => a.localeCompare(b))
+      inactiveMcpServerNames = configuredEnabled.filter(
+        (name) => !activeMcpRequested.includes(name),
+      )
+    } catch {
+      inactiveMcpServerNames = []
+    }
+  }
   logChatPerf('buildMcpTools', mcpToolsStart)
   for (const w of mcpWarnings) {
     settingsWarnings.push(w)
@@ -532,6 +552,7 @@ export async function buildTanStackChatTurnArgs(
       hasProviderWebSearch: nativeSearchTools.length > 0,
       hasWorkspaceMemoryTool: workspaceMemoryTools.length > 0,
       mcpServerNames,
+      inactiveMcpServerNames,
     }),
     isCodeMode ? CODE_MODE_ROUTING_ADDENDUM : DOC_MODE_ROUTING_ADDENDUM,
     ...(isAppMode ? [APP_MODE_ROUTING_ADDENDUM] : []),

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use braian_mcp_core::config::load_workspace_mcp_config as load_mcp_config_from_root;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,7 +11,7 @@ use uuid::Uuid;
 use crate::db;
 use crate::workspace::PERSONAL_WORKSPACE_ID;
 
-const CONVERSATION_SCHEMA_VERSION: u32 = 4;
+const CONVERSATION_SCHEMA_VERSION: u32 = 5;
 
 fn default_agent_mode() -> String {
   "document".to_string()
@@ -24,8 +25,12 @@ fn default_reasoning_mode() -> String {
   "fast".to_string()
 }
 
+fn default_active_mcp_servers() -> Vec<String> {
+  vec![]
+}
+
 fn conversation_schema_supported(v: u32) -> bool {
-  v == 1 || v == 2 || v == 3 || v == CONVERSATION_SCHEMA_VERSION
+  v == 1 || v == 2 || v == 3 || v == 4 || v == CONVERSATION_SCHEMA_VERSION
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +92,9 @@ struct ConversationFileV1 {
   /// `"fast"` | `"thinking"` — provider-native reasoning depth for this chat.
   #[serde(default = "default_reasoning_mode")]
   reasoning_mode: String,
+  /// Per-chat active MCP server names.
+  #[serde(default = "default_active_mcp_servers")]
+  active_mcp_servers: Vec<String>,
   #[serde(default)]
   pinned: bool,
   #[serde(default)]
@@ -131,6 +139,8 @@ pub struct ChatThreadDto {
   pub app_harness_enabled: bool,
   #[serde(default = "default_reasoning_mode")]
   pub reasoning_mode: String,
+  #[serde(default = "default_active_mcp_servers")]
+  pub active_mcp_servers: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -161,6 +171,8 @@ pub struct ConversationSaveInput {
   pub app_harness_enabled: bool,
   #[serde(default = "default_reasoning_mode")]
   pub reasoning_mode: String,
+  #[serde(default = "default_active_mcp_servers")]
+  pub active_mcp_servers: Vec<String>,
   #[serde(default)]
   pub pinned: bool,
   #[serde(default)]
@@ -442,6 +454,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
     agent_mode: f.agent_mode,
     app_harness_enabled: f.app_harness_enabled,
     reasoning_mode: f.reasoning_mode,
+    active_mcp_servers: f.active_mcp_servers,
   }
 }
 
@@ -512,6 +525,11 @@ pub fn conversation_create(
   }
   let root = workspace_root_path(&conn, &workspace_id)?;
   ensure_braian_layout(&root)?;
+  let default_active_mcp = load_mcp_config_from_root(&root)
+    .ok()
+    .and_then(|cfg| cfg.braian)
+    .map(|b| b.default_active_mcp_servers)
+    .unwrap_or_default();
   let id = Uuid::new_v4().to_string();
   let now = now_ms();
   let file = ConversationFileV1 {
@@ -529,6 +547,7 @@ pub fn conversation_create(
     agent_mode: default_agent_mode(),
     app_harness_enabled: false,
     reasoning_mode: default_reasoning_mode(),
+    active_mcp_servers: default_active_mcp,
     pinned: false,
     unread: false,
   };
@@ -624,6 +643,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
     agent_mode: input.agent_mode.clone(),
     app_harness_enabled: input.app_harness_enabled,
     reasoning_mode: input.reasoning_mode.clone(),
+    active_mcp_servers: input.active_mcp_servers.clone(),
     pinned: input.pinned,
     unread: input.unread,
   };

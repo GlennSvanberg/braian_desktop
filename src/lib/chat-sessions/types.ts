@@ -88,6 +88,8 @@ export type ChatThreadState = {
   agentMode: AgentMode
   /** Persisted: minimize vs enable provider-native chain-of-thought. */
   reasoningMode: ReasoningMode
+  /** Per-chat selected MCP connection names (server ids). */
+  activeMcpServers: string[]
   /** Payload assembled for the most recently started model turn (debug / context manager). */
   lastModelRequestSnapshot: SerializableModelRequestSnapshot | null
 }
@@ -103,5 +105,6 @@ export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   contextConversations: [],
   agentMode: 'document',
   reasoningMode: 'fast',
+  activeMcpServers: [],
   lastModelRequestSnapshot: null,
 }

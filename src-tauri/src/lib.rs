@@ -5,10 +5,7 @@ mod workspace;
 mod workspace_agent;
 mod workspace_files;
 mod workspace_mcp_config;
-mod workspace_mcp_http;
 mod workspace_mcp_runtime;
-mod workspace_mcp_stdio;
-mod workspace_mcp_probe;
 mod workspace_git;
 mod workspace_webapp_dev;
 mod workspace_webapp_static;
@@ -82,7 +79,7 @@ pub fn run() {
       ai_settings::ai_settings_set,
       workspace_mcp_config::workspace_mcp_config_get,
       workspace_mcp_config::workspace_mcp_config_set,
-      workspace_mcp_probe::workspace_mcp_probe_connection,
+      workspace_mcp_runtime::workspace_mcp_probe_connection,
       workspace_mcp_runtime::workspace_mcp_list_tools,
       workspace_mcp_runtime::workspace_mcp_call_tool,
       workspace_mcp_runtime::workspace_mcp_sessions_disconnect,
@@ -102,6 +99,7 @@ pub fn run() {
     .expect("error while building tauri application")
     .run(|app_handle, event| {
       if let tauri::RunEvent::Exit = event {
+        workspace_mcp_runtime::workspace_mcp_broker_shutdown();
         workspace_webapp_dev::webapp_dev_stop_all(&app_handle);
       }
     });

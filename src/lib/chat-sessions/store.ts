@@ -83,6 +83,14 @@ function hydrateUserProfileThreadOnce() {
         (parsed as { reasoningMode?: string }).reasoningMode === 'thinking'
           ? 'thinking'
           : 'fast',
+      activeMcpServers: Array.isArray(
+        (parsed as { activeMcpServers?: unknown }).activeMcpServers,
+      )
+        ? ((parsed as { activeMcpServers?: unknown[] }).activeMcpServers ?? [])
+            .filter((s): s is string => typeof s === 'string')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+        : [],
       contextFiles: [],
       contextConversations: [],
       artifactOpen: false,
@@ -115,6 +123,7 @@ function scheduleProfileThreadPersist() {
         draft: t.draft,
         agentMode: t.agentMode,
         reasoningMode: t.reasoningMode,
+        activeMcpServers: t.activeMcpServers,
       }
       localStorage.setItem(PROFILE_THREAD_LS_KEY, JSON.stringify(payload))
     } catch (e) {
@@ -440,6 +449,25 @@ export function setChatReasoningMode(
   )
 }
 
+export function setChatActiveMcpServers(
+  sessionKey: string,
+  serverNames: string[],
+) {
+  const normalized = Array.from(
+    new Set(serverNames.map((s) => s.trim()).filter((s) => s.length > 0)),
+  ).sort((a, b) => a.localeCompare(b))
+  patchThread(sessionKey, (prev) => {
+    const prevNames = prev.activeMcpServers ?? []
+    if (
+      prevNames.length === normalized.length &&
+      prevNames.every((v, i) => normalized[i] === v)
+    ) {
+      return prev
+    }
+    return { ...prev, activeMcpServers: normalized }
+  })
+}
+
 type SeedCanvasOpts = {
   title?: string
   canvasKind?: 'document' | 'tabular' | 'visual'
@@ -548,6 +576,9 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       }
       const threadNow = getThread(sessionKey)
       const agentMode = threadNow.agentMode ?? 'document'
+      const activeMcpServers = (threadNow.activeMcpServers ?? [])
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
       const ap = threadNow.artifactPayload
       const live = getDocumentCanvasLivePayload(sessionKey)
       const documentCanvasSnapshot =
@@ -659,6 +690,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         contextPriorConversations.length > 0
           ? { contextPriorConversations }
           : {}),
+        ...(activeMcpServers.length > 0 ? { activeMcpServers } : {}),
       }
 
       const argsBuildStart = nowMs()
@@ -1037,6 +1069,9 @@ export function useChatThreadActions() {
     },
     [],
   )
+  const setActiveMcp = useCallback((sessionKey: string, names: string[]) => {
+    setChatActiveMcpServers(sessionKey, names)
+  }, [])
   return {
     sendChatTurn: send,
     setChatDraft: setDraft,
@@ -1044,6 +1079,7 @@ export function useChatThreadActions() {
     stopChatGeneration: stop,
     setChatAgentMode,
     setChatReasoningMode: setReasoning,
+    setChatActiveMcpServers: setActiveMcp,
     addContextFileEntry,
     removeContextFileEntry,
     addContextConversationEntry,

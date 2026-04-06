@@ -30,6 +30,18 @@ Cursor’s usual file does not define a standard **disabled** flag per server. B
 
 A server is **on** in Braian when its name is **not** listed in `braian.disabledMcpServers`. The **Connections** screen **Copy for Cursor** action copies only `{ "mcpServers": … }` so you can paste into Cursor without the Braian overlay.
 
+Braian also supports an optional workspace default for new chats:
+
+```json
+{
+  "braian": {
+    "defaultActiveMcpServers": ["atlassian", "azure-devops"]
+  }
+}
+```
+
+This does not force a server globally on; it seeds the per-chat selection for newly created conversations.
+
 ## Status indicators (green / red)
 
 The **Connections** list can **check** each configured server:
@@ -41,12 +53,18 @@ The **Connections** list can **check** each configured server:
 
 ## In chat (assistant tools)
 
-When a server is **on** in Braian (not in `braian.disabledMcpServers`), its MCP tools are offered to the model in **workspace chats** (desktop app only):
+When a server is **on** in Braian (not in `braian.disabledMcpServers`), it is **eligible** for chat use. Actual MCP tool availability is now **per chat** (desktop app only):
 
+- Each chat can toggle active Connections from the chat header (**Connections** button).
+- Only that chat's active server subset is listed and attached as model tools.
+- If no servers are active for a chat, MCP is skipped for that turn.
 - Tool names are namespaced as `mcp__<server>__<tool>` (safe slugged identifiers).
-- Each turn, the app calls **`tools/list`** on enabled servers (stdio and remote) and builds TanStack tools. MCP sessions stay warm across turns for faster follow-ups; **~90 seconds** after the last chat turn completes, sessions disconnect so local helper processes are not left running indefinitely.
+
+- Each turn, the app calls **`tools/list`** only for active servers (stdio and remote) and builds TanStack tools. MCP sessions stay warm across turns for faster follow-ups; **~90 seconds** after the last chat turn completes, sessions disconnect so local helper processes are not left running indefinitely.
 - If one server fails listing, other servers still work; you may see a short warning in the turn’s settings warnings.
 - **Remote** servers use the same JSON-RPC POST session as the status check; very custom gateways may need a URL that speaks MCP over HTTP as above.
+
+Under the hood, Braian runs MCP through a dedicated local broker process (`braian-mcpd`) so MCP process/session management is isolated from the main chat UI event loop.
 
 Workspace file, command, document canvas (`apply_document_canvas_patch` / `open_document_canvas`), skills, and webapp helpers stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
 

@@ -91,6 +91,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 name = "app"
 version = "0.1.0"
 dependencies = [
+ "braian-mcp-core",
  "git2",
  "hex",
  "libc",
@@ -399,6 +400,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "braian-mcp-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "ureq",
+]
+
+[[package]]
+name = "braian-mcpd"
+version = "0.1.0"
+dependencies = [
+ "braian-mcp-core",
+ "serde",
+ "serde_json",
+ "tiny_http",
 ]
 
 [[package]]

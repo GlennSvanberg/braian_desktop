@@ -13,7 +13,10 @@ import { isTauri } from '@/lib/tauri-env'
 /** Payload matching Rust `WorkspaceMcpConfigDto` (camelCase). */
 export type WorkspaceMcpConfigDto = {
   mcpServers: Record<string, unknown>
-  braian?: { disabledMcpServers: string[] }
+  braian?: {
+    disabledMcpServers?: string[]
+    defaultActiveMcpServers?: string[]
+  }
 }
 
 function dtoToDocument(dto: WorkspaceMcpConfigDto): WorkspaceMcpConfigDocument {
@@ -26,11 +29,22 @@ function dtoToDocument(dto: WorkspaceMcpConfigDto): WorkspaceMcpConfigDocument {
   const disabled = dto.braian?.disabledMcpServers?.filter(
     (s) => typeof s === 'string',
   )
+  const defaultActive = dto.braian?.defaultActiveMcpServers?.filter(
+    (s) => typeof s === 'string',
+  )
   return {
     mcpServers: servers,
     braian:
-      disabled && disabled.length > 0
-        ? { disabledMcpServers: disabled }
+      (disabled && disabled.length > 0) ||
+      (defaultActive && defaultActive.length > 0)
+        ? {
+            ...(disabled && disabled.length > 0
+              ? { disabledMcpServers: disabled }
+              : {}),
+            ...(defaultActive && defaultActive.length > 0
+              ? { defaultActiveMcpServers: defaultActive }
+              : {}),
+          }
         : undefined,
   }
 }
@@ -38,9 +52,16 @@ function dtoToDocument(dto: WorkspaceMcpConfigDto): WorkspaceMcpConfigDocument {
 function documentToDto(doc: WorkspaceMcpConfigDocument): WorkspaceMcpConfigDto {
   return {
     mcpServers: { ...doc.mcpServers },
-    braian: doc.braian?.disabledMcpServers?.length
-      ? { disabledMcpServers: [...doc.braian.disabledMcpServers] }
-      : undefined,
+    braian:
+      (doc.braian?.disabledMcpServers?.length ?? 0) > 0 ||
+      (doc.braian?.defaultActiveMcpServers?.length ?? 0) > 0
+        ? {
+            disabledMcpServers: [...(doc.braian?.disabledMcpServers ?? [])],
+            defaultActiveMcpServers: [
+              ...(doc.braian?.defaultActiveMcpServers ?? []),
+            ],
+          }
+        : undefined,
   }
 }
 

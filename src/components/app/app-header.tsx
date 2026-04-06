@@ -3,6 +3,7 @@ import { useMatches, useRouterState } from '@tanstack/react-router'
 
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { cn } from '@/lib/utils'
 import { isTauri } from '@/lib/tauri-env'
 import type { ConversationDto } from '@/lib/workspace-api'
 
@@ -68,15 +69,13 @@ export function AppHeader() {
     /^\/workspace\/([^/]+)\/webapp$/,
   )
 
-  const title = (() => {
-    if (isHome) return 'Welcome'
-    if (isDashboard) return 'Dashboard'
-    if (isUserPage) return 'You'
-    if (isSettings) return 'Settings'
-    if (isWorkspaceSettings) return 'Workspace settings'
-    if (workspaceWebappSettingsMatch) return 'App settings'
-    if (workspaceWebappMatch) return 'Apps'
-    if (isNewChatRoute) return 'New agent'
+  const wsName = activeWorkspace?.name ?? 'Workspace'
+  const isChatRoute =
+    isNewChatRoute ||
+    (Boolean(conversationIdFromPath) && conversationIdFromPath !== 'new')
+
+  const chatViewTitle = (() => {
+    if (isNewChatRoute) return 'New chat'
     if (
       conversationIdFromPath &&
       conversationIdFromPath !== 'new' &&
@@ -91,12 +90,36 @@ export function AppHeader() {
     if (conversationIdFromPath && conversationIdFromPath !== 'new') {
       return 'Conversation'
     }
+    return 'Chat'
+  })()
+
+  const title = (() => {
+    if (isChatRoute) return activeWorkspace?.name ?? 'No workspace'
+    if (isHome) return wsName
+    if (isDashboard) return wsName
+    if (isUserPage) return 'You'
+    if (isSettings) return 'Settings'
+    if (isWorkspaceSettings && workspaceSettingsMatch) {
+      const id = workspaceSettingsMatch[1]
+      const w = workspaces.find((x) => x.id === id)
+      return w?.name ?? 'Workspace'
+    }
+    if (workspaceWebappSettingsMatch) {
+      const id = workspaceWebappSettingsMatch[1]
+      const w = workspaces.find((x) => x.id === id)
+      return w?.name ?? wsName
+    }
+    if (workspaceWebappMatch) {
+      const id = workspaceWebappMatch[1]
+      const w = workspaces.find((x) => x.id === id)
+      return w?.name ?? wsName
+    }
     return 'Braian'
   })()
 
   const subtitle = (() => {
-    const wsName = activeWorkspace?.name ?? 'Workspace'
-    if (isHome) return wsName
+    if (isChatRoute) return chatViewTitle
+    if (isHome) return 'Welcome'
     if (isUserPage) {
       return userTab === 'ai'
         ? 'AI provider, model & API key'
@@ -104,31 +127,27 @@ export function AppHeader() {
     }
     if (isSettings) return 'AI provider & API key'
     if (isWorkspaceSettings && workspaceSettingsMatch) {
-      const id = workspaceSettingsMatch[1]
-      const w = workspaces.find((x) => x.id === id)
-      return `${w?.name ?? 'Workspace'} · Connections (MCP)`
+      return 'Workspace settings · Connections (MCP)'
     }
     if (isDashboard) {
       const tab = parseDashboardTabFromSearchStr(dashboardSearchStr)
-      if (tab === 'app-settings') return `${wsName} · App settings`
-      if (tab === 'apps') return `${wsName} · Apps`
-      if (tab === 'workspace-settings') return `${wsName} · Workspace settings`
-      return `${wsName} · Dashboard`
+      if (tab === 'app-settings') return 'App settings'
+      if (tab === 'apps') return 'Apps'
+      if (tab === 'workspace-settings') return 'Workspace settings'
+      return 'Dashboard'
     }
     if (workspaceWebappSettingsMatch) {
-      const id = workspaceWebappSettingsMatch[1]
-      const w = workspaces.find((x) => x.id === id)
-      return `${w?.name ?? wsName} · Template, deps, preview`
+      return 'App settings · Template, deps, preview'
     }
     if (workspaceWebappMatch) {
-      const id = workspaceWebappMatch[1]
-      const w = workspaces.find((x) => x.id === id)
-      return `${w?.name ?? wsName} · Published app`
+      return 'Published app'
     }
-    if (isNewChatRoute) return 'No workspace · move when ready'
-    if (routeConversation) return `${wsName} · Chat`
     return wsName
   })()
+
+  const workspaceLedHeader =
+    isChatRoute || isHome || isDashboard || isWorkspaceSettings ||
+    Boolean(workspaceWebappSettingsMatch) || Boolean(workspaceWebappMatch)
 
   const tauriChrome = isTauri()
 
@@ -156,10 +175,17 @@ export function AppHeader() {
             : undefined
         }
       >
-        <h1 className="text-text-1 truncate text-sm font-semibold tracking-tight md:text-base">
+        <h1
+          className={cn(
+            'text-text-1 truncate font-semibold tracking-tight',
+            workspaceLedHeader
+              ? 'text-base md:text-lg'
+              : 'text-sm md:text-base',
+          )}
+        >
           {title}
         </h1>
-        <p className="text-text-3 truncate text-xs">{subtitle}</p>
+        <p className="text-text-3 truncate text-xs leading-snug">{subtitle}</p>
       </div>
       <div
         className="flex min-h-0 min-w-0 flex-1 items-center justify-end gap-2 py-0.5"

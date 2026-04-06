@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -89,6 +90,13 @@ import {
   relativePathFromRoot,
 } from '@/lib/workspace-path-utils'
 import {
+  workspaceMcpConfigGet,
+} from '@/lib/connections-api'
+import {
+  defaultActiveSetFromDoc,
+  disabledSetFromDoc,
+} from '@/lib/mcp-config-types'
+import {
   buildConversationSavePayload,
   conversationList,
   conversationMoveToWorkspace,
@@ -128,6 +136,9 @@ type ChatSessionHeaderToolbarProps = {
   onUpdateMemoryNow: () => void
   activeAgentSegment: 'document' | 'code' | 'app'
   onSelectAgentSegment: (next: 'document' | 'code' | 'app') => void
+  configuredMcpServers: string[]
+  activeMcpServers: string[]
+  onToggleMcpServer: (name: string, enabled: boolean) => void
 }
 
 /** Shared header toolbar control surface (height, radius, border). */
@@ -157,6 +168,9 @@ function ChatSessionHeaderToolbar({
   onUpdateMemoryNow,
   activeAgentSegment,
   onSelectAgentSegment,
+  configuredMcpServers,
+  activeMcpServers,
+  onToggleMcpServer,
 }: ChatSessionHeaderToolbarProps) {
   const showWorkspaceMove =
     isPersonalSimpleChat &&
@@ -179,6 +193,12 @@ function ChatSessionHeaderToolbar({
     isTauriRuntime &&
     !isProfileSession &&
     !isPersonalSimpleChat
+  const showMcpToggle =
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isPersonalSimpleChat &&
+    !isProfileSession &&
+    configuredMcpServers.length > 0
 
   const modeSegments = (
     [
@@ -241,6 +261,30 @@ function ChatSessionHeaderToolbar({
         </button>
       ) : null}
       {showAgentModes ? agentModeGroup : null}
+      {showMcpToggle ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={headerToolbarBtnClass}>
+              <Brain className="size-3.5 shrink-0 opacity-80" aria-hidden />
+              Connections
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-56">
+            {configuredMcpServers.map((name) => {
+              const checked = activeMcpServers.includes(name)
+              return (
+                <DropdownMenuCheckboxItem
+                  key={name}
+                  checked={checked}
+                  onCheckedChange={(v) => onToggleMcpServer(name, Boolean(v))}
+                >
+                  {name}
+                </DropdownMenuCheckboxItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
       {generating ? (
         <>
           <span
@@ -371,6 +415,7 @@ export function ChatWorkbench({
     stopChatGeneration,
     setChatAgentMode,
     setChatReasoningMode,
+    setChatActiveMcpServers,
     addContextFileEntry,
     removeContextFileEntry,
     addContextConversationEntry,
@@ -396,6 +441,7 @@ export function ChatWorkbench({
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetWs, setMoveTargetWs] = useState('')
   const [moveBusy, setMoveBusy] = useState(false)
+  const [configuredMcpServers, setConfiguredMcpServers] = useState<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const composerDropZoneRef = useRef<HTMLDivElement>(null)
   const dragHasFilesRef = useRef(false)
@@ -777,6 +823,60 @@ export function ChatWorkbench({
       cancelled = true
     }
   }, [isTauriRuntime, threadWorkspaceId, isPersonalSimpleChat, isProfileSession])
+
+  useEffect(() => {
+    if (
+      !isTauriRuntime ||
+      !threadWorkspaceId ||
+      isPersonalSimpleChat ||
+      isProfileSession
+    ) {
+      setConfiguredMcpServers([])
+      return
+    }
+    let cancelled = false
+    void workspaceMcpConfigGet(threadWorkspaceId)
+      .then((doc) => {
+        if (cancelled) return
+        const disabled = disabledSetFromDoc(doc)
+        const names = Object.keys(doc.mcpServers)
+          .filter((n) => !disabled.has(n))
+          .sort((a, b) => a.localeCompare(b))
+        setConfiguredMcpServers(names)
+        const active = (getThreadSnapshot(sessionKey).activeMcpServers ?? [])
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+        if (active.length === 0 && names.length > 0) {
+          const defaults = Array.from(defaultActiveSetFromDoc(doc)).filter((n) =>
+            names.includes(n),
+          )
+          if (defaults.length > 0) {
+            setChatActiveMcpServers(sessionKey, defaults)
+          }
+          return
+        }
+        const next = active.filter((n) => names.includes(n))
+        if (next.length !== active.length) {
+          setChatActiveMcpServers(sessionKey, next)
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.error('[braian] mcp config load', e)
+          setConfiguredMcpServers([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    isTauriRuntime,
+    threadWorkspaceId,
+    isPersonalSimpleChat,
+    isProfileSession,
+    sessionKey,
+    setChatActiveMcpServers,
+  ])
 
   useEffect(() => {
     if (
@@ -1191,6 +1291,17 @@ export function ChatWorkbench({
     setMoveOpen(true)
   }, [])
 
+  const onToggleMcpServer = useCallback(
+    (name: string, enabled: boolean) => {
+      const current = new Set(thread.activeMcpServers ?? [])
+      if (enabled) current.add(name)
+      else current.delete(name)
+      const next = Array.from(current).filter((n) => configuredMcpServers.includes(n))
+      setChatActiveMcpServers(sessionKey, next)
+    },
+    [configuredMcpServers, sessionKey, setChatActiveMcpServers, thread.activeMcpServers],
+  )
+
   const sessionHeaderToolbarNode = useMemo(
     () => (
       <ChatSessionHeaderToolbar
@@ -1211,6 +1322,9 @@ export function ChatWorkbench({
         onUpdateMemoryNow={onUpdateMemoryNow}
         activeAgentSegment={activeAgentSegment}
         onSelectAgentSegment={onSelectAgentSegment}
+        configuredMcpServers={configuredMcpServers}
+        activeMcpServers={thread.activeMcpServers ?? []}
+        onToggleMcpServer={onToggleMcpServer}
       />
     ),
     [
@@ -1231,6 +1345,9 @@ export function ChatWorkbench({
       onUpdateMemoryNow,
       activeAgentSegment,
       onSelectAgentSegment,
+      configuredMcpServers,
+      thread.activeMcpServers,
+      onToggleMcpServer,
     ],
   )
 

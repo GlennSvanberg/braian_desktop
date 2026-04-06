@@ -38,7 +38,17 @@ See [Tools](/docs/tools) for a short summary of those tools.
 - **Lazy tools** (document mode): coding and **webapp helper** tools may appear as "lazy" until the model calls the right **`switch_to_*`** tool and completes **tool discovery**. Those unlock steps are only mentioned in the prompt when the corresponding switch tool is actually available that turn. The **Context** dialog shows each tool tagged as **eager** or **lazy**.
 - **Code** mode: all **coding** workspace tools are available immediately — `read_workspace_file`, `write_workspace_file`, `patch_workspace_file`, `list_workspace_dir`, `search_workspace`, `run_workspace_command`, and `run_workspace_shell`. Webapp helpers remain **lazy** until `switch_to_app_builder` + discovery. The routing addendum includes a **tool selection guide** and guidelines for search-before-read, patch-over-rewrite, and shell usage. `maxIterations` is higher (40 base, up to 48 with MCP) to accommodate the richer tool surface.
 - **App** mode: same eager **coding** tools as Code mode, and **`init_workspace_webapp`** / **`read_workspace_webapp_dev_logs`** are **eager** too. The **app-builder** section (from the skill file when possible) plus the **App mode** routing subsection describe `.braian/webapp/`. `maxIterations` is slightly higher than Code-only (44 base) to cover webapp edits. See [Workspace webapp](/docs/dashboard).
-- **MCP issues**: when MCP connections fail or are slow, warnings are injected into a dedicated **"Connections (MCP) issues"** system section so the model is aware of unavailable tools. Active MCP server names are listed in the routing text.
+- **MCP issues**: when MCP connections fail or are slow, warnings are injected into a dedicated **"Connections (MCP) issues"** system section so the model is aware of unavailable tools. Active MCP server names are listed in the routing text; configured-but-inactive servers may be listed too so the model does not assume they are callable in this chat.
+
+## Per-chat MCP selection
+
+Connections are now resolved in three layers:
+
+1. **Configured** — workspace `.braian/mcp.json` (`mcpServers`)
+2. **Enabled in workspace** — not listed in `braian.disabledMcpServers`
+3. **Active in this chat** — selected in the chat header Connections picker
+
+Only layer (3) is exposed as `mcp__*` tools in the current turn.
 
 ## Related
 

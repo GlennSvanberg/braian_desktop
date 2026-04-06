@@ -12,6 +12,7 @@ export type BuildRoutingPromptOptions = {
   /** `add_workspace_memory` — append to `.braian/MEMORY.md` for this workspace. */
   hasWorkspaceMemoryTool?: boolean
   mcpServerNames?: string[]
+  inactiveMcpServerNames?: string[]
 }
 
 function numbered(lines: string[]): string {
@@ -70,7 +71,11 @@ function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null 
     options.mcpServerNames && options.mcpServerNames.length > 0
       ? ` Active servers: ${options.mcpServerNames.map((n) => `**${n}**`).join(', ')}.`
       : ''
-  return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.`
+  const inactiveList =
+    options.inactiveMcpServerNames && options.inactiveMcpServerNames.length > 0
+      ? ` Configured but inactive for this chat: ${options.inactiveMcpServerNames.map((n) => `**${n}**`).join(', ')}.`
+      : ''
+  return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList}${inactiveList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.`
 }
 
 function buildWorkspaceMemoryRoutingLine(

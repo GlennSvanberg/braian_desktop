@@ -272,6 +272,7 @@ export type ConversationSavePayload = {
   agentMode: AgentMode
   appHarnessEnabled: boolean
   reasoningMode: ReasoningMode
+  activeMcpServers: string[]
   pinned: boolean
   unread: boolean
 }
@@ -299,6 +300,7 @@ type ConversationOpenInvoke = {
     agentMode?: string
     appHarnessEnabled?: boolean
     reasoningMode?: string
+    activeMcpServers?: string[]
   }
 }
 
@@ -342,6 +344,9 @@ function mapInvokeThreadToState(
     contextConversations: thread.contextConversations ?? [],
     agentMode: normalizeAgentMode(thread.agentMode, thread.appHarnessEnabled),
     reasoningMode: normalizeReasoningMode(thread.reasoningMode),
+    activeMcpServers: (thread.activeMcpServers ?? [])
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
     lastModelRequestSnapshot: null,
   }
 }
@@ -392,6 +397,7 @@ export async function conversationOpen(
         contextConversations: [],
         agentMode: 'document',
         reasoningMode: 'fast',
+        activeMcpServers: [],
         lastModelRequestSnapshot: null,
       }
       return { conversation, thread }
@@ -407,6 +413,7 @@ export async function conversationOpen(
       contextConversations: [],
       agentMode: 'document',
       reasoningMode: 'fast',
+      activeMcpServers: [],
       lastModelRequestSnapshot: null,
     }
     return { conversation, thread }
@@ -472,6 +479,9 @@ export function buildConversationSavePayload(
     agentMode: thread.agentMode ?? 'document',
     appHarnessEnabled: (thread.agentMode ?? 'document') === 'app',
     reasoningMode: thread.reasoningMode === 'thinking' ? 'thinking' : 'fast',
+    activeMcpServers: (thread.activeMcpServers ?? [])
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
   }
 }
 

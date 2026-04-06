@@ -22,6 +22,8 @@ export type McpServerEntryJson = Record<string, unknown>
 export type BraianMcpOverlay = {
   /** Server names disabled in Braian only; omitted from "Copy for Cursor". */
   disabledMcpServers?: string[]
+  /** Optional default per-chat active servers for newly created conversations. */
+  defaultActiveMcpServers?: string[]
 }
 
 export type WorkspaceMcpConfigDocument = {
@@ -65,6 +67,13 @@ export function disabledSetFromDoc(
   doc: WorkspaceMcpConfigDocument,
 ): Set<string> {
   const raw = doc.braian?.disabledMcpServers ?? []
+  return new Set(raw.filter((n) => typeof n === 'string' && n.length > 0))
+}
+
+export function defaultActiveSetFromDoc(
+  doc: WorkspaceMcpConfigDocument,
+): Set<string> {
+  const raw = doc.braian?.defaultActiveMcpServers ?? []
   return new Set(raw.filter((n) => typeof n === 'string' && n.length > 0))
 }
 

@@ -49,12 +49,14 @@ export type McpListToolsResultDto = {
 
 export async function workspaceMcpListTools(
   workspaceId: string,
+  serverNames?: string[],
 ): Promise<McpListToolsResultDto> {
   if (!isTauri()) {
     return { servers: [] }
   }
   return invoke<McpListToolsResultDto>('workspace_mcp_list_tools', {
     workspaceId,
+    serverNames: serverNames ?? null,
   })
 }
 

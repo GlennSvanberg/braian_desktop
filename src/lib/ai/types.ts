@@ -61,6 +61,8 @@ export type ChatTurnContext = {
   contextFiles?: ContextFileForModel[]
   /** Other saved conversations (full thread text) loaded for this user turn. */
   contextPriorConversations?: ContextPriorConversationForModel[]
+  /** Per-chat MCP server allowlist selected by the user. */
+  activeMcpServers?: string[]
 }
 
 export type PriorChatMessage = {

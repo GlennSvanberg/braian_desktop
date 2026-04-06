@@ -56,14 +56,16 @@ function withTimeout<T>(
 
 async function listMcpToolsCached(
   workspaceId: string,
+  activeServerNames: string[],
 ): Promise<{ catalog: McpCatalog; warning?: string }> {
+  const scopeKey = `${workspaceId}::${activeServerNames.join('|')}`
   const now = nowMs()
-  const cached = mcpCatalogCache.get(workspaceId)
+  const cached = mcpCatalogCache.get(scopeKey)
   if (cached && now - cached.fetchedAt <= MCP_TOOL_CATALOG_TTL_MS) {
     return { catalog: cached.catalog }
   }
 
-  const inFlight = mcpCatalogInFlight.get(workspaceId)
+  const inFlight = mcpCatalogInFlight.get(scopeKey)
   if (inFlight) {
     const catalog = await withTimeout(
       inFlight,
@@ -73,11 +75,13 @@ async function listMcpToolsCached(
     return { catalog }
   }
 
-  const request = workspaceMcpListTools(workspaceId).then((catalog) => {
-    mcpCatalogCache.set(workspaceId, { fetchedAt: nowMs(), catalog })
-    return catalog
-  })
-  mcpCatalogInFlight.set(workspaceId, request)
+  const request = workspaceMcpListTools(workspaceId, activeServerNames).then(
+    (catalog) => {
+      mcpCatalogCache.set(scopeKey, { fetchedAt: nowMs(), catalog })
+      return catalog
+    },
+  )
+  mcpCatalogInFlight.set(scopeKey, request)
 
   try {
     const catalog = await withTimeout(
@@ -96,8 +100,8 @@ async function listMcpToolsCached(
     }
     throw error
   } finally {
-    if (mcpCatalogInFlight.get(workspaceId) === request) {
-      mcpCatalogInFlight.delete(workspaceId)
+    if (mcpCatalogInFlight.get(scopeKey) === request) {
+      mcpCatalogInFlight.delete(scopeKey)
     }
   }
 }
@@ -332,10 +336,16 @@ export async function buildMcpTools(
   ) {
     return { tools: [], warnings, serverNames: [] }
   }
+  const activeServerNames = Array.from(
+    new Set((context.activeMcpServers ?? []).map((s) => s.trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b))
+  if (activeServerNames.length === 0) {
+    return { tools: [], warnings, serverNames: [] }
+  }
 
   let catalog: McpCatalog
   try {
-    const listed = await listMcpToolsCached(context.workspaceId)
+    const listed = await listMcpToolsCached(context.workspaceId, activeServerNames)
     catalog = listed.catalog
     if (listed.warning) {
       warnings.push(listed.warning)

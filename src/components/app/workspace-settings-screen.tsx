@@ -93,11 +93,21 @@ function parseArgsText(text: string): string[] {
 }
 
 function cloneDoc(d: WorkspaceMcpConfigDocument): WorkspaceMcpConfigDocument {
+  const disabled = d.braian?.disabledMcpServers ?? []
+  const defaults = d.braian?.defaultActiveMcpServers ?? []
   return {
     mcpServers: { ...d.mcpServers },
-    braian: d.braian?.disabledMcpServers?.length
-      ? { disabledMcpServers: [...d.braian.disabledMcpServers] }
-      : undefined,
+    braian:
+      disabled.length > 0 || defaults.length > 0
+        ? {
+            ...(disabled.length > 0
+              ? { disabledMcpServers: [...disabled] }
+              : {}),
+            ...(defaults.length > 0
+              ? { defaultActiveMcpServers: [...defaults] }
+              : {}),
+          }
+        : undefined,
   }
 }
 
@@ -232,6 +242,7 @@ export function WorkspaceSettingsScreen({
     return JSON.stringify({
       s: doc.mcpServers,
       d: doc.braian?.disabledMcpServers ?? [],
+      a: doc.braian?.defaultActiveMcpServers ?? [],
     })
   }, [doc])
 
@@ -468,8 +479,18 @@ export function WorkspaceSettingsScreen({
       if (dis.has(editingName)) {
         dis.delete(editingName)
         dis.add(name)
+        const defaults = next.braian?.defaultActiveMcpServers ?? []
         next.braian =
-          dis.size > 0 ? { disabledMcpServers: [...dis].sort() } : undefined
+          dis.size > 0 || defaults.length > 0
+            ? {
+                ...(dis.size > 0
+                  ? { disabledMcpServers: [...dis].sort() }
+                  : {}),
+                ...(defaults.length > 0
+                  ? { defaultActiveMcpServers: [...defaults] }
+                  : {}),
+              }
+            : undefined
       }
     }
     next.mcpServers[name] = entry
@@ -490,8 +511,16 @@ export function WorkspaceSettingsScreen({
     delete next.mcpServers[name]
     const dis = disabledSetFromDoc(next)
     dis.delete(name)
+    const defaults = next.braian?.defaultActiveMcpServers ?? []
     next.braian =
-      dis.size > 0 ? { disabledMcpServers: [...dis].sort() } : undefined
+      dis.size > 0 || defaults.length > 0
+        ? {
+            ...(dis.size > 0 ? { disabledMcpServers: [...dis].sort() } : {}),
+            ...(defaults.length > 0
+              ? { defaultActiveMcpServers: [...defaults] }
+              : {}),
+          }
+        : undefined
     try {
       await persist(next)
     } catch (e) {
@@ -507,8 +536,16 @@ export function WorkspaceSettingsScreen({
       if (enabled) dis.delete(name)
       else dis.add(name)
       const next = cloneDoc(doc)
+      const defaults = next.braian?.defaultActiveMcpServers ?? []
       next.braian =
-        dis.size > 0 ? { disabledMcpServers: [...dis].sort() } : undefined
+        dis.size > 0 || defaults.length > 0
+          ? {
+              ...(dis.size > 0 ? { disabledMcpServers: [...dis].sort() } : {}),
+              ...(defaults.length > 0
+                ? { defaultActiveMcpServers: [...defaults] }
+                : {}),
+            }
+          : undefined
       await persist(next)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e))
