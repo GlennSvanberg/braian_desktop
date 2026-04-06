@@ -2,13 +2,16 @@ import { isTauri } from '@/lib/tauri-env'
 import { workspaceListDir, workspaceReadTextFile } from '@/lib/workspace-api'
 
 import {
-  APP_BUILDER_SKILL_FILENAME,
+  SKILL_MD_FILENAME,
   SKILL_CATALOG_MAX_FILES,
   SKILL_CATALOG_READ_MAX_BYTES,
   SKILLS_DIR_RELATIVE_PATH,
 } from './constants'
 import { parseSkillMarkdown } from './parse-skill-md'
-import { createSkillRelativePath } from './skill-path'
+import {
+  appBuilderSkillLegacyRelativePath,
+  appBuilderSkillRelativePath,
+} from './skill-path'
 
 export type SkillCatalogEntry = {
   relativePath: string
@@ -23,7 +26,7 @@ export type SkillCatalogLoadResult = {
 }
 
 /**
- * Shallow scan of `.braian/skills/*.md` for frontmatter name + description.
+ * Scan `.braian/skills/` for canonical `<slug>/SKILL.md` plus legacy flat `.md` files.
  */
 export async function loadSkillCatalog(
   workspaceId: string,
@@ -32,13 +35,57 @@ export async function loadSkillCatalog(
     return { entries: [], catalogIncomplete: true }
   }
   try {
-    const dir = await workspaceListDir(workspaceId, SKILLS_DIR_RELATIVE_PATH)
-    const mdFiles = dir
+    const dirEntries = await workspaceListDir(workspaceId, SKILLS_DIR_RELATIVE_PATH)
+    const records = new Map<string, SkillCatalogEntry>()
+
+    const upsert = (entry: SkillCatalogEntry, prefer = false) => {
+      const key = entry.name.trim().toLowerCase()
+      if (!key) return
+      if (prefer || !records.has(key)) {
+        records.set(key, entry)
+      }
+    }
+
+    // Canonical format: `.braian/skills/<slug>/SKILL.md`
+    const skillDirs = dirEntries.filter((e) => e.isDir).slice(0, SKILL_CATALOG_MAX_FILES)
+    for (const d of skillDirs) {
+      const mainPath = `${d.relativePath}/${SKILL_MD_FILENAME}`
+      try {
+        const { text } = await workspaceReadTextFile(
+          workspaceId,
+          mainPath,
+          SKILL_CATALOG_READ_MAX_BYTES,
+        )
+        const parsed = parseSkillMarkdown(text)
+        if (parsed.ok) {
+          upsert(
+            {
+              relativePath: mainPath,
+              name: parsed.frontmatter.name,
+              description: parsed.frontmatter.description,
+            },
+            true,
+          )
+          continue
+        }
+        upsert(
+          {
+            relativePath: mainPath,
+            name: d.name,
+            description: `[Invalid frontmatter: ${parsed.message}]`,
+          },
+          true,
+        )
+      } catch {
+        // Directory exists but no readable SKILL.md; ignore.
+      }
+    }
+
+    // Legacy flat format: `.braian/skills/<name>.md`
+    const legacyMdFiles = dirEntries
       .filter((e) => !e.isDir && e.name.toLowerCase().endsWith('.md'))
       .slice(0, SKILL_CATALOG_MAX_FILES)
-
-    const entries: SkillCatalogEntry[] = []
-    for (const e of mdFiles) {
+    for (const e of legacyMdFiles) {
       try {
         const { text } = await workspaceReadTextFile(
           workspaceId,
@@ -47,27 +94,31 @@ export async function loadSkillCatalog(
         )
         const parsed = parseSkillMarkdown(text)
         if (parsed.ok) {
-          entries.push({
+          upsert({
             relativePath: e.relativePath,
             name: parsed.frontmatter.name,
             description: parsed.frontmatter.description,
           })
         } else {
-          entries.push({
+          upsert({
             relativePath: e.relativePath,
             name: e.name,
             description: `[Invalid frontmatter: ${parsed.message}]`,
           })
         }
       } catch {
-        entries.push({
+        upsert({
           relativePath: e.relativePath,
           name: e.name,
           description: '[Could not read file.]',
         })
       }
     }
-    return { entries, catalogIncomplete: false }
+
+    return {
+      entries: Array.from(records.values()),
+      catalogIncomplete: false,
+    }
   } catch {
     return { entries: [], catalogIncomplete: true }
   }
@@ -80,7 +131,7 @@ export function formatSkillCatalogSystemText(
   const lines: string[] = [
     '## Skills catalog',
     '',
-    'Skills are `.md` files under `.braian/skills/`. Call `read_workspace_skill` to load the full body before following a skill.',
+    'Skills live under `.braian/skills/`, usually as `.braian/skills/<slug>/SKILL.md` with optional bundled files (for example `references/` or `scripts/`). Call `read_workspace_skill` before following a skill.',
     '',
   ]
   if (catalogIncomplete) {
@@ -99,33 +150,6 @@ export function formatSkillCatalogSystemText(
   return lines.join('\n')
 }
 
-/**
- * Full markdown body of create-skill (after frontmatter), for system injection.
- */
-export async function loadCreateSkillBodyMarkdown(
-  workspaceId: string,
-  fallbackBody: string,
-): Promise<string> {
-  if (!isTauri()) {
-    return fallbackBody
-  }
-  try {
-    const path = createSkillRelativePath()
-    const { text } = await workspaceReadTextFile(
-      workspaceId,
-      path,
-      SKILL_CATALOG_READ_MAX_BYTES,
-    )
-    const parsed = parseSkillMarkdown(text)
-    if (!parsed.ok) {
-      return fallbackBody
-    }
-    return parsed.body.trim() || fallbackBody
-  } catch {
-    return fallbackBody
-  }
-}
-
 export async function loadAppBuilderSkillMarkdown(
   workspaceId: string,
   fallback: string,
@@ -134,19 +158,33 @@ export async function loadAppBuilderSkillMarkdown(
     return fallback
   }
   try {
-    const rel = `${SKILLS_DIR_RELATIVE_PATH}/${APP_BUILDER_SKILL_FILENAME}`
     const { text } = await workspaceReadTextFile(
       workspaceId,
-      rel,
+      appBuilderSkillRelativePath(),
       SKILL_CATALOG_READ_MAX_BYTES * 2,
     )
     const parsed = parseSkillMarkdown(text)
     if (!parsed.ok) {
-      return fallback
+      throw new Error(parsed.message)
     }
     const body = parsed.body.trim()
     return body || fallback
   } catch {
-    return fallback
+    // Backward compatibility for pre-migration workspaces.
+    try {
+      const { text } = await workspaceReadTextFile(
+        workspaceId,
+        appBuilderSkillLegacyRelativePath(),
+        SKILL_CATALOG_READ_MAX_BYTES * 2,
+      )
+      const parsed = parseSkillMarkdown(text)
+      if (!parsed.ok) {
+        return fallback
+      }
+      const body = parsed.body.trim()
+      return body || fallback
+    } catch {
+      return fallback
+    }
   }
 }

@@ -9,8 +9,9 @@ import type { SkillCatalogEntry } from '@/lib/skills/load-skill-catalog'
 import { loadSkillCatalog } from '@/lib/skills/load-skill-catalog'
 import { parseSkillMarkdown } from '@/lib/skills/parse-skill-md'
 import {
-  isAllowedSkillRelativePath,
-  normalizeWorkspaceRelativePath,
+  isLegacySkillRelativePath,
+  isSkillMainPath,
+  resolveSkillPathArg,
 } from '@/lib/skills/skill-path'
 import { workspaceReadTextFile, workspaceWriteTextFile } from '@/lib/workspace-api'
 
@@ -22,7 +23,7 @@ const readSchema = z.object({
   path: z
     .string()
     .describe(
-      `Relative path to a skill file under ${SKILLS_DIR_RELATIVE_PATH}/ (e.g. create-skill.md or ${SKILLS_DIR_RELATIVE_PATH}/create-skill.md).`,
+      `Skill id or path under ${SKILLS_DIR_RELATIVE_PATH}/. Examples: create-skill, create-skill/SKILL.md, create-skill/references/best-practices.md, or ${SKILLS_DIR_RELATIVE_PATH}/create-skill/SKILL.md.`,
     ),
 })
 
@@ -30,22 +31,12 @@ const writeSchema = z.object({
   path: z
     .string()
     .describe(
-      `Target path: basename like create-skill.md or full path ${SKILLS_DIR_RELATIVE_PATH}/<name>.md`,
+      `Target skill path under ${SKILLS_DIR_RELATIVE_PATH}/. Examples: create-skill, create-skill/SKILL.md, create-skill/references/checklist.md, or legacy create-skill.md.`,
     ),
   content: z
     .string()
-    .describe('Full UTF-8 Markdown file including YAML frontmatter and body.'),
+    .describe('UTF-8 content to write. For SKILL.md and legacy top-level .md files, content must include valid frontmatter (name, description).'),
 })
-
-function resolveSkillPathArg(raw: string): string | null {
-  const n = normalizeWorkspaceRelativePath(raw)
-  if (isAllowedSkillRelativePath(n)) return n
-  const base = n.replace(/^.*\//, '')
-  if (!base.toLowerCase().endsWith('.md')) return null
-  if (base.includes('..') || base.includes('/') || base.includes('\\'))
-    return null
-  return `${SKILLS_DIR_RELATIVE_PATH}/${base}`
-}
 
 export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
   if (
@@ -58,7 +49,7 @@ export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
 
   const listTool = toolDefinition({
     name: 'list_workspace_skills',
-    description: `List workspace skills under \`${SKILLS_DIR_RELATIVE_PATH}/\` (name, description, path).`,
+    description: `List workspace skills under \`${SKILLS_DIR_RELATIVE_PATH}/\` (name, description, path to SKILL.md or legacy .md).`,
     inputSchema: listSchema,
   }).server(async () => {
     listSchema.parse({})
@@ -74,16 +65,15 @@ export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
   const readTool = toolDefinition({
     name: 'read_workspace_skill',
     description:
-      'Read one skill Markdown file under `.braian/skills/`. Returns frontmatter metadata and body text.',
+      'Read skill instructions or bundled skill resources under `.braian/skills/`. For SKILL.md/legacy .md returns frontmatter and body; for other files returns raw text.',
     inputSchema: readSchema,
   }).server(async (args) => {
     const { path: rawPath } = readSchema.parse(args)
     const rel = resolveSkillPathArg(rawPath)
-    if (!rel || !isAllowedSkillRelativePath(rel)) {
+    if (!rel) {
       return JSON.stringify({
         ok: false as const,
-        error:
-          'Path must be a .md file directly under .braian/skills/ (no subfolders or ..).',
+        error: 'Path must stay under .braian/skills/ and cannot contain ..',
       })
     }
     try {
@@ -92,21 +82,31 @@ export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
         rel,
         null,
       )
-      const parsed = parseSkillMarkdown(text)
-      if (!parsed.ok) {
+      if (isSkillMainPath(rel) || isLegacySkillRelativePath(rel)) {
+        const parsed = parseSkillMarkdown(text)
+        if (!parsed.ok) {
+          return JSON.stringify({
+            ok: false as const,
+            path: rel,
+            error: parsed.message,
+            preview: text.slice(0, 2000),
+          })
+        }
         return JSON.stringify({
-          ok: false as const,
+          ok: true as const,
           path: rel,
-          error: parsed.message,
-          preview: text.slice(0, 2000),
+          kind: 'skill' as const,
+          name: parsed.frontmatter.name,
+          description: parsed.frontmatter.description,
+          body: parsed.body,
+          truncated,
         })
       }
       return JSON.stringify({
         ok: true as const,
         path: rel,
-        name: parsed.frontmatter.name,
-        description: parsed.frontmatter.description,
-        body: parsed.body,
+        kind: 'resource' as const,
+        content: text,
         truncated,
       })
     } catch (e) {
@@ -119,31 +119,37 @@ export function buildSkillTools(context: ChatTurnContext | undefined): Tool[] {
 
   const writeTool = toolDefinition({
     name: 'write_workspace_skill',
-    description: `Create or replace a UTF-8 Markdown skill under \`${SKILLS_DIR_RELATIVE_PATH}/\`. Content must include valid YAML frontmatter (\`name\`, \`description\`) and a Markdown body.`,
+    description: `Create or replace files under \`${SKILLS_DIR_RELATIVE_PATH}/\`. SKILL.md (or legacy top-level .md) must include valid frontmatter (\`name\`, \`description\`); bundled files can contain arbitrary UTF-8 content.`,
     inputSchema: writeSchema,
   }).server(async (args) => {
     const { path: rawPath, content } = writeSchema.parse(args)
     const rel = resolveSkillPathArg(rawPath)
-    if (!rel || !isAllowedSkillRelativePath(rel)) {
+    if (!rel) {
       return JSON.stringify({
         ok: false as const,
-        error:
-          'Path must be a .md file directly under .braian/skills/ (no subfolders or ..).',
+        error: 'Path must stay under .braian/skills/ and cannot contain ..',
       })
     }
-    const parsed = parseSkillMarkdown(content)
-    if (!parsed.ok) {
-      return JSON.stringify({
-        ok: false as const,
-        error: `Invalid skill markdown: ${parsed.message}`,
-      })
+    const shouldValidateFrontmatter =
+      isSkillMainPath(rel) || isLegacySkillRelativePath(rel)
+    let parsedName: string | null = null
+    if (shouldValidateFrontmatter) {
+      const parsed = parseSkillMarkdown(content)
+      if (!parsed.ok) {
+        return JSON.stringify({
+          ok: false as const,
+          error: `Invalid skill markdown: ${parsed.message}`,
+        })
+      }
+      parsedName = parsed.frontmatter.name
     }
     try {
       await workspaceWriteTextFile(workspaceId, rel, content)
       return JSON.stringify({
         ok: true as const,
         path: rel,
-        name: parsed.frontmatter.name,
+        kind: shouldValidateFrontmatter ? ('skill' as const) : ('resource' as const),
+        name: parsedName,
       })
     } catch (e) {
       return JSON.stringify({

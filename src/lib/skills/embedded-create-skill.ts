@@ -1,41 +1,50 @@
 /**
- * Used when `.braian/skills/create-skill.md` is missing or unreadable (e.g. web preview).
- * Keep in sync with `src-tauri/skills-default/create-skill.md` body after frontmatter.
+ * Used when `.braian/skills/create-skill/SKILL.md` is missing or unreadable (e.g. web preview).
+ * Keep in sync with `src-tauri/skills-default/create-skill/SKILL.md` body after frontmatter.
  */
-export const EMBEDDED_CREATE_SKILL_MARKDOWN = `## Braian workspace skills
+export const EMBEDDED_CREATE_SKILL_MARKDOWN = `## Agent Skills in Braian
 
-In this app, skills live as Markdown files under \`.braian/skills/\` in the active workspace. Each file must start with YAML frontmatter:
+Braian skills follow Anthropic's progressive disclosure model:
+
+1. Level 1 (always loaded): frontmatter metadata in the catalog.
+2. Level 2 (when triggered): \`SKILL.md\` body loaded via \`read_workspace_skill\`.
+3. Level 3 (as needed): bundled files under the same skill folder.
+
+Use this layout:
+
+\`\`\`text
+.braian/skills/<skill-slug>/
+  SKILL.md
+  references/
+  scripts/
+  assets/
+\`\`\`
+
+Legacy flat files (\`.braian/skills/<name>.md\`) are still supported for compatibility, but new skills should use the folder + \`SKILL.md\` format.
+
+### Frontmatter requirements
 
 \`\`\`yaml
 ---
-name: my-skill
-description: One line explaining when to use this skill.
+name: your-skill-name
+description: What this skill does and when to use it.
 ---
 \`\`\`
 
-Then write concise instructions in Markdown below the closing \`---\`.
+\`name\` should use lowercase letters, numbers, and hyphens only.
 
-## Create Skill
+### Authoring guidance
 
-Guide for creating effective skills that extend agent capabilities with specialized knowledge, workflows, and tool integrations.
+- Keep \`SKILL.md\` concise.
+- Move long details to \`references/\`.
+- Use \`scripts/\` for deterministic repeated operations.
+- Test with the models you plan to use.
 
-### About skills
+### Braian tool mapping
 
-Skills are modular instructions the model loads **on demand** via \`read_workspace_skill\`. The **catalog** (name + description) is always visible; the body loads when needed.
+- Use \`list_workspace_skills\` for metadata checks.
+- Use \`read_workspace_skill\` before following a skill.
+- Use \`write_workspace_skill\` to write \`SKILL.md\` or bundled files.
 
-### Progressive disclosure
-
-Keep each skill focused. Prefer short files; split long reference into separate skills or workspace docs.
-
-### Core principles
-
-- Be concise — the context window is shared with chat, memory, and tools.
-- Use \`list_workspace_skills\` / \`read_workspace_skill\` before claiming a workflow you have not loaded.
-- After editing a skill file with \`write_workspace_skill\`, the next turn’s catalog will reflect it.
-
-### Structure (Braian)
-
-- One \`.md\` file per skill under \`.braian/skills/\`.
-- Required frontmatter: \`name\`, \`description\`.
-- Optional: keep related scripts in the workspace (e.g. \`scripts/\`) and reference paths in the skill body.
+In Braian, scripts only run when shell/command tools are available and called. Do not claim execution unless it happened.
 `

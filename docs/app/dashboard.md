@@ -28,7 +28,7 @@ Each workspace can host a **Vite + React + TypeScript** app under **`.braian/web
 | Path | Purpose |
 |------|---------|
 | `.braian/webapp/` | User-editable Vite project (`src/`, `package.json`, etc.). |
-| `.braian/skills/app-builder.md` | Seeded skill for App mode. |
+| `.braian/skills/app-builder/SKILL.md` | Seeded skill for App mode (legacy `app-builder.md` still read for compatibility). |
 
 ## Chat modes: Document, Code, and App
 

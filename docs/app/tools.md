@@ -51,13 +51,13 @@ You can switch modes yourself, or stay on **Document** and ask the assistant to 
 
 ## Workspace skills (`.braian/skills`)
 
-In a **real workspace** on the **desktop app**, the assistant also gets tools to work with **Markdown skills** — reusable instructions stored under **`.braian/skills/*.md`** (YAML frontmatter with `name` and `description`, then the body). The **Model context** preview includes a **catalog** of skill metadata (name + description per file); the model loads full bodies with **`read_workspace_skill`** when needed.
+In a **real workspace** on the **desktop app**, the assistant also gets tools to work with **Agent Skills** — reusable instructions stored under **`.braian/skills/`**. The canonical layout is **`.braian/skills/<slug>/SKILL.md`** (with YAML frontmatter `name` + `description`, then body), plus optional bundled files like `references/` and `scripts/`. The **Model context** preview includes a **catalog** of skill metadata (name + description per skill); the model loads full bodies with **`read_workspace_skill`** when needed.
 
 | Tool | What it does |
 |------|----------------|
 | `list_workspace_skills` | Returns JSON listing skills (path, name, description)—same idea as the catalog in system context. |
-| `read_workspace_skill` | Reads one `.md` file under `.braian/skills/` (no subfolders; path must stay under that directory). |
-| `write_workspace_skill` | Creates or replaces a skill file; content must be valid skill Markdown (frontmatter + body). |
+| `read_workspace_skill` | Reads a skill body or bundled skill resource under `.braian/skills/` (path must stay under that directory). |
+| `write_workspace_skill` | Creates or replaces `SKILL.md` files and bundled skill resources under `.braian/skills/` (frontmatter required for main skill files). |
 
 These tools are **not** available in the **You** profile coach, detached "new chat" without a folder, or in the browser-only dev preview.
 

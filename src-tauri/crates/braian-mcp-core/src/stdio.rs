@@ -160,6 +160,7 @@ pub fn spawn_stdio_server(
     .unwrap_or_default();
   let cwd_path = resolve_stdio_cwd(workspace_root, canon_root, entry)?;
   let mut cmd = Command::new(command);
+  println!("mcpd: spawning `{}` with args {:?}", command, args);
   cmd.args(&args);
   cmd.current_dir(&cwd_path);
   cmd.stdin(Stdio::piped());

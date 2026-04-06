@@ -62,7 +62,7 @@ function buildCanvasRoutingLine(options: BuildRoutingPromptOptions): string | nu
 
 function buildSkillsRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (!options.hasSkillTools) return null
-  return '**Workspace skills** (see **Skills catalog** below): when a skill description fits the task, call `read_workspace_skill` before acting on that domain. To create or edit skills, call `read_workspace_skill` on `create-skill` first.'
+  return '**Workspace skills** (see **Skills catalog** below): when a skill description fits the task, call `read_workspace_skill` before acting on that domain. To create or edit skills, start by calling `read_workspace_skill` with `create-skill` (resolves to that skill\'s `SKILL.md`).'
 }
 
 function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null {
@@ -156,5 +156,5 @@ You build the workspace **Vite + React** app under \`.braian/webapp/\`.
 - **Published vs dev:** **Dashboard → Apps** shows only the **published** build; **Dashboard → App settings** has dev preview and template tools (legacy **Webapp** URLs still work). In **App mode**, the **artifact** panel runs **dev preview** (auto-started when possible). Publish again to refresh the Apps tab.
 - If a **document canvas snapshot** is present, focus on the surface the user is clearly iterating on.`
 
-/** Fallback if \`.braian/skills/app-builder.md\` is missing or invalid (no frontmatter). */
+/** Fallback if \`.braian/skills/app-builder/SKILL.md\` is missing or invalid (no frontmatter). */
 export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). **\`/\` is only My apps** (\`MyAppsLandingPage\` in \`app-routes.tsx\`). **Every** new mini-app — including “simple” tools — goes on **\`/kebab-slug\`**: new \`src/pages/*Page.tsx\`, append \`APP_ROUTES\`, preview path = that slug (not \`/\`). Never replace the landing or root route with feature UI. Use semantic theme classes; keep \`BraianShell\` in \`App.tsx\`. **Dashboard → Apps** is **published** only; **Dashboard → App settings** has dev preview and template; use \`publish_workspace_webapp\` (or UI Publish) to refresh the published app. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` — not \`npm run dev\`. Use \`init_workspace_webapp\` when needed; \`read_workspace_webapp_dev_logs\` for dev-server issues.`

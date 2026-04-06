@@ -94,6 +94,7 @@ fn main() {
       continue;
     }
     let path = req.url().to_string();
+    println!("mcpd: {} {}", req.method(), path);
     if path == "/v1/list-tools" {
       let payload = match read_json::<ListToolsReq>(&mut req) {
         Ok(v) => v,

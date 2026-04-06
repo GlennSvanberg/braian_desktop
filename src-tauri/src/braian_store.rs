@@ -215,8 +215,9 @@ fn skills_dir(workspace_root: &Path) -> PathBuf {
   braian_dir(workspace_root).join("skills")
 }
 
-const DEFAULT_CREATE_SKILL_MD: &str = include_str!("../skills-default/create-skill.md");
-const DEFAULT_APP_BUILDER_SKILL_MD: &str = include_str!("../skills-default/app-builder.md");
+const DEFAULT_CREATE_SKILL_MD: &str = include_str!("../skills-default/create-skill/SKILL.md");
+const DEFAULT_APP_BUILDER_SKILL_MD: &str =
+  include_str!("../skills-default/app-builder/SKILL.md");
 
 fn conversation_path(workspace_root: &Path, id: &str) -> PathBuf {
   conversations_dir(workspace_root).join(format!("{id}.json"))
@@ -232,6 +233,10 @@ fn canvas_md_path(workspace_root: &Path, conversation_id: &str) -> PathBuf {
 
 fn memory_md_path(workspace_root: &Path) -> PathBuf {
   braian_dir(workspace_root).join("MEMORY.md")
+}
+
+fn skill_main_path(workspace_root: &Path, slug: &str) -> PathBuf {
+  skills_dir(workspace_root).join(slug).join("SKILL.md")
 }
 
 const MEMORY_MD_TEMPLATE: &str = r#"# Workspace memory
@@ -254,12 +259,18 @@ pub(crate) fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> 
   fs::create_dir_all(artifacts_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(canvas_dir(workspace_root)).map_err(|e| e.to_string())?;
   fs::create_dir_all(skills_dir(workspace_root)).map_err(|e| e.to_string())?;
-  let create_skill_path = skills_dir(workspace_root).join("create-skill.md");
+  let create_skill_path = skill_main_path(workspace_root, "create-skill");
   if !create_skill_path.exists() {
+    if let Some(parent) = create_skill_path.parent() {
+      fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     fs::write(&create_skill_path, DEFAULT_CREATE_SKILL_MD).map_err(|e| e.to_string())?;
   }
-  let app_builder_skill_path = skills_dir(workspace_root).join("app-builder.md");
+  let app_builder_skill_path = skill_main_path(workspace_root, "app-builder");
   if !app_builder_skill_path.exists() {
+    if let Some(parent) = app_builder_skill_path.parent() {
+      fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     fs::write(&app_builder_skill_path, DEFAULT_APP_BUILDER_SKILL_MD)
       .map_err(|e| e.to_string())?;
   }

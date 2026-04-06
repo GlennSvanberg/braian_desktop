@@ -115,9 +115,9 @@ fn ensure_broker_running() -> Result<BrokerAddr, String> {
   } else {
     return Err("Could not locate braian-mcpd binary.".to_string());
   };
-  cmd.stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
+  cmd.stdin(Stdio::null());
+  // .stdout(Stdio::null())
+  // .stderr(Stdio::null());
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;

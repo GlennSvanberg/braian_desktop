@@ -83,38 +83,39 @@ fn run_child(
     .spawn()
     .map_err(|e| format!("Failed to start process: {e}"))?;
 
-  let stdout = child.stdout.take();
-  let stderr = child.stderr.take();
+  let mut stdout_pipe = child.stdout.take().unwrap();
+  let mut stderr_pipe = child.stderr.take().unwrap();
 
   let stdout_handle = thread::spawn(move || {
     let mut v = Vec::new();
-    if let Some(mut h) = stdout {
-      let _ = h.read_to_end(&mut v);
-    }
+    let _ = stdout_pipe.read_to_end(&mut v);
     v
   });
   let stderr_handle = thread::spawn(move || {
     let mut v = Vec::new();
-    if let Some(mut h) = stderr {
-      let _ = h.read_to_end(&mut v);
-    }
+    let _ = stderr_pipe.read_to_end(&mut v);
     v
   });
 
   let start = Instant::now();
   let mut timed_out = false;
   let exit_code = loop {
-    if start.elapsed() >= timeout {
-      timed_out = true;
-      let _ = child.kill();
-      break child.wait().ok().and_then(|s| s.code());
-    }
     match child.try_wait() {
       Ok(Some(status)) => break status.code(),
-      Ok(None) => thread::sleep(Duration::from_millis(25)),
+      Ok(None) => {
+        if start.elapsed() >= timeout {
+          timed_out = true;
+          let _ = child.kill();
+          // After kill, we still need to wait for the process to actually exit
+          // so we don't leave a zombie and can get the exit status.
+          break child.wait().ok().and_then(|s| s.code());
+        }
+        thread::sleep(Duration::from_millis(100));
+      }
       Err(e) => return Err(e.to_string()),
     }
   };
+
   let stdout_bytes = stdout_handle.join().unwrap_or_default();
   let stderr_bytes = stderr_handle.join().unwrap_or_default();
 
@@ -143,7 +144,7 @@ fn parse_limits(timeout_ms: Option<u64>, max_output_bytes: Option<usize>) -> (Du
 
 /// Run a program with argv (no shell). `cwd` is optional, relative to workspace root; default is workspace root.
 #[tauri::command]
-pub fn workspace_run_command(
+pub async fn workspace_run_command(
   app: AppHandle,
   workspace_id: String,
   program: String,
@@ -152,7 +153,7 @@ pub fn workspace_run_command(
   timeout_ms: Option<u64>,
   max_output_bytes: Option<usize>,
 ) -> Result<WorkspaceRunCommandResult, String> {
-  let program = program.trim();
+  let program = program.trim().to_string();
   if program.is_empty() {
     return Err("Program name cannot be empty.".to_string());
   }
@@ -160,17 +161,21 @@ pub fn workspace_run_command(
   let (_canon_root, cwd_path) = resolve_workspace_cwd(&app, &workspace_id, &cwd)?;
   let (timeout, max_each) = parse_limits(timeout_ms, max_output_bytes);
 
-  let mut cmd = Command::new(program);
-  cmd.args(&args);
-  cmd.current_dir(&cwd_path);
+  tauri::async_runtime::spawn_blocking(move || {
+    let mut cmd = Command::new(program);
+    cmd.args(&args);
+    cmd.current_dir(&cwd_path);
 
-  run_child(cmd, timeout, max_each)
+    run_child(cmd, timeout, max_each)
+  })
+  .await
+  .map_err(|e| format!("Command task failed: {e}"))?
 }
 
 /// Run a shell command string. Windows: cmd.exe /C. Unix: sh -c.
 /// `cwd` is optional, relative to workspace root; default is workspace root.
 #[tauri::command]
-pub fn workspace_run_shell(
+pub async fn workspace_run_shell(
   app: AppHandle,
   workspace_id: String,
   command: String,
@@ -186,16 +191,20 @@ pub fn workspace_run_shell(
   let (_canon_root, cwd_path) = resolve_workspace_cwd(&app, &workspace_id, &cwd)?;
   let (timeout, max_each) = parse_limits(timeout_ms, max_output_bytes);
 
-  let mut cmd = if cfg!(windows) {
-    let mut c = Command::new("cmd.exe");
-    c.args(["/C", &command]);
-    c
-  } else {
-    let mut c = Command::new("sh");
-    c.args(["-c", &command]);
-    c
-  };
-  cmd.current_dir(&cwd_path);
+  tauri::async_runtime::spawn_blocking(move || {
+    let mut cmd = if cfg!(windows) {
+      let mut c = Command::new("cmd.exe");
+      c.args(["/C", &command]);
+      c
+    } else {
+      let mut c = Command::new("sh");
+      c.args(["-c", &command]);
+      c
+    };
+    cmd.current_dir(&cwd_path);
 
-  run_child(cmd, timeout, max_each)
+    run_child(cmd, timeout, max_each)
+  })
+  .await
+  .map_err(|e| format!("Shell task failed: {e}"))?
 }

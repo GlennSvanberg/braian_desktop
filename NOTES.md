@@ -14,7 +14,7 @@ Local-First, Sync-Later: All data resides on the user's machine. Cloud sync (Con
 
 Artifact-Centric UI: The chat is a side-tool used to manipulate the "Canvas" (the Artifact/Dashboard).
 
-Agentic Execution: Braian uses MCP (Model Context Protocol) to execute "Skills"—local scripts or tools that interact with the file system.
+Agentic Execution: Braian uses MCP (Model Context Protocol) for external connections/tools, and separate filesystem Agent Skills under `.braian/skills/` for reusable instruction bundles.
 
 Abstraction for Business: Technical terms (RAG, LLM, Embeddings) are hidden. The user sees "Skills," "Dashboards," and "Actions."
 

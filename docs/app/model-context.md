@@ -9,13 +9,13 @@ In the chat toolbar, **Context** opens the **Model context** dialog: **Last sent
 For a normal chat attached to a **workspace folder** (not "new chat" without a folder, and not the **You** profile coach), sections are assembled in this order:
 
 1. **Routing (Core)** — A numbered **decision tree** assembled for the current turn, plus a short addendum for **document/triage** or **code** mode, and in **App** mode an extra **App mode** subsection (workspace webapp, live preview). It tells the model how to choose webapp helpers, code tools, the document canvas, workspace skills, and MCP tools **without mentioning workflows that are unavailable in that scenario**.
-2. **Skills** — A **catalog** listing every skill file's `name`, `description`, and path (metadata only). Full skill bodies — including create-skill instructions — load **on demand** via `read_workspace_skill`, keeping the default prompt compact.
+2. **Skills** — A **catalog** listing every skill's `name`, `description`, and main path (usually `.braian/skills/<slug>/SKILL.md`) as metadata only. Full skill bodies — including create-skill instructions — load **on demand** via `read_workspace_skill`, keeping the default prompt compact.
 3. **User context** — Your saved **profile** (sidebar → **You**) and the app's **current client time** (for tone and scheduling; the model is told not to read the clock aloud unless you ask).
 4. **Workspace memory** — Excerpt from **`.braian/MEMORY.md`** when that file exists and is non-empty (subject to size limits). See [Memory](/docs/memory).
 5. **This turn** — Optional blocks appended when relevant:
    - **Attached workspace files** (excerpts from @-attachments),
    - **Document canvas snapshot** (latest side-panel markdown + **revision**, optional **selection** excerpt),
-   - **Workspace webapp builder** — When **App** mode is on for that chat, the app injects the full **app-builder** instructions (loaded from **`.braian/skills/app-builder.md`**, with an in-app fallback if the file is missing).
+   - **Workspace webapp builder** — When **App** mode is on for that chat, the app injects the full **app-builder** instructions (loaded from **`.braian/skills/app-builder/SKILL.md`**, with compatibility fallback to legacy `app-builder.md`, then an in-app fallback if needed).
 
 Detached chats (no workspace folder yet) and synthetic sessions skip workspace-only sections (memory, skills on disk, webapp files) where the app cannot resolve paths.
 
@@ -25,9 +25,9 @@ The **sidebar → You** chat uses a **separate** prompt: profile coach instructi
 
 ## Workspace skills
 
-Skills are Markdown files under **`.braian/skills/`** in the workspace. Each file starts with YAML frontmatter (`name` and `description`), then the instruction body.
+Skills are stored under **`.braian/skills/`**. The canonical format is one folder per skill with **`SKILL.md`** containing YAML frontmatter (`name` and `description`) followed by the instruction body.
 
-- New workspaces (or first use of `.braian`) get default **`create-skill.md`** and **`app-builder.md`** from the app so the catalog is never empty of those two.
+- New workspaces (or first use of `.braian`) get default **`create-skill/SKILL.md`** and **`app-builder/SKILL.md`** so the catalog is never empty of those two.
 - The model sees only the **catalog** (name + description per file) in the default prompt. It calls **`read_workspace_skill`** to load the full body when a skill is relevant.
 - The model can also call **`list_workspace_skills`** and **`write_workspace_skill`** (desktop app, real workspace only) to discover and edit skills without switching to **Code** mode for generic file tools.
 

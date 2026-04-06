@@ -45,7 +45,7 @@ import type { ReasoningModelOptions } from './reasoning-model-options'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
 
-/** Fallback webapp instructions if `.braian/skills/app-builder.md` is unavailable. */
+/** Fallback webapp instructions if `.braian/skills/app-builder/SKILL.md` is unavailable. */
 export const APP_BUILDER_SYSTEM = APP_BUILDER_INSTRUCTIONS_FALLBACK
 
 export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Desktop. Your job is to get to know the user in a friendly, efficient way and to keep their **global profile** up to date.
@@ -94,7 +94,7 @@ const SOURCE_ROUTING_CODE =
   'src/lib/ai/braian-routing-prompt.ts + chat-turn-args (code mode)'
 const SOURCE_SKILLS_CATALOG = 'src/lib/skills/load-skill-catalog.ts'
 const SOURCE_APP_BUILDER =
-  'src/lib/skills/load-skill-catalog.ts → app-builder.md (+ APP_BUILDER_INSTRUCTIONS_FALLBACK)'
+  'src/lib/skills/load-skill-catalog.ts → app-builder/SKILL.md (+ legacy app-builder.md fallback, + APP_BUILDER_INSTRUCTIONS_FALLBACK)'
 const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_PRIOR_CONVERSATIONS =
