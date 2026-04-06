@@ -146,7 +146,7 @@ fn clear_last_error(state: &WebappDevState, workspace_id: &str) {
   }
 }
 
-fn webapp_dir_for(app: &AppHandle, workspace_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn webapp_dir_for(app: &AppHandle, workspace_id: &str) -> Result<PathBuf, String> {
   let conn = db::open_connection(app).map_err(|e| e.to_string())?;
   let root = workspace_root_path(&conn, workspace_id)?;
   safe_join_workspace(&root, WEBAPP_RELATIVE_DIR)

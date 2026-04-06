@@ -643,6 +643,20 @@ export type WorkspaceWebappInitResult = {
   skippedExisting: boolean
 }
 
+export type WorkspaceWebappPublishResult = {
+  ok: boolean
+  logSummary?: string
+}
+
+export type WorkspaceWebappPublishStatus = {
+  staticServerOrigin: string
+  hasPublishedDist: boolean
+  publishedAtMs: number
+  hasUnpublishedChanges: boolean
+  previewPath: string
+  publishedPreviewUrl?: string | null
+}
+
 export async function workspaceWebappInit(input: {
   workspaceId: string
   overwrite?: boolean
@@ -709,3 +723,31 @@ export async function workspaceWebappPreviewPathSet(input: {
     path: input.path,
   })
 }
+
+export async function workspaceWebappPublish(
+  workspaceId: string,
+): Promise<WorkspaceWebappPublishResult> {
+  if (!isTauri()) {
+    throw new Error('Publishing the workspace webapp requires the desktop app.')
+  }
+  return invoke<WorkspaceWebappPublishResult>('webapp_publish', { workspaceId })
+}
+
+export async function workspaceWebappPublishStatus(
+  workspaceId: string,
+): Promise<WorkspaceWebappPublishStatus> {
+  if (!isTauri()) {
+    return {
+      staticServerOrigin: '',
+      hasPublishedDist: false,
+      publishedAtMs: 0,
+      hasUnpublishedChanges: false,
+      previewPath: '/',
+      publishedPreviewUrl: null,
+    }
+  }
+  return invoke<WorkspaceWebappPublishStatus>('webapp_publish_status', {
+    workspaceId,
+  })
+}
+

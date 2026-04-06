@@ -201,6 +201,7 @@ export function ArtifactPanel({
       <WorkspaceWebappPreviewCore
         workspaceId={appPreviewWorkspaceId}
         isTauriRuntime={isTauriRuntime}
+        surface="artifact"
         variant="embedded"
         generating={appPreviewGenerating}
         className="h-full min-h-0"
@@ -225,6 +226,7 @@ export function ArtifactPanel({
       <WorkspaceWebappPreviewCore
         workspaceId={appPreviewWorkspaceId}
         isTauriRuntime={isTauriRuntime}
+        surface="artifact"
         variant="embedded"
         generating={appPreviewGenerating}
         className="h-full min-h-0"

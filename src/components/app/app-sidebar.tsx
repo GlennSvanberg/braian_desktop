@@ -457,7 +457,7 @@ function WorkspaceConversationGroup({
             <SidebarMenuItem key="workspace-webapp">
               <SidebarMenuButton
                 asChild
-                tooltip="Vite workspace webapp preview"
+                tooltip="Workspace webapp (published build + dev preview)"
                 isActive={
                   pathname === `/workspace/${workspace.id}/webapp` &&
                   workspace.id === activeWorkspaceId
@@ -706,7 +706,7 @@ export function AppSidebar() {
                     (!!activeWorkspaceId &&
                       pathname === `/workspace/${activeWorkspaceId}/webapp`)
                   }
-                  tooltip="Workspace webapp (Vite preview)"
+                  tooltip="Workspace webapp (published + dev)"
                 >
                   <Link to="/dashboard">
                     <MonitorPlay />

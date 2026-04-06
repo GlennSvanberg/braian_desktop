@@ -300,3 +300,49 @@ pub fn webapp_preview_path_set(
   Ok(())
 }
 
+/// Last successful webapp publish time (ms since epoch); `0` means never published.
+pub fn webapp_published_at_ms_get(app: &AppHandle, workspace_id: &str) -> Result<i64, String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  conn
+    .query_row(
+      "SELECT webapp_published_at_ms FROM workspaces WHERE id = ?1",
+      params![workspace_id],
+      |r| r.get(0),
+    )
+    .map_err(|_| "Workspace not found.".to_string())
+}
+
+/// Fingerprint of webapp sources at last successful publish; empty if never published.
+pub fn webapp_publish_fingerprint_get(
+  app: &AppHandle,
+  workspace_id: &str,
+) -> Result<String, String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  conn
+    .query_row(
+      "SELECT webapp_publish_fingerprint FROM workspaces WHERE id = ?1",
+      params![workspace_id],
+      |r| r.get(0),
+    )
+    .map_err(|_| "Workspace not found.".to_string())
+}
+
+pub fn webapp_publish_metadata_set(
+  app: &AppHandle,
+  workspace_id: &str,
+  published_at_ms: i64,
+  fingerprint: &str,
+) -> Result<(), String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  let n = conn
+    .execute(
+      "UPDATE workspaces SET webapp_published_at_ms = ?1, webapp_publish_fingerprint = ?2 WHERE id = ?3",
+      params![published_at_ms, fingerprint, workspace_id],
+    )
+    .map_err(|e| e.to_string())?;
+  if n == 0 {
+    return Err("Workspace not found.".to_string());
+  }
+  Ok(())
+}
+

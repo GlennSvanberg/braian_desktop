@@ -139,6 +139,7 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   init_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
   read_workspace_webapp_dev_logs: 'src/lib/ai/webapp-tools.ts',
   set_workspace_webapp_preview_path: 'src/lib/ai/webapp-tools.ts',
+  publish_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
   update_user_profile: 'src/lib/ai/user-profile-tools.ts',
   list_workspace_skills: 'src/lib/ai/skill-tools.ts',
   read_workspace_skill: 'src/lib/ai/skill-tools.ts',

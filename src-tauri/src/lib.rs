@@ -10,6 +10,7 @@ mod workspace_mcp_runtime;
 mod workspace_mcp_stdio;
 mod workspace_mcp_probe;
 mod workspace_webapp_dev;
+mod workspace_webapp_static;
 
 use tauri::Manager;
 
@@ -35,6 +36,9 @@ pub fn run() {
         log::error!("Failed to ensure default workspace: {e}");
       }
       app.manage(workspace_webapp_dev::WebappDevState::default());
+      app.manage(workspace_webapp_static::WebappStaticServerState::start(
+        app.handle().clone(),
+      ));
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -76,6 +80,9 @@ pub fn run() {
       workspace_webapp_dev::webapp_dev_logs,
       workspace_webapp_dev::webapp_preview_path_set,
       workspace_webapp_dev::webapp_init_from_template,
+      workspace_webapp_static::webapp_static_server_url,
+      workspace_webapp_static::webapp_publish,
+      workspace_webapp_static::webapp_publish_status,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

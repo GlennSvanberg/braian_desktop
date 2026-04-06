@@ -307,6 +307,10 @@ describe('buildTanStackChatTurnArgs', () => {
       (t) => t.name === 'set_workspace_webapp_preview_path',
     )
     expect(setPreviewPath?.lazy).toBe(true)
+    const publishWebapp = r.toolsDisplay.find(
+      (t) => t.name === 'publish_workspace_webapp',
+    )
+    expect(publishWebapp?.lazy).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)
@@ -340,10 +344,17 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'set_workspace_webapp_preview_path'),
     ).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'publish_workspace_webapp'),
+    ).toBe(true)
     const setPreviewPath = r.toolsDisplay.find(
       (t) => t.name === 'set_workspace_webapp_preview_path',
     )
     expect(setPreviewPath?.lazy).toBeUndefined()
+    const publishWebapp = r.toolsDisplay.find(
+      (t) => t.name === 'publish_workspace_webapp',
+    )
+    expect(publishWebapp?.lazy).toBeUndefined()
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
@@ -374,6 +385,10 @@ describe('buildTanStackChatTurnArgs', () => {
       (t) => t.name === 'init_workspace_webapp',
     )
     expect(initWebapp?.lazy).toBe(true)
+    const publishWebapp = r.toolsDisplay.find(
+      (t) => t.name === 'publish_workspace_webapp',
+    )
+    expect(publishWebapp?.lazy).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)

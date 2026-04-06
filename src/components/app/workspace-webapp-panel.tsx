@@ -16,6 +16,7 @@ export function WorkspaceWebappPanel({
     <WorkspaceWebappPreviewCore
       workspaceId={workspaceId}
       isTauriRuntime={isTauriRuntime}
+      surface="sidebar"
       variant="full"
       className={cn(className)}
     />

@@ -6,6 +6,7 @@ import {
   workspaceWebappDevLogs,
   workspaceWebappInit,
   workspaceWebappPreviewPathSet,
+  workspaceWebappPublish,
 } from '@/lib/workspace-api'
 
 import type { ChatTurnContext } from './types'
@@ -14,6 +15,7 @@ export const WORKSPACE_WEBAPP_TOOL_NAMES = [
   'init_workspace_webapp',
   'read_workspace_webapp_dev_logs',
   'set_workspace_webapp_preview_path',
+  'publish_workspace_webapp',
 ] as const
 
 export type BuildWorkspaceWebappToolsOptions = {
@@ -38,6 +40,8 @@ const setPreviewPathSchema = z.object({
       'Preview iframe route. Must start with /. For a mini-app you just built, use THAT app path (e.g. /email-checker, /calculator) — never use / to showcase new feature UI; / is only the My apps index. Use / only when you intentionally want the landing page.',
     ),
 })
+
+const publishSchema = z.object({})
 
 export function buildWorkspaceWebappTools(
   context: ChatTurnContext | undefined,
@@ -72,8 +76,16 @@ export function buildWorkspaceWebappTools(
   const previewPathTool = toolDefinition({
     name: 'set_workspace_webapp_preview_path',
     description:
-      'Set the preview iframe route. After building or editing a mini-app, set this to that app path (e.g. /email-checker) — not /. Using / is only for the My apps index; do not point / at new feature UI you implemented.',
+      'Set the preview iframe route. After building or editing a mini-app, set this to that app path (e.g. /email-checker) — not /. Using / is only for the My apps index; do not point / at new feature UI you implemented. Applies to both the published sidebar iframe and the dev preview.',
     inputSchema: setPreviewPathSchema,
+    ...lazyOpt,
+  })
+
+  const publishTool = toolDefinition({
+    name: 'publish_workspace_webapp',
+    description:
+      'Run a production build of `.braian/webapp` with the correct base path and update the published app shown in the sidebar Webapp route. Use after meaningful UI changes when the user wants the sidebar (or others) to see the latest build — not for every tiny edit. The user can also click Publish in Braian. Dev preview (hot reload) is separate and started from the UI.',
+    inputSchema: publishSchema,
     ...lazyOpt,
   })
 
@@ -117,6 +129,21 @@ export function buildWorkspaceWebappTools(
           path: parsed.path,
         })
         return { ok: true as const, previewPath }
+      } catch (e) {
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : String(e),
+        }
+      }
+    }),
+    publishTool.server(async (args) => {
+      publishSchema.parse(args)
+      try {
+        const r = await workspaceWebappPublish(workspaceId)
+        return {
+          ok: r.ok,
+          logSummary: r.logSummary,
+        }
       } catch (e) {
         return {
           ok: false as const,

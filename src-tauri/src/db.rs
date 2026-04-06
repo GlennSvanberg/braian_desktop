@@ -92,6 +92,14 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 6 {
+    conn.execute_batch(
+      "ALTER TABLE workspaces ADD COLUMN webapp_published_at_ms INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE workspaces ADD COLUMN webapp_publish_fingerprint TEXT NOT NULL DEFAULT '';
+      UPDATE _schema_version SET version = 6 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 
