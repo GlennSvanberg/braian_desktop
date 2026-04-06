@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { WorkspaceFolderManagementPanel } from '@/components/app/workspace-folder-management-panel'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
@@ -447,6 +448,7 @@ export function WorkspaceHubOverview({
     <ScrollArea className="min-h-0 flex-1">
       <div className="w-full min-w-0 px-4 pb-10 pt-1 md:px-6 md:pb-12">
         <div className="flex w-full min-w-0 flex-col gap-6">
+          <WorkspaceFolderManagementPanel workspaceId={workspaceId} />
           {welcomeSections.map((s) => (
             <div key={s.id} className="w-full min-w-0">
               {renderSection(s)}

@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSyncExternalStore } from 'react'
 
+import { AiSettingsPanel } from '@/components/app/ai-settings-panel'
 import { ChatWorkbench } from '@/components/app/chat-workbench'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useThemePreference } from '@/hooks/use-theme-preference'
@@ -12,7 +13,20 @@ import {
 import type { ThemePreference } from '@/lib/theme-preference'
 import { cn } from '@/lib/utils'
 
+export type UserPageTab = 'profile' | 'ai'
+
+type UserSearch = {
+  tab: UserPageTab
+}
+
+function parseUserTab(raw: Record<string, unknown>): UserPageTab {
+  return raw.tab === 'ai' ? 'ai' : 'profile'
+}
+
 export const Route = createFileRoute('/_shell/user/')({
+  validateSearch: (raw: Record<string, unknown>): UserSearch => ({
+    tab: parseUserTab(raw),
+  }),
   component: UserPage,
 })
 
@@ -58,6 +72,8 @@ function AppearanceSection() {
 }
 
 function UserPage() {
+  const { tab } = Route.useSearch()
+  const navigate = useNavigate()
   const profile = useUserProfileSnapshot()
   const summary = formatUserProfileForPrompt(profile)
 
@@ -69,29 +85,55 @@ function UserPage() {
             You
           </h1>
           <p className="text-text-3 text-sm leading-relaxed md:text-base">
-            Chat below to teach Braian about yourself. What you save is added to
-            every workspace chat as context (name, location, languages, notes).
+            Profile, appearance, and global AI settings. Your saved profile is
+            added to every workspace chat as context.
           </p>
         </header>
-        <AppearanceSection />
-        <div
-          className={cn(
-            'border-border bg-card/50 rounded-xl border p-4 md:p-5',
-          )}
+
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            void navigate({
+              to: '/user',
+              search: { tab: v as UserPageTab },
+              replace: true,
+            })
+          }}
         >
-          <h2 className="text-text-2 mb-2 text-xs font-semibold tracking-wide uppercase">
-            Saved profile summary
-          </h2>
-          <pre className="text-text-2 font-sans text-sm leading-relaxed whitespace-pre-wrap">
-            {summary}
-          </pre>
-        </div>
-        <div className="border-border flex min-h-[min(70dvh,640px)] flex-1 flex-col overflow-hidden rounded-xl border md:min-h-[min(72dvh,720px)]">
-          <ChatWorkbench
-            conversationId={null}
-            variant="profile"
-          />
-        </div>
+          <TabsList
+            variant="line"
+            className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0"
+          >
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="ai">AI &amp; models</TabsTrigger>
+          </TabsList>
+          <TabsContent value="profile" className="mt-4 space-y-4">
+            <p className="text-text-3 text-sm leading-relaxed">
+              Chat below to teach Braian about yourself (name, location,
+              languages, notes). API keys and models live under{' '}
+              <span className="text-text-2 font-medium">AI &amp; models</span>.
+            </p>
+            <AppearanceSection />
+            <div
+              className={cn(
+                'border-border bg-card/50 rounded-xl border p-4 md:p-5',
+              )}
+            >
+              <h2 className="text-text-2 mb-2 text-xs font-semibold tracking-wide uppercase">
+                Saved profile summary
+              </h2>
+              <pre className="text-text-2 font-sans text-sm leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </pre>
+            </div>
+            <div className="border-border flex min-h-[min(70dvh,640px)] flex-1 flex-col overflow-hidden rounded-xl border md:min-h-[min(72dvh,720px)]">
+              <ChatWorkbench conversationId={null} variant="profile" />
+            </div>
+          </TabsContent>
+          <TabsContent value="ai" className="mt-4">
+            <AiSettingsPanel embedded />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

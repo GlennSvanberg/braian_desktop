@@ -571,7 +571,7 @@ function ConnectionsPage() {
             {workspacesLoading
               ? 'Loading workspaces…'
               : loadError === 'Workspace not found.'
-                ? 'This workspace is not in your list. Use Manage workspaces to add it again.'
+                ? 'This workspace is not in your list. Add the folder again from Dashboard → Overview → Workspace folder.'
                 : 'Open workspace settings from the gear icon next to a workspace in the sidebar.'}
           </p>
         ) : null}

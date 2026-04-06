@@ -22,6 +22,11 @@ function dashboardTabFromSearchStr(searchStr: string): DashboardTab {
   return 'overview'
 }
 
+function userTabFromSearchStr(searchStr: string): 'profile' | 'ai' {
+  const raw = searchStr.startsWith('?') ? searchStr.slice(1) : searchStr
+  return new URLSearchParams(raw).get('tab') === 'ai' ? 'ai' : 'profile'
+}
+
 export function AppHeader() {
   const { toolbar: shellToolbar } = useOptionalShellHeaderToolbar() ?? {
     toolbar: null,
@@ -30,6 +35,12 @@ export function AppHeader() {
   const dashboardSearchStr = useRouterState({
     select: (s) =>
       s.location.pathname.startsWith('/dashboard') ? s.location.searchStr : '',
+  })
+  const userSearchStr = useRouterState({
+    select: (s) =>
+      s.location.pathname === '/user' || s.location.pathname === '/user/'
+        ? s.location.searchStr
+        : '',
   })
   const matches = useMatches()
   const { activeWorkspace, conversationsByWorkspace, workspaces } =
@@ -52,6 +63,9 @@ export function AppHeader() {
   const isDashboard = pathname.startsWith('/dashboard')
   const isHome = pathname === '/'
   const isSettings = pathname === '/settings'
+  const isUserPage =
+    pathname === '/user' || pathname === '/user/'
+  const userTab = userTabFromSearchStr(userSearchStr)
   const workspaceSettingsMatch = pathname.match(
     /^\/workspace\/([^/]+)\/settings$/,
   )
@@ -66,6 +80,7 @@ export function AppHeader() {
   const title = (() => {
     if (isHome) return 'Welcome'
     if (isDashboard) return 'Dashboard'
+    if (isUserPage) return 'You'
     if (isSettings) return 'Settings'
     if (isWorkspaceSettings) return 'Workspace settings'
     if (workspaceWebappSettingsMatch) return 'App settings'
@@ -91,6 +106,11 @@ export function AppHeader() {
   const subtitle = (() => {
     const wsName = activeWorkspace?.name ?? 'Workspace'
     if (isHome) return wsName
+    if (isUserPage) {
+      return userTab === 'ai'
+        ? 'AI provider, model & API key'
+        : 'Profile & preferences'
+    }
     if (isSettings) return 'AI provider & API key'
     if (isWorkspaceSettings && workspaceSettingsMatch) {
       const id = workspaceSettingsMatch[1]

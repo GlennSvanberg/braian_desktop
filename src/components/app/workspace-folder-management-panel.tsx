@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
-  ChevronDown,
   Copy,
-  Folder,
   FolderOpen,
   FolderPlus,
   Loader2,
@@ -14,21 +12,7 @@ import {
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from '@/components/ui/sidebar'
 import {
   Sheet,
   SheetContent,
@@ -45,11 +29,19 @@ import {
   workspaceRename,
 } from '@/lib/workspace-api'
 import { formatPathForDisplay } from '@/lib/workspace-path-utils'
+import { cn } from '@/lib/utils'
 
 import { useWorkspace } from './workspace-context'
 
-export function WorkspaceSwitcher() {
-  const { isMobile } = useSidebar()
+type Props = {
+  workspaceId: string
+  className?: string
+}
+
+export function WorkspaceFolderManagementPanel({
+  workspaceId,
+  className,
+}: Props) {
   const navigate = useNavigate()
   const {
     workspaces,
@@ -59,6 +51,9 @@ export function WorkspaceSwitcher() {
     isTauriRuntime,
     defaultWorkspacesRoot,
   } = useWorkspace()
+
+  const workspace =
+    workspaces.find((w) => w.id === workspaceId) ?? activeWorkspace
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -96,7 +91,8 @@ export function WorkspaceSwitcher() {
   const onChooseCreateParent = () => {
     void run(async () => {
       const path = await pickFolder({
-        title: 'Choose parent folder (a new folder for this workspace will be created inside)',
+        title:
+          'Choose parent folder (a new folder for this workspace will be created inside)',
         defaultPath: createParentPath || defaultWorkspacesRoot || undefined,
       })
       if (path) setCreateParentPath(path)
@@ -113,7 +109,7 @@ export function WorkspaceSwitcher() {
       setCreateOpen(false)
       await refreshWorkspaces()
       setActiveWorkspaceId(ws.id)
-      navigate({ to: '/dashboard' })
+      navigate({ to: '/dashboard', search: { tab: 'overview' } })
     })
   }
 
@@ -127,46 +123,44 @@ export function WorkspaceSwitcher() {
       const ws = await workspaceAddFromPath(path)
       await refreshWorkspaces()
       setActiveWorkspaceId(ws.id)
-      navigate({ to: '/dashboard' })
+      navigate({ to: '/dashboard', search: { tab: 'overview' } })
     })
   }
 
   const onOpenInExplorer = () => {
-    if (!activeWorkspace?.rootPath) return
-    void revealItemInDir(activeWorkspace.rootPath).catch((e) =>
-      console.error(e),
-    )
+    if (!workspace?.rootPath) return
+    void revealItemInDir(workspace.rootPath).catch((e) => console.error(e))
   }
 
   const onRemove = () => {
-    if (!activeWorkspace) return
+    if (!workspace) return
     if (
       !window.confirm(
-        `Remove “${activeWorkspace.name}” from braian.io? Files on disk stay; only the app link is removed.`,
+        `Remove “${workspace.name}” from braian.io? Files on disk stay; only the app link is removed.`,
       )
     ) {
       return
     }
     void run(async () => {
-      await workspaceRemove(activeWorkspace.id)
+      await workspaceRemove(workspace.id)
       await refreshWorkspaces()
-      navigate({ to: '/dashboard' })
+      navigate({ to: '/dashboard', search: { tab: 'overview' } })
     })
   }
 
   const openEditWorkspace = () => {
-    if (!activeWorkspace) return
-    setEditName(activeWorkspace.name)
+    if (!workspace) return
+    setEditName(workspace.name)
     setEditOpen(true)
   }
 
   const onEditSave = () => {
-    if (!activeWorkspace) return
+    if (!workspace) return
     const t = editName.trim()
     if (!t) return
     void run(async () => {
-      if (t !== activeWorkspace.name) {
-        await workspaceRename(activeWorkspace.id, t)
+      if (t !== workspace.name) {
+        await workspaceRename(workspace.id, t)
         await refreshWorkspaces()
       }
       setEditOpen(false)
@@ -174,7 +168,7 @@ export function WorkspaceSwitcher() {
   }
 
   const onCopyPath = async () => {
-    const p = activeWorkspace?.rootPath
+    const p = workspace?.rootPath
     if (!p) return
     const display = formatPathForDisplay(p)
     try {
@@ -186,167 +180,134 @@ export function WorkspaceSwitcher() {
 
   return (
     <>
-      <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined}>
-        <SidebarMenuItem>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <SidebarMenuButton
-                disabled={busy}
-                tooltip="Manage workspaces"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-              >
-                {busy ? (
-                  <Loader2
-                    className="text-sidebar-foreground/70 size-4 shrink-0 animate-spin"
-                    aria-hidden
-                  />
-                ) : (
-                  <Folder className="size-4 shrink-0 opacity-80" aria-hidden />
-                )}
-                <span className="group-data-[collapsible=icon]:hidden truncate">
-                  Manage workspaces
-                </span>
-                <ChevronDown
-                  className="text-sidebar-foreground/50 ml-auto size-4 shrink-0 group-data-[collapsible=icon]:hidden"
-                  aria-hidden
-                />
-              </SidebarMenuButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="min-w-56 rounded-lg"
-              align="start"
-              side={isMobile ? 'bottom' : 'right'}
-              sideOffset={4}
+      <section
+        className={cn(
+          'border-border bg-card rounded-xl border p-4 shadow-sm md:p-5',
+          className,
+        )}
+      >
+        <h2 className="text-text-2 mb-1 text-xs font-semibold tracking-wide uppercase">
+          Workspace folder
+        </h2>
+        {workspace ? (
+          <p className="text-text-1 mb-3 truncate text-sm font-semibold">
+            {workspace.name}
+          </p>
+        ) : (
+          <p className="text-text-3 mb-3 text-sm">No workspace selected.</p>
+        )}
+
+        {isTauriRuntime && workspace?.rootPath ? (
+          <div className="mb-4 flex items-start gap-1">
+            <p
+              className="text-text-3 max-h-24 min-w-0 flex-1 overflow-y-auto break-all font-mono text-[11px] leading-snug"
+              title={formatPathForDisplay(workspace.rootPath)}
             >
-              <div className="border-border max-w-[min(100vw-2rem,20rem)] border-b px-2 py-2">
-                <p className="text-text-3 mb-1.5 text-[11px] font-medium tracking-wide uppercase">
-                  Current workspace
-                </p>
-                {activeWorkspace ? (
-                  <>
-                    <p className="text-foreground truncate text-sm font-semibold">
-                      {activeWorkspace.name}
-                    </p>
-                    {isTauriRuntime && activeWorkspace.rootPath ? (
-                      <div className="mt-2 flex items-start gap-1">
-                        <p
-                          className="text-text-3 max-h-24 min-w-0 flex-1 overflow-y-auto break-all font-mono text-[11px] leading-snug"
-                          title={formatPathForDisplay(activeWorkspace.rootPath)}
-                        >
-                          {formatPathForDisplay(activeWorkspace.rootPath)}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-text-3 size-7 shrink-0"
-                          disabled={busy}
-                          aria-label="Copy folder path"
-                          title="Copy path"
-                          onPointerDown={(e) => e.preventDefault()}
-                          onClick={() => void onCopyPath()}
-                        >
-                          <Copy className="size-3.5" aria-hidden />
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="text-text-3 mt-1.5 text-xs leading-snug">
-                        {isTauriRuntime
-                          ? 'No folder is linked to this workspace.'
-                          : 'Folder path is shown in the desktop app.'}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-text-3 text-xs leading-snug">
-                    None selected. Choose a workspace under{' '}
-                    <span className="font-medium">Workspaces</span> in the
-                    sidebar.
-                  </p>
-                )}
-              </div>
-              <DropdownMenuLabel className="text-text-3 px-2 pt-2 text-xs font-normal">
-                Actions
-              </DropdownMenuLabel>
-              {isTauriRuntime && workspaces.length === 0 ? (
-                <p className="text-text-3 px-2 pb-1 text-xs leading-snug">
-                  No folders yet—create or add one to get started.
-                </p>
-              ) : null}
-              {!isTauriRuntime ? (
-                <p className="text-text-3 px-2 pb-2 text-xs leading-snug">
-                  Open the desktop app to add folder workspaces on this
-                  computer.
-                </p>
-              ) : null}
-              {isTauriRuntime ? (
-                <>
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 p-2"
-                    onClick={() => setCreateOpen(true)}
-                  >
-                    <Plus className="size-4" />
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-medium">New workspace</span>
-                      <span className="text-text-3 text-xs">
-                        New folder—default location or choose elsewhere
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 p-2"
-                    onClick={() => void onAddFolder()}
-                  >
-                    <FolderPlus className="size-4" />
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-medium">Open existing folder</span>
-                      <span className="text-text-3 text-xs">
-                        Use any folder on disk as a workspace
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 p-2"
-                    disabled={!activeWorkspace?.rootPath}
-                    onClick={() => void onOpenInExplorer()}
-                  >
-                    <FolderOpen className="size-4" />
-                    <span>Show in file manager</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 p-2"
-                    disabled={!activeWorkspace}
-                    onClick={() => openEditWorkspace()}
-                  >
-                    <Pencil className="size-4" />
-                    <span>Edit workspace…</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive cursor-pointer gap-2 p-2"
-                    disabled={!activeWorkspace}
-                    onClick={() => void onRemove()}
-                  >
-                    <Trash2 className="size-4" />
-                    <span>Remove from app</span>
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarMenuItem>
-      </SidebarMenu>
+              {formatPathForDisplay(workspace.rootPath)}
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-text-3 size-7 shrink-0"
+              disabled={busy}
+              aria-label="Copy folder path"
+              title="Copy path"
+              onClick={() => void onCopyPath()}
+            >
+              <Copy className="size-3.5" aria-hidden />
+            </Button>
+          </div>
+        ) : isTauriRuntime && workspace ? (
+          <p className="text-text-3 mb-4 text-xs leading-snug">
+            No folder is linked to this workspace.
+          </p>
+        ) : !isTauriRuntime ? (
+          <p className="text-text-3 mb-4 text-xs leading-snug">
+            Open the desktop app to add folder workspaces on this computer. Folder
+            paths are shown there.
+          </p>
+        ) : null}
+
+        {isTauriRuntime && workspaces.length === 0 ? (
+          <p className="text-text-3 mb-3 text-xs leading-snug">
+            No folders yet—create or add one below.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          {isTauriRuntime ? (
+            <>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="gap-1.5"
+                disabled={busy}
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="size-3.5" aria-hidden />
+                New workspace
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={busy}
+                onClick={() => void onAddFolder()}
+              >
+                <FolderPlus className="size-3.5" aria-hidden />
+                Open existing folder
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={busy || !workspace?.rootPath}
+                onClick={() => void onOpenInExplorer()}
+              >
+                <FolderOpen className="size-3.5" aria-hidden />
+                Show in file manager
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={busy || !workspace}
+                onClick={() => openEditWorkspace()}
+              >
+                <Pencil className="size-3.5" aria-hidden />
+                Edit name…
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive gap-1.5"
+                disabled={busy || !workspace}
+                onClick={() => void onRemove()}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                Remove from app
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </section>
 
       <Sheet open={createOpen} onOpenChange={onCreateSheetOpenChange}>
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>New workspace</SheetTitle>
             <SheetDescription>
-              Pick where the workspace folder should live. The default parent
-              is your braian.io app workspaces directory; use Browse to put it
+              Pick where the workspace folder should live. The default parent is
+              your braian.io app workspaces directory; use Browse to put it
               anywhere. A new subfolder is created from the workspace name (safe
-              characters). The display name in the app can differ from the
-              folder name.
+              characters). The display name in the app can differ from the folder
+              name.
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-4 px-4">
@@ -427,11 +388,11 @@ export function WorkspaceSwitcher() {
                 }}
               />
             </div>
-            {activeWorkspace?.rootPath ? (
+            {workspace?.rootPath ? (
               <div className="flex flex-col gap-2">
                 <p className="text-text-2 text-xs font-medium">Folder</p>
                 <p className="text-text-3 bg-muted/40 max-h-32 overflow-y-auto rounded-md border border-border px-2 py-2 font-mono text-[11px] leading-snug break-all">
-                  {formatPathForDisplay(activeWorkspace.rootPath)}
+                  {formatPathForDisplay(workspace.rootPath)}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button

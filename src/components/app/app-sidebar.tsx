@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   BookOpen,
   ChevronDown,
-  LayoutDashboard,
   Loader2,
   MoreHorizontal,
   PanelLeftIcon,
@@ -68,7 +67,6 @@ import {
 
 import type { WorkspaceConversation } from './workspace-context'
 import { useWorkspace } from './workspace-context'
-import { WorkspaceSwitcher } from './workspace-switcher'
 
 const VISIBLE_WORKSPACES_DEFAULT = 8
 const VISIBLE_CHATS_DEFAULT = 6
@@ -592,8 +590,8 @@ export function AppSidebar() {
       <NewAgentSidebarItem pathname={pathname} />
       {workspaces.length === 0 ? (
         <p className="text-sidebar-foreground/60 px-2 py-3 text-xs leading-relaxed">
-          Use <span className="font-medium">Manage workspaces</span> below to add
-          a folder and list chats here.
+          Open the <span className="font-medium">dashboard</span> from the logo
+          or add a folder workspace there to list chats here.
         </p>
       ) : (
         <>
@@ -671,43 +669,6 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={
-                    pathname.startsWith('/dashboard') ||
-                    (!!activeWorkspaceId &&
-                      (pathname === `/workspace/${activeWorkspaceId}/webapp` ||
-                        pathname ===
-                          `/workspace/${activeWorkspaceId}/webapp/settings`))
-                  }
-                  tooltip="Workspace hub: overview, published apps, and app settings"
-                >
-                  <Link to="/dashboard" search={{ tab: 'overview' }}>
-                    <LayoutDashboard />
-                    <span>Dashboard</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === '/settings'}
-                  tooltip="AI settings"
-                >
-                  <Link to="/settings">
-                    <Settings />
-                    <span>Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
         <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
           <SidebarGroupContent className="min-h-0">
@@ -729,7 +690,6 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="gap-2">
-        <WorkspaceSwitcher />
         <SidebarSeparator className="mx-0" />
         <SidebarMenu>
           <SidebarMenuItem>
