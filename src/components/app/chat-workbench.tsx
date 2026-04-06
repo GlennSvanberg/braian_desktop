@@ -1,5 +1,6 @@
 import {
   Brain,
+  Braces,
   Camera,
   Check,
   Copy,
@@ -23,16 +24,14 @@ import {
 } from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 
-import {
-  ChatContextManagerDialog,
-  ChatContextManagerTriggerButton,
-} from '@/components/app/chat-context-manager-dialog'
+import { ChatContextManagerDialog } from '@/components/app/chat-context-manager-dialog'
 import {
   assistantPlainTextForCopy,
   ChatAssistantMessageBody,
   ChatUserMessageBody,
 } from '@/components/app/chat-message-body'
 import { ArtifactPanel } from '@/components/app/artifact-panel'
+import { useOptionalShellHeaderToolbar } from '@/components/app/shell-header-toolbar'
 import { useWorkspace } from '@/components/app/workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -95,6 +94,7 @@ import {
   type ConversationDto,
   type WorkspaceFileIndexEntry,
 } from '@/lib/workspace-api'
+import { workspaceHubRecentFileTouch } from '@/lib/workspace-hub-api'
 import { workspaceGitTryCommit } from '@/lib/workspace/git-history-api'
 import { cn } from '@/lib/utils'
 
@@ -104,6 +104,193 @@ function normalizeCanvasKind(
   if (s === 'tabular' || s === 'tabular-multi') return 'tabular'
   if (s === 'visual') return 'visual'
   return 'document'
+}
+
+type ChatSessionHeaderToolbarProps = {
+  onOpenContext: () => void
+  generating: boolean
+  sessionKey: string
+  stopChatGeneration: (key: string) => void
+  isDetachedSession: boolean
+  isTauriRuntime: boolean
+  workspacesLength: number
+  moveBusy: boolean
+  onMoveOpen: () => void
+  conversationId: string | null
+  isProfileSession: boolean
+  snapshotBusy: boolean
+  onSaveSnapshotNow: () => void
+  memoryUpdateBusy: boolean
+  onUpdateMemoryNow: () => void
+  activeAgentSegment: 'document' | 'code' | 'app'
+  onSelectAgentSegment: (next: 'document' | 'code' | 'app') => void
+}
+
+/** Shared header toolbar control surface (height, radius, border). */
+const headerToolbarBtnClass =
+  'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border/55 bg-muted/20 px-2.5 text-[13px] font-medium text-text-2 shadow-sm transition-colors hover:border-border hover:bg-muted/40 hover:text-text-1 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50'
+
+const headerToolbarContextBtnClass = cn(
+  headerToolbarBtnClass,
+  'border-accent-500/25 bg-accent-500/[0.07] text-accent-700 hover:border-accent-500/45 hover:bg-accent-500/12 dark:text-accent-400',
+)
+
+function ChatSessionHeaderToolbar({
+  onOpenContext,
+  generating,
+  sessionKey,
+  stopChatGeneration,
+  isDetachedSession,
+  isTauriRuntime,
+  workspacesLength,
+  moveBusy,
+  onMoveOpen,
+  conversationId,
+  isProfileSession,
+  snapshotBusy,
+  onSaveSnapshotNow,
+  memoryUpdateBusy,
+  onUpdateMemoryNow,
+  activeAgentSegment,
+  onSelectAgentSegment,
+}: ChatSessionHeaderToolbarProps) {
+  const showWorkspaceMove =
+    isDetachedSession && isTauriRuntime && workspacesLength > 0
+  const showAgentModes =
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isDetachedSession &&
+    !isProfileSession
+  const showSnapshot =
+    !generating &&
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isProfileSession &&
+    !isDetachedSession
+  const showMemory =
+    !generating &&
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isProfileSession
+
+  const modeSegments = (
+    [
+      { id: 'document' as const, label: 'Document' },
+      { id: 'code' as const, label: 'Code' },
+      { id: 'app' as const, label: 'App' },
+    ] as const
+  ).map((seg) => (
+    <button
+      key={seg.id}
+      type="button"
+      className={cn(
+        'focus-visible:ring-ring h-full min-w-0 px-2 text-center text-[13px] font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none sm:px-2.5',
+        activeAgentSegment === seg.id
+          ? 'bg-background text-text-1 shadow-sm'
+          : 'text-text-3 hover:bg-muted/30 hover:text-text-2 bg-transparent',
+      )}
+      aria-pressed={activeAgentSegment === seg.id}
+      title={
+        seg.id === 'document'
+          ? 'Document assistant: canvas, lazy file tools'
+          : seg.id === 'code'
+            ? 'Code assistant: eager read/write/run in workspace (no dashboard harness)'
+            : 'App agent: full code + dashboard tools; live preview in the side panel'
+      }
+      onClick={() => onSelectAgentSegment(seg.id)}
+    >
+      {seg.label}
+    </button>
+  ))
+
+  const agentModeGroup = (
+    <div
+      className="border-border/60 bg-muted/20 inline-grid h-8 w-[14.25rem] shrink-0 grid-cols-3 divide-x divide-border/55 overflow-hidden rounded-md border shadow-sm sm:w-[15.5rem]"
+      role="group"
+      aria-label="Agent mode"
+    >
+      {modeSegments}
+    </div>
+  )
+
+  return (
+    <div className="inline-flex w-max max-w-none items-center gap-1.5 pr-1">
+      <button
+        type="button"
+        className={headerToolbarContextBtnClass}
+        onClick={onOpenContext}
+      >
+        <Braces className="size-3.5 shrink-0 opacity-80" aria-hidden />
+        Context
+      </button>
+      {showWorkspaceMove ? (
+        <button
+          type="button"
+          className={headerToolbarBtnClass}
+          disabled={generating || moveBusy}
+          onClick={onMoveOpen}
+        >
+          Move to workspace
+        </button>
+      ) : null}
+      {showAgentModes ? agentModeGroup : null}
+      {generating ? (
+        <>
+          <span
+            className="text-text-3 inline-flex h-8 shrink-0 items-center gap-1.5 px-1 text-xs sm:px-2"
+            aria-live="polite"
+          >
+            <Loader2
+              className="size-3.5 shrink-0 animate-spin opacity-80"
+              aria-hidden
+            />
+            <span className="sr-only">Assistant is replying</span>
+            <span className="hidden sm:inline">Working…</span>
+          </span>
+          <button
+            type="button"
+            className={headerToolbarBtnClass}
+            onClick={() => stopChatGeneration(sessionKey)}
+          >
+            <Square className="size-2.5 fill-current" aria-hidden />
+            Stop
+          </button>
+        </>
+      ) : null}
+      {showSnapshot ? (
+        <button
+          type="button"
+          className={headerToolbarBtnClass}
+          disabled={snapshotBusy}
+          title="Save the workspace folder to Git now (after saving this chat)"
+          onClick={onSaveSnapshotNow}
+        >
+          {snapshotBusy ? (
+            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+          ) : (
+            <Camera className="size-3.5 shrink-0" aria-hidden />
+          )}
+          Save snapshot
+        </button>
+      ) : null}
+      {showMemory ? (
+        <button
+          type="button"
+          className={headerToolbarBtnClass}
+          disabled={memoryUpdateBusy}
+          title="Update workspace memory from this chat"
+          onClick={onUpdateMemoryNow}
+        >
+          {memoryUpdateBusy ? (
+            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+          ) : (
+            <Brain className="size-3.5 shrink-0" aria-hidden />
+          )}
+          Update memory
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 type ChatWorkbenchProps = {
@@ -231,19 +418,28 @@ export function ChatWorkbench({
   conversationTitleRef.current = conversationTitle
   const isNewChat = conversationId === null
 
+  /** Stable while the assistant streams; avoids aborting title generation on every message chunk. */
+  const firstUserMessageIdForAutoTitle = useMemo(() => {
+    const m = thread.messages.find(
+      (msg) => msg.role === 'user' && msg.content.trim().length > 0,
+    )
+    return m?.id ?? ''
+  }, [thread.messages])
+
   useEffect(() => {
     if (!isDetachedSession || isProfileSession) return
     if (autoTitleAppliedRef.current === 'detached-title') return
     if (
-      conversationTitle !== DEFAULT_AGENT_TITLE &&
-      conversationTitle !== DEFAULT_CHAT_TITLE
+      conversationTitleRef.current !== DEFAULT_AGENT_TITLE &&
+      conversationTitleRef.current !== DEFAULT_CHAT_TITLE
     ) {
       return
     }
+    if (!firstUserMessageIdForAutoTitle) return
     const firstUser = thread.messages.find(
-      (m) => m.role === 'user' && m.content.trim().length > 0,
+      (m) => m.id === firstUserMessageIdForAutoTitle,
     )
-    if (!firstUser) return
+    if (!firstUser || firstUser.role !== 'user') return
 
     const heuristic = deriveConversationTitle(firstUser.content)
     setConversationTitle(heuristic)
@@ -262,7 +458,7 @@ export function ChatWorkbench({
     })
 
     return () => ac.abort()
-  }, [isDetachedSession, isProfileSession, conversationTitle, thread.messages])
+  }, [firstUserMessageIdForAutoTitle, isDetachedSession, isProfileSession])
 
   useEffect(() => {
     if (!moveOpen || workspaces.length === 0) return
@@ -299,11 +495,12 @@ export function ChatWorkbench({
   useEffect(() => {
     if (!conversationId || !conversationMeta || isProfileSession) return
     if (autoTitleAppliedRef.current === conversationId) return
-    if (conversationTitle !== DEFAULT_CHAT_TITLE) return
+    if (conversationTitleRef.current !== DEFAULT_CHAT_TITLE) return
+    if (!firstUserMessageIdForAutoTitle) return
     const firstUser = thread.messages.find(
-      (m) => m.role === 'user' && m.content.trim().length > 0,
+      (m) => m.id === firstUserMessageIdForAutoTitle,
     )
-    if (!firstUser) return
+    if (!firstUser || firstUser.role !== 'user') return
 
     const heuristic = deriveConversationTitle(firstUser.content)
     setConversationTitle(heuristic)
@@ -325,9 +522,9 @@ export function ChatWorkbench({
     return () => ac.abort()
   }, [
     conversationId,
-    conversationMeta,
-    conversationTitle,
-    thread.messages,
+    conversationMeta?.id,
+    conversationMeta?.title,
+    firstUserMessageIdForAutoTitle,
     isProfileSession,
   ])
 
@@ -514,6 +711,11 @@ export function ChatWorkbench({
               relativePath: rel,
               displayName: name,
             })
+            void workspaceHubRecentFileTouch({
+              workspaceId: activeWorkspaceId,
+              relativePath: rel,
+              label: name,
+            })
             mentionTags.push(`@${name}`)
           } else {
             const { relativePath, displayName } = await workspaceImportFile(
@@ -521,6 +723,11 @@ export function ChatWorkbench({
               abs,
             )
             addContextFileEntry(sessionKey, { relativePath, displayName })
+            void workspaceHubRecentFileTouch({
+              workspaceId: activeWorkspaceId,
+              relativePath,
+              label: displayName,
+            })
             mentionTags.push(`@${displayName}`)
           }
         } catch (e) {
@@ -1025,6 +1232,67 @@ export function ChatWorkbench({
     [sessionKey, setChatAgentMode],
   )
 
+  const shellHeaderToolbar = useOptionalShellHeaderToolbar()
+
+  const openContextManager = useCallback(() => {
+    setContextManagerOpen(true)
+  }, [])
+
+  const openMoveDialog = useCallback(() => {
+    setMoveOpen(true)
+  }, [])
+
+  const sessionHeaderToolbarNode = useMemo(
+    () => (
+      <ChatSessionHeaderToolbar
+        onOpenContext={openContextManager}
+        generating={generating}
+        sessionKey={sessionKey}
+        stopChatGeneration={stopChatGeneration}
+        isDetachedSession={isDetachedSession}
+        isTauriRuntime={isTauriRuntime}
+        workspacesLength={workspaces.length}
+        moveBusy={moveBusy}
+        onMoveOpen={openMoveDialog}
+        conversationId={conversationId}
+        isProfileSession={isProfileSession}
+        snapshotBusy={snapshotBusy}
+        onSaveSnapshotNow={onSaveSnapshotNow}
+        memoryUpdateBusy={memoryUpdateBusy}
+        onUpdateMemoryNow={onUpdateMemoryNow}
+        activeAgentSegment={activeAgentSegment}
+        onSelectAgentSegment={onSelectAgentSegment}
+      />
+    ),
+    [
+      openContextManager,
+      generating,
+      sessionKey,
+      stopChatGeneration,
+      isDetachedSession,
+      isTauriRuntime,
+      workspaces.length,
+      moveBusy,
+      openMoveDialog,
+      conversationId,
+      isProfileSession,
+      snapshotBusy,
+      onSaveSnapshotNow,
+      memoryUpdateBusy,
+      onUpdateMemoryNow,
+      activeAgentSegment,
+      onSelectAgentSegment,
+    ],
+  )
+
+  useLayoutEffect(() => {
+    if (!shellHeaderToolbar) return
+    shellHeaderToolbar.setToolbar(sessionHeaderToolbarNode)
+    return () => {
+      shellHeaderToolbar.setToolbar(null)
+    }
+  }, [shellHeaderToolbar, sessionHeaderToolbarNode])
+
   const isThinking = reasoningMode === 'thinking'
 
   const reasoningModeGroup = (
@@ -1047,44 +1315,6 @@ export function ChatWorkbench({
     </button>
   )
 
-  const agentModeGroup = (
-    <div
-      className="bg-muted/30 flex h-8 shrink-0 items-center overflow-hidden rounded-full p-1"
-      role="group"
-      aria-label="Agent mode"
-    >
-      {(
-        [
-          { id: 'document' as const, label: 'Document' },
-          { id: 'code' as const, label: 'Code' },
-          { id: 'app' as const, label: 'App' },
-        ] as const
-      ).map((seg) => (
-        <button
-          key={seg.id}
-          type="button"
-          className={cn(
-            'focus-visible:ring-ring h-full rounded-full px-3.5 text-[13px] font-medium transition-all duration-200 focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none',
-            activeAgentSegment === seg.id
-              ? 'bg-background text-text-1 shadow-sm'
-              : 'text-text-3 hover:text-text-2 bg-transparent',
-          )}
-          aria-pressed={activeAgentSegment === seg.id}
-          title={
-            seg.id === 'document'
-              ? 'Document assistant: canvas, lazy file tools'
-              : seg.id === 'code'
-                ? 'Code assistant: eager read/write/run in workspace (no dashboard harness)'
-                : 'App agent: full code + dashboard tools; live preview in the side panel'
-          }
-          onClick={() => onSelectAgentSegment(seg.id)}
-        >
-          {seg.label}
-        </button>
-      ))}
-    </div>
-  )
-
   const chatColumn = (
     <div
       className={cn(
@@ -1095,112 +1325,19 @@ export function ChatWorkbench({
         !showArtifactPanel && 'md:rounded-xl md:border md:border-border',
       )}
     >
+      {!shellHeaderToolbar ? (
+        <div className="border-border/60 bg-background shrink-0 border-b px-4 py-2 md:px-6">
+          <div className="mx-auto flex max-w-5xl justify-start overflow-x-auto">
+            {sessionHeaderToolbarNode}
+          </div>
+        </div>
+      ) : null}
       <ScrollArea
         className="min-h-0 flex-1"
         viewportRef={chatScrollViewportRef}
       >
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 md:px-6">
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <p className="text-text-1 truncate text-sm font-medium md:text-base">
-                  {conversationTitle}
-                </p>
-                {generating ? (
-                  <span className="text-text-3 inline-flex items-center gap-1.5 text-xs">
-                    <Loader2
-                      className="size-3.5 shrink-0 animate-spin opacity-80"
-                      aria-hidden
-                    />
-                    <span className="sr-only">Assistant is replying</span>
-                    <span className="hidden sm:inline">Working…</span>
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <ChatContextManagerTriggerButton
-                  onClick={() => setContextManagerOpen(true)}
-                />
-                {isDetachedSession && isTauriRuntime && workspaces.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
-                    disabled={generating || moveBusy}
-                    onClick={() => setMoveOpen(true)}
-                  >
-                    Move to workspace
-                  </Button>
-                ) : null}
-                {conversationId &&
-                isTauriRuntime &&
-                !isDetachedSession &&
-                !isProfileSession ? (
-                  agentModeGroup
-                ) : null}
-                {generating ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
-                    onClick={() => stopChatGeneration(sessionKey)}
-                  >
-                    <Square className="size-2.5 fill-current" aria-hidden />
-                    Stop
-                  </Button>
-                ) : null}
-                {!generating &&
-                conversationId &&
-                isTauriRuntime &&
-                !isProfileSession &&
-                !isDetachedSession ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
-                    disabled={snapshotBusy}
-                    title="Save the workspace folder to Git now (after saving this chat)"
-                    onClick={onSaveSnapshotNow}
-                  >
-                    {snapshotBusy ? (
-                      <Loader2
-                        className="size-3.5 shrink-0 animate-spin"
-                        aria-hidden
-                      />
-                    ) : (
-                      <Camera className="size-3.5 shrink-0" aria-hidden />
-                    )}
-                    Save snapshot
-                  </Button>
-                ) : null}
-                {!generating &&
-                conversationId &&
-                isTauriRuntime &&
-                !isProfileSession ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
-                    disabled={memoryUpdateBusy}
-                    onClick={onUpdateMemoryNow}
-                  >
-                    {memoryUpdateBusy ? (
-                      <Loader2
-                        className="size-3.5 shrink-0 animate-spin"
-                        aria-hidden
-                      />
-                    ) : (
-                      <Brain className="size-3.5 shrink-0" aria-hidden />
-                    )}
-                    Update memory
-                  </Button>
-                ) : null}
-              </div>
-            </div>
             {memoryUpdateHint ? (
               <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
             ) : null}

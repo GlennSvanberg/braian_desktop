@@ -7,6 +7,7 @@ use tauri::AppHandle;
 
 use crate::braian_store::workspace_root_path;
 use crate::db;
+use crate::workspace_hub;
 
 const DEFAULT_MAX_READ: u64 = 512 * 1024;
 
@@ -129,6 +130,10 @@ pub fn workspace_write_text_file(
   if !canon_file.starts_with(&canon_root) {
     return Err("Path escapes workspace.".to_string());
   }
+  let rel_display = relative_path_display(&root, &canon_file).unwrap_or_else(|_| relative_path.trim().replace('\\', "/"));
+  if let Err(e) = workspace_hub::recent_file_touch_internal(&root, &rel_display, None) {
+    log::warn!("recent file touch after write: {e}");
+  }
   Ok(())
 }
 
@@ -170,6 +175,9 @@ pub fn workspace_import_file(
   fs::copy(&src, &dest).map_err(|e| e.to_string())?;
 
   let rel = relative_path_display(&root, &dest)?;
+  if let Err(e) = workspace_hub::recent_file_touch_internal(&root, &rel, Some(orig_name)) {
+    log::warn!("recent file touch after import: {e}");
+  }
   Ok(WorkspaceImportFileResult {
     relative_path: rel,
     display_name: orig_name.to_string(),

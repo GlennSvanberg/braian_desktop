@@ -17,6 +17,7 @@ import {
   workspaceListDir,
   type WorkspaceDirEntryDto,
 } from '@/lib/workspace-api'
+import { workspaceHubRecentFileTouch } from '@/lib/workspace-hub-api'
 import { cn } from '@/lib/utils'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 
@@ -63,6 +64,11 @@ export function WorkspaceFilesPanel({
     addContextFileEntry(sessionKey, {
       relativePath: e.relativePath,
       displayName: e.name,
+    })
+    void workspaceHubRecentFileTouch({
+      workspaceId,
+      relativePath: e.relativePath,
+      label: e.name,
     })
   }
 

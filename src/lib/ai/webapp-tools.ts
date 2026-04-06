@@ -84,7 +84,7 @@ export function buildWorkspaceWebappTools(
   const publishTool = toolDefinition({
     name: 'publish_workspace_webapp',
     description:
-      'Run a production build of `.braian/webapp` with the correct base path and update the published app on **Dashboard → Apps**. Use after meaningful UI changes when the user wants that view refreshed — not for every tiny edit. The user can also click **Publish** in Braian (Apps tab or App settings). Dev preview (hot reload) is under **Dashboard → App settings** or the App-mode artifact.',
+      'Run a production build of `.braian/webapp` with the correct base path and update the published app on **Dashboard → Apps**, and refresh `.braian/webapp-apps.json` (routes for **Dashboard → Overview**). Use after meaningful UI changes when the user wants that view refreshed — not for every tiny edit. The user can also click **Publish** in Braian (Apps tab or App settings). Dev preview (hot reload) is under **Dashboard → App settings** or the App-mode artifact.',
     inputSchema: publishSchema,
     ...lazyOpt,
   })

@@ -399,7 +399,7 @@ function WorkspaceConversationGroup({
             setActiveWorkspaceId(workspace.id)
             navigate({
               to: '/dashboard',
-              search: { tab: 'apps' },
+              search: { tab: 'overview' },
             })
           }}
         >
@@ -685,9 +685,9 @@ export function AppSidebar() {
                         pathname ===
                           `/workspace/${activeWorkspaceId}/webapp/settings`))
                   }
-                  tooltip="Workspace dashboard (published apps and app settings)"
+                  tooltip="Workspace hub: overview, published apps, and app settings"
                 >
-                  <Link to="/dashboard" search={{ tab: 'apps' }}>
+                  <Link to="/dashboard" search={{ tab: 'overview' }}>
                     <LayoutDashboard />
                     <span>Dashboard</span>
                   </Link>

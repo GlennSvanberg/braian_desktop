@@ -1,15 +1,24 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { WorkspaceDashboard } from '@/components/app/workspace-dashboard'
+import type { DashboardTab } from '@/components/app/workspace-dashboard'
 import { useWorkspace } from '@/components/app/workspace-context'
 
 type DashboardSearch = {
-  tab: 'apps' | 'app-settings'
+  tab: DashboardTab
+}
+
+function parseDashboardTab(raw: Record<string, unknown>): DashboardTab {
+  const t = raw.tab
+  if (t === 'apps' || t === 'app-settings' || t === 'overview') {
+    return t
+  }
+  return 'overview'
 }
 
 export const Route = createFileRoute('/_shell/dashboard')({
   validateSearch: (raw: Record<string, unknown>): DashboardSearch => ({
-    tab: raw.tab === 'app-settings' ? 'app-settings' : 'apps',
+    tab: parseDashboardTab(raw),
   }),
   component: DashboardRoute,
 })

@@ -1,10 +1,13 @@
 import { useNavigate } from '@tanstack/react-router'
 
+import { WorkspaceHubOverview } from '@/components/app/workspace-hub-overview'
 import { WorkspaceWebappPanel } from '@/components/app/workspace-webapp-panel'
 import { WorkspaceWebappSettingsPanel } from '@/components/app/workspace-webapp-settings-panel'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-export type DashboardTab = 'apps' | 'app-settings'
+import { useWorkspace } from './workspace-context'
+
+export type DashboardTab = 'overview' | 'apps' | 'app-settings'
 
 type Props = {
   tab: DashboardTab
@@ -18,6 +21,9 @@ export function WorkspaceDashboard({
   isTauriRuntime,
 }: Props) {
   const navigate = useNavigate()
+  const { activeWorkspace, conversationsByWorkspace } = useWorkspace()
+  const workspaceName = activeWorkspace?.name ?? 'Workspace'
+  const conversations = conversationsByWorkspace[workspaceId] ?? []
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -36,13 +42,21 @@ export function WorkspaceDashboard({
             variant="line"
             className="h-auto w-full justify-start gap-1 rounded-none bg-transparent p-0"
           >
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="apps">Apps</TabsTrigger>
             <TabsTrigger value="app-settings">App settings</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {tab === 'apps' ? (
+        {tab === 'overview' ? (
+          <WorkspaceHubOverview
+            workspaceId={workspaceId}
+            workspaceName={workspaceName}
+            isTauriRuntime={isTauriRuntime}
+            conversations={conversations}
+          />
+        ) : tab === 'apps' ? (
           <WorkspaceWebappPanel
             workspaceId={workspaceId}
             isTauriRuntime={isTauriRuntime}

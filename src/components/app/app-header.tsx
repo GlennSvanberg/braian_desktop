@@ -6,18 +6,26 @@ import { SidebarTrigger } from '@/components/ui/sidebar'
 import { isTauri } from '@/lib/tauri-env'
 import type { ConversationDto } from '@/lib/workspace-api'
 
+import { useOptionalShellHeaderToolbar } from './shell-header-toolbar'
+import type { DashboardTab } from './workspace-dashboard'
 import { useWorkspace } from './workspace-context'
 import { WindowControls } from './window-controls'
 
 type ChatRouteContext = { conversation: ConversationDto }
 
-function dashboardTabFromSearchStr(searchStr: string): 'apps' | 'app-settings' {
+function dashboardTabFromSearchStr(searchStr: string): DashboardTab {
   const raw = searchStr.startsWith('?') ? searchStr.slice(1) : searchStr
   const tab = new URLSearchParams(raw).get('tab')
-  return tab === 'app-settings' ? 'app-settings' : 'apps'
+  if (tab === 'apps' || tab === 'app-settings' || tab === 'overview') {
+    return tab
+  }
+  return 'overview'
 }
 
 export function AppHeader() {
+  const { toolbar: shellToolbar } = useOptionalShellHeaderToolbar() ?? {
+    toolbar: null,
+  }
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const dashboardSearchStr = useRouterState({
     select: (s) =>
@@ -92,7 +100,8 @@ export function AppHeader() {
     if (isDashboard) {
       const tab = dashboardTabFromSearchStr(dashboardSearchStr)
       if (tab === 'app-settings') return `${wsName} · App settings`
-      return `${wsName} · Apps`
+      if (tab === 'apps') return `${wsName} · Apps`
+      return `${wsName} · Overview`
     }
     if (workspaceWebappSettingsMatch) {
       const id = workspaceWebappSettingsMatch[1]
@@ -126,7 +135,7 @@ export function AppHeader() {
         {...noDrag}
       />
       <div
-        className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-1"
+        className="flex min-w-0 max-w-[min(100%,40%)] flex-1 flex-col justify-center gap-0.5 py-1 sm:max-w-[min(100%,50%)]"
         onDoubleClick={
           tauriChrome
             ? () => {
@@ -140,7 +149,19 @@ export function AppHeader() {
         </h1>
         <p className="text-text-3 truncate text-xs">{subtitle}</p>
       </div>
-      {tauriChrome ? <WindowControls /> : null}
+      {shellToolbar ? (
+        <div
+          className="flex min-w-0 flex-1 items-center justify-end overflow-x-auto overscroll-x-contain py-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80"
+          {...noDrag}
+        >
+          {shellToolbar}
+        </div>
+      ) : null}
+      {tauriChrome ? (
+        <div className="shrink-0" {...noDrag}>
+          <WindowControls />
+        </div>
+      ) : null}
     </header>
   )
 }

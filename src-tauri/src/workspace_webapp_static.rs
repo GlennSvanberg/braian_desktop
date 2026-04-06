@@ -462,6 +462,13 @@ pub fn webapp_publish(
       let fp = fingerprint_webapp_sources(&webapp_dir)?;
       let at = now_ms();
       workspace::webapp_publish_metadata_set(&app, &workspace_id, at, &fp)?;
+      let workspace_root = webapp_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| "Invalid webapp directory layout.".to_string())?;
+      if let Err(e) = crate::workspace_hub::write_webapp_apps_manifest(workspace_root) {
+        log::warn!("webapp apps manifest after publish: {e}");
+      }
       Ok(WebappPublishResult {
         ok: true,
         log_summary: Some(log_summary),
