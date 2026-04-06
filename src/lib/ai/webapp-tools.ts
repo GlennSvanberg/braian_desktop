@@ -35,7 +35,7 @@ const setPreviewPathSchema = z.object({
   path: z
     .string()
     .describe(
-      'Client route path for the Vite SPA preview iframe. Must start with / (e.g. /calculator). Use / for the landing page.',
+      'Preview iframe route. Must start with /. For a mini-app you just built, use THAT app path (e.g. /email-checker, /calculator) — never use / to showcase new feature UI; / is only the My apps index. Use / only when you intentionally want the landing page.',
     ),
 })
 
@@ -56,7 +56,7 @@ export function buildWorkspaceWebappTools(
   const initTool = toolDefinition({
     name: 'init_workspace_webapp',
     description:
-      'Copy the bundled Vite + React + TypeScript template into .braian/webapp when package.json is missing or the user asked to reset. Use overwrite=true only when replacing an existing webapp. After init, run npm install via run_workspace_shell with cwd ".braian/webapp".',
+      'Copy the bundled Vite + React + TypeScript multi-page template into .braian/webapp when package.json is missing or the user asked to reset. The template keeps `/` as My apps only; every new feature belongs on its own sub-route (e.g. /email-checker) via app-routes.tsx + src/pages/. Use overwrite=true only when replacing an existing webapp. After init, run npm install via run_workspace_shell with cwd ".braian/webapp".',
     inputSchema: initSchema,
     ...lazyOpt,
   })
@@ -72,7 +72,7 @@ export function buildWorkspaceWebappTools(
   const previewPathTool = toolDefinition({
     name: 'set_workspace_webapp_preview_path',
     description:
-      'Set which route the workspace webapp preview iframe opens (e.g. /calculator after adding a sub-page). Call this after creating or editing a sub-app so the user sees the right screen. Use / for the My apps landing page.',
+      'Set the preview iframe route. After building or editing a mini-app, set this to that app path (e.g. /email-checker) — not /. Using / is only for the My apps index; do not point / at new feature UI you implemented.',
     inputSchema: setPreviewPathSchema,
     ...lazyOpt,
   })

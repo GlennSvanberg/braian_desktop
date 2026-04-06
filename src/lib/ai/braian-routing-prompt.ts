@@ -32,10 +32,10 @@ function buildProviderWebSearchLine(
 
 function buildWebappRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasSwitchToAppBuilder) {
-    return '**Braian workspace webapp** — real interactive UI (forms, React): call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and webapp helper tools unlock. Edit `.braian/webapp/src/**`; use `init_workspace_webapp` if there is no `package.json`; do **not** use standalone `.html` only when the user asked for the in-workspace Vite app.'
+    return '**Braian workspace webapp** — real interactive UI (forms, React): call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and webapp helper tools unlock. Edit `.braian/webapp/src/**`; use `init_workspace_webapp` if there is no `package.json`; do **not** use standalone `.html` only when the user asked for the in-workspace Vite app. **New mini-apps:** always a sub-route (`/email-checker`, etc.) via `app-routes.tsx` + `src/pages/` — **never** implement new features on `/` or replace the My apps landing.'
   }
   if (options.hasWebappTools) {
-    return '**Braian workspace webapp** — implement UI in `.braian/webapp/` (Vite + React). Use file and shell tools plus `init_workspace_webapp` / `read_workspace_webapp_dev_logs` when relevant. The user starts the Vite preview from Braian (sidebar **Webapp** or the chat artifact in App mode). Do **not** satisfy webapp requests with unrelated standalone `.html` only.'
+    return '**Braian workspace webapp** — implement UI in `.braian/webapp/` (Vite + React). Use file and shell tools plus `init_workspace_webapp` / `read_workspace_webapp_dev_logs` when relevant. The user starts the Vite preview from Braian (sidebar **Webapp** or the chat artifact in App mode). Do **not** satisfy webapp requests with unrelated standalone `.html` only. **New mini-apps** go on their own path (`/slug`); not on `/`.'
   }
   return null
 }
@@ -130,7 +130,9 @@ export const APP_MODE_ROUTING_ADDENDUM = `### App mode (workspace webapp)
 
 You build the workspace **Vite + React** app under \`.braian/webapp/\`.
 
-- The template is a **multi-page SPA**: \`/\` is the **My apps** landing; each feature lives on its own route (e.g. \`/calculator\`). Add pages under \`src/pages/\`, register them in \`src/app-routes.tsx\`, and **do not** replace the whole app with a single screen when the user asks for a new small app.
+- **Sacred landing (\`/\`):** \`MyAppsLandingPage\` in \`app-routes.tsx\` is **only** the **My apps** index (links from \`APP_ROUTES\`). **Never** replace it with feature UI. **Never** implement a new "simple app" on \`/\` — always add \`src/pages/<Name>Page.tsx\`, append \`APP_ROUTES\`, and \`set_workspace_webapp_preview_path\` to that path (e.g. \`/email-checker\`).
+- **Theming:** Use template semantic classes (\`bg-app-bg-0\`, \`text-app-text-1\`, \`border-app-border\`, \`text-app-accent-600\`, … from \`index.css\`). **Do not** ship plain white/black unstyled pages. Keep \`BraianShell\` wrapping \`Routes\` in \`App.tsx\`.
+- The template is a **multi-page SPA**: each feature lives on its own route (e.g. \`/calculator\`, \`/register\`). Add pages under \`src/pages/\`, register them in \`src/app-routes.tsx\`, and **do not** replace the whole app with a single screen when the user asks for a new small app.
 - After you add or edit a sub-page, call \`set_workspace_webapp_preview_path\` with that path (e.g. \`/calculator\`) so the preview iframe opens the right route; use \`/\` for the landing page.
 - Edit \`.braian/webapp/src/**\` with file tools. Run \`npm install\` / \`npm run build\` via \`run_workspace_shell\` with \`cwd: ".braian/webapp"\`. **Do not** run \`npm run dev\` in the shell tool (long-running).
 - Use \`init_workspace_webapp\` when \`package.json\` is missing or the user wants the template reset (\`overwrite: true\`).
@@ -139,4 +141,4 @@ You build the workspace **Vite + React** app under \`.braian/webapp/\`.
 - If a **document canvas snapshot** is present, focus on the surface the user is clearly iterating on.`
 
 /** Fallback if \`.braian/skills/app-builder.md\` is missing or invalid (no frontmatter). */
-export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). Multi-page SPA: landing at \`/\`, sub-apps on routes like \`/calculator\` (\`src/pages/\`, \`src/app-routes.tsx\`). Do not replace the entire app for one new feature. After editing a sub-page, call \`set_workspace_webapp_preview_path\` so the preview opens that route. Edit \`.braian/webapp/src/**\`. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` and \`npm run build\` — not \`npm run dev\`. Use \`init_workspace_webapp\` to copy the bundled template when needed. Use \`read_workspace_webapp_dev_logs\` after dev-server issues. The user starts the preview from Braian (Webapp route or App-mode artifact).`
+export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). **\`/\` is only My apps** (\`MyAppsLandingPage\` in \`app-routes.tsx\`). **Every** new mini-app — including “simple” tools — goes on **\`/kebab-slug\`**: new \`src/pages/*Page.tsx\`, append \`APP_ROUTES\`, preview path = that slug (not \`/\`). Never replace the landing or root route with feature UI. Use semantic theme classes; keep \`BraianShell\` in \`App.tsx\`. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` / \`npm run build\` — not \`npm run dev\`. Use \`init_workspace_webapp\` when needed; \`read_workspace_webapp_dev_logs\` for dev-server issues.`

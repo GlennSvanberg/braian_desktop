@@ -1,15 +1,21 @@
 import { Route, Routes } from 'react-router-dom'
 
-import { APP_ROUTES } from './app-routes'
-import { HomePage } from './pages/HomePage'
+import { APP_ROUTES, MyAppsLandingPage } from './app-routes'
+import { BraianShell } from './layouts/BraianShell'
 
+/**
+ * Root shell + router. Keep `path="/"` → `MyAppsLandingPage` as-is.
+ * New features: only `app-routes.tsx` + `pages/*`.
+ */
 export function App() {
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      {APP_ROUTES.map((r) => (
-        <Route key={r.path} path={r.path} element={r.element} />
-      ))}
-    </Routes>
+    <BraianShell>
+      <Routes>
+        <Route path="/" element={<MyAppsLandingPage />} />
+        {APP_ROUTES.map((r) => (
+          <Route key={r.path} path={r.path} element={r.element} />
+        ))}
+      </Routes>
+    </BraianShell>
   )
 }

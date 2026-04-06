@@ -36,6 +36,26 @@ body,
   margin: 0;
 }
 
+/* Before React mounts, avoid a flash of unstyled white if classes are missing */
+html:not(.light):not(.dark) {
+  color-scheme: dark;
+  --app-bg-0: #0f1114;
+  --app-bg-1: #151a1f;
+  --app-bg-2: #1b2229;
+  --app-border: #222a32;
+  --app-text-1: #f2f2ee;
+  --app-text-2: #cbc7be;
+  --app-text-3: #8f8a80;
+  --app-accent-500: #3e8e6c;
+  --app-accent-600: #347a5d;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 body {
   font-family:
     ui-sans-serif,

@@ -41,6 +41,8 @@ export function buildSwitchToAppBuilderTool(context: ChatTurnContext | undefined
 
 **Required workflow after this tool returns successfully:** immediately call \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use file/shell tools for \`.braian/webapp/\`, \`init_workspace_webapp\` when the template is missing, and \`read_workspace_webapp_dev_logs\` when diagnosing the managed dev server.
 
+**Sub-routes (mandatory):** For any new or "simple" app the user asks for, implement it on a **dedicated path** (e.g. \`/email-checker\`): new file under \`src/pages/\`, new entry in \`src/app-routes.tsx\`, then \`set_workspace_webapp_preview_path\` to that path. **Never** put the feature on \`/\` or replace \`MyAppsLandingPage\` / the root route with feature UI.
+
 **Interactive UI:** Implement real components under **\`.braian/webapp/src/**\`. **Do not** run \`npm run dev\` via the shell tool. The user starts the dev preview from Braian.
 
 Call this when the user wants an in-workspace webapp or Vite-based UI.`,
@@ -51,7 +53,7 @@ Call this when the user wants an in-workspace webapp or Vite-based UI.`,
     return {
       ok: true as const,
       message:
-        'App agent mode is enabled for this conversation. Next: call __lazy__tool__discovery__ with the toolNames array below.',
+        'App agent mode is enabled. Put every new mini-app on its own route (pages/ + app-routes.tsx); never replace the `/` landing with feature UI. Next: call __lazy__tool__discovery__ with the toolNames array below.',
       discoveryToolNames: [...APP_BUILDER_DISCOVERY_NAMES],
     }
   })

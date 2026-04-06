@@ -20,9 +20,12 @@ export function CalculatorPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-6 p-6">
+    <div className="flex min-h-full flex-col gap-6 p-6 md:p-10">
       <header className="border-app-border flex flex-wrap items-baseline justify-between gap-2 border-b pb-4">
         <div>
+          <p className="text-app-accent-600 mb-1 text-xs font-semibold tracking-widest uppercase">
+            Sub-app
+          </p>
           <h1 className="text-app-text-1 text-xl font-semibold tracking-tight">
             Calculator
           </h1>
