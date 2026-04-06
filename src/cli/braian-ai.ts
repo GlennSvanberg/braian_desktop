@@ -16,7 +16,7 @@ import {
 } from '@/lib/ai/chat-turn-args'
 import { streamTanStackChatTurnHeadless } from '@/lib/ai/tanstack-chat-stream'
 import type { ChatTurnContext, PriorChatMessage } from '@/lib/ai/types'
-import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
+import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { deriveAgentModeFromPersisted } from '@/lib/workspace-api'
 
 const PROVIDER_IDS = [
@@ -126,7 +126,7 @@ stream only:
   --tools                Register tools with the model (workspace tools need Tauri; will fail in Node).
   --trace                Log each stream chunk as one JSON line on stderr.
 
-If --context is omitted, uses detached workspace (${DETACHED_WORKSPACE_SESSION_ID}), no conversation.
+If --context is omitted, uses simple-chats workspace (${PERSONAL_WORKSPACE_SESSION_ID}), no conversation.
 `)
 }
 
@@ -190,7 +190,7 @@ function readJsonFile(path: string, label: string): unknown {
 function parseContext(path: string | undefined): ChatTurnContext {
   if (!path) {
     return {
-      workspaceId: DETACHED_WORKSPACE_SESSION_ID,
+      workspaceId: PERSONAL_WORKSPACE_SESSION_ID,
       conversationId: null,
       agentMode: 'document',
     }

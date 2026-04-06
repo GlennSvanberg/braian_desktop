@@ -12,6 +12,8 @@ export type MockDemoMessage = {
   content: string
 }
 
+import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
+
 export type MockConversation = {
   id: string
   workspaceId: string
@@ -27,6 +29,11 @@ export type MockConversation = {
 }
 
 export const MOCK_WORKSPACES: MockWorkspace[] = [
+  {
+    id: PERSONAL_WORKSPACE_SESSION_ID,
+    name: 'Simple chats',
+    description: 'Non-project chats (browser preview)',
+  },
   {
     id: 'ws-personal',
     name: 'Personal',
@@ -45,6 +52,20 @@ export const MOCK_WORKSPACES: MockWorkspace[] = [
 ]
 
 export const MOCK_CONVERSATIONS: MockConversation[] = [
+  {
+    id: 'conv-simple-a',
+    workspaceId: PERSONAL_WORKSPACE_SESSION_ID,
+    title: 'Scratch note',
+    updatedLabel: 'Today',
+    canvasKind: 'document',
+  },
+  {
+    id: 'conv-simple-b',
+    workspaceId: PERSONAL_WORKSPACE_SESSION_ID,
+    title: 'Question for later',
+    updatedLabel: 'Yesterday',
+    canvasKind: 'document',
+  },
   {
     id: 'conv-kickoff',
     workspaceId: 'ws-personal',

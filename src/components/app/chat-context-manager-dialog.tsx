@@ -32,7 +32,7 @@ import type { ModelContextSectionGroup } from '@/lib/ai/model-context-section-me
 import { deriveSnapshotSummary, type SnapshotSummary, type SectionSummary, type ToolBucket } from '@/lib/ai/snapshot-summary'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
 import {
-  isDetachedWorkspaceSessionId,
+  isNonWorkspaceScopedSessionId,
   isUserProfileSessionId,
 } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
@@ -449,10 +449,7 @@ export function ChatContextManagerDialog({
           | Awaited<ReturnType<typeof loadContextConversationsForModel>>
           | undefined
         if (thread.contextFiles.length > 0) {
-          if (
-            isDetachedWorkspaceSessionId(workspaceId) ||
-            isUserProfileSessionId(workspaceId)
-          ) {
+          if (isNonWorkspaceScopedSessionId(workspaceId)) {
             contextFiles = undefined
           } else if (!isTauriRuntime) {
             contextFiles = thread.contextFiles.map((f) => ({
@@ -477,10 +474,7 @@ export function ChatContextManagerDialog({
         }
 
         if ((thread.contextConversations ?? []).length > 0) {
-          if (
-            isDetachedWorkspaceSessionId(workspaceId) ||
-            isUserProfileSessionId(workspaceId)
-          ) {
+          if (isNonWorkspaceScopedSessionId(workspaceId)) {
             contextPriorConversations = undefined
           } else if (!isTauriRuntime) {
             contextPriorConversations = (thread.contextConversations ?? []).map(

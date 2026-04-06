@@ -34,6 +34,7 @@ import { buildSkillTools } from './skill-tools'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import { buildUserProfileTools } from './user-profile-tools'
+import { buildWorkspaceMemoryTools } from './workspace-memory-tools'
 import { buildProviderNativeSearchTools } from './provider-native-search-tools'
 import { buildWorkspaceWebappTools } from './webapp-tools'
 import { buildReasoningModelOptions } from './reasoning-model-options'
@@ -141,6 +142,7 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   set_workspace_webapp_preview_path: 'src/lib/ai/webapp-tools.ts',
   publish_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
   update_user_profile: 'src/lib/ai/user-profile-tools.ts',
+  add_workspace_memory: 'src/lib/ai/workspace-memory-tools.ts',
   list_workspace_skills: 'src/lib/ai/skill-tools.ts',
   read_workspace_skill: 'src/lib/ai/skill-tools.ts',
   write_workspace_skill: 'src/lib/ai/skill-tools.ts',
@@ -466,8 +468,14 @@ export async function buildTanStackChatTurnArgs(
   for (const w of mcpWarnings) {
     settingsWarnings.push(w)
   }
+  const workspaceMemoryTools =
+    ctx?.workspaceId != null &&
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
+      ? buildWorkspaceMemoryTools(ctx)
+      : []
   const tools: Tool[] = [
     ...canvasTools,
+    ...workspaceMemoryTools,
     ...codingTools,
     ...skillTools,
     ...(switchToCodeTool ? [switchToCodeTool] : []),
@@ -516,6 +524,7 @@ export async function buildTanStackChatTurnArgs(
       hasSkillTools: skillTools.length > 0,
       hasMcpTools: mcpTools.length > 0,
       hasProviderWebSearch: nativeSearchTools.length > 0,
+      hasWorkspaceMemoryTool: workspaceMemoryTools.length > 0,
       mcpServerNames,
     }),
     isCodeMode ? CODE_MODE_ROUTING_ADDENDUM : DOC_MODE_ROUTING_ADDENDUM,

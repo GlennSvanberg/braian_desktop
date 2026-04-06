@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { WorkspaceHistoryPanel } from '@/components/app/workspace-history-panel'
+import { WorkspaceMemorySettingsPanel } from '@/components/app/workspace-memory-settings-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
 import {
   workspaceMcpConfigGet,
@@ -554,6 +555,10 @@ function ConnectionsPage() {
             use Git—avoid secrets in tracked files.
           </p>
         </div>
+
+        {tauri && wsId ? (
+          <WorkspaceMemorySettingsPanel workspaceId={wsId} />
+        ) : null}
 
         {tauri && wsId ? (
           <WorkspaceHistoryPanel workspaceId={wsId} />

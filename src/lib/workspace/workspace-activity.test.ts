@@ -22,6 +22,8 @@ vi.mock('@/lib/memory/scheduler', () => ({
   scheduleMemoryReviewAfterIdle: scheduleMemory,
 }))
 
+import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
+
 import {
   emitWorkspaceDurableActivity,
   GIT_CHECKPOINT_DEBOUNCE_MS,
@@ -72,5 +74,14 @@ describe('emitWorkspaceDurableActivity', () => {
     await vi.waitFor(() => {
       expect(scheduleMemory).toHaveBeenCalledWith('ws-c', 'conv-1')
     })
+  })
+
+  it('does not schedule git or memory for built-in Simple chats workspace', async () => {
+    emitWorkspaceDurableActivity(PERSONAL_WORKSPACE_SESSION_ID, {
+      conversationId: 'conv-1',
+    })
+    await vi.advanceTimersByTimeAsync(GIT_CHECKPOINT_DEBOUNCE_MS)
+    expect(tryCommit).not.toHaveBeenCalled()
+    expect(scheduleMemory).not.toHaveBeenCalled()
   })
 })

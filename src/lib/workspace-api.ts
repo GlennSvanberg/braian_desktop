@@ -207,6 +207,23 @@ export async function conversationDelete(input: {
   })
 }
 
+export async function conversationMoveToWorkspace(input: {
+  id: string
+  fromWorkspaceId: string
+  toWorkspaceId: string
+}): Promise<void> {
+  if (!isTauri()) {
+    throw new Error('Moving chats to a project requires the desktop app.')
+  }
+  await invoke('conversation_move_to_workspace', {
+    input: {
+      id: input.id,
+      fromWorkspaceId: input.fromWorkspaceId,
+      toWorkspaceId: input.toWorkspaceId,
+    },
+  })
+}
+
 export type ContextFileEntryDto = {
   relativePath: string
   displayName?: string

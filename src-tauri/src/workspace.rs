@@ -7,6 +7,45 @@ use uuid::Uuid;
 
 use crate::db;
 
+/// Stable SQLite id for app-managed simple chats (non-project), under app data `personal-chats/`.
+pub const PERSONAL_WORKSPACE_ID: &str = "__braian_personal__";
+
+const PERSONAL_WORKSPACE_DISPLAY_NAME: &str = "Simple chats";
+
+fn personal_chats_root(app: &AppHandle) -> Result<PathBuf, String> {
+  let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+  Ok(dir.join("personal-chats"))
+}
+
+/// Ensures the personal workspace row and folder exist (id [`PERSONAL_WORKSPACE_ID`]).
+pub fn ensure_personal_workspace(app: &AppHandle) -> Result<(), String> {
+  let conn = db::open_connection(app).map_err(|e| e.to_string())?;
+  let dir = personal_chats_root(app)?;
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let path_str = resolve_workspace_dir(&dir)?;
+  let count: i64 = conn
+    .query_row(
+      "SELECT COUNT(*) FROM workspaces WHERE id = ?1",
+      params![PERSONAL_WORKSPACE_ID],
+      |r| r.get(0),
+    )
+    .map_err(|e| e.to_string())?;
+  if count == 0 {
+    let now = now_ms();
+    conn
+      .execute(
+        "INSERT INTO workspaces (id, name, root_path, created_at_ms, last_used_at_ms) VALUES (?1, ?2, ?3, ?4, ?4)",
+        params![PERSONAL_WORKSPACE_ID, PERSONAL_WORKSPACE_DISPLAY_NAME, path_str, now],
+      )
+      .map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+pub fn is_personal_workspace_id(id: &str) -> bool {
+  id == PERSONAL_WORKSPACE_ID
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceRecord {
@@ -225,6 +264,9 @@ pub fn workspace_add_from_path(
 
 #[tauri::command]
 pub fn workspace_remove(app: AppHandle, id: String) -> Result<(), String> {
+  if is_personal_workspace_id(&id) {
+    return Err("Cannot remove the built-in Simple chats workspace.".to_string());
+  }
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   let n = conn
     .execute("DELETE FROM workspaces WHERE id = ?1", params![id])

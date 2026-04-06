@@ -3,6 +3,7 @@
  * checkpoints (debounced) and optional memory auto-review (after chat turns).
  */
 
+import { isPersonalWorkspaceSessionId } from '@/lib/chat-sessions/detached'
 import { isTauri } from '@/lib/tauri-env'
 
 /** Wait this long after the last mutation before attempting a checkpoint. */
@@ -72,6 +73,7 @@ export function emitWorkspaceDurableActivity(
   options?: { conversationId?: string },
 ): void {
   if (!isTauri()) return
+  if (isPersonalWorkspaceSessionId(workspaceId)) return
 
   if (options?.conversationId) {
     void import('@/lib/memory/scheduler').then((m) =>

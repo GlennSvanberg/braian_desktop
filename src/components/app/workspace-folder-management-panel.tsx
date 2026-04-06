@@ -21,6 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { isPersonalWorkspaceSessionId } from '@/lib/chat-sessions/detached'
 import {
   pickFolder,
   workspaceAddFromPath,
@@ -45,6 +46,7 @@ export function WorkspaceFolderManagementPanel({
   const navigate = useNavigate()
   const {
     workspaces,
+    projectWorkspaces,
     activeWorkspace,
     setActiveWorkspaceId,
     refreshWorkspaces,
@@ -54,6 +56,7 @@ export function WorkspaceFolderManagementPanel({
 
   const workspace =
     workspaces.find((w) => w.id === workspaceId) ?? activeWorkspace
+  const isPersonalWs = workspace ? isPersonalWorkspaceSessionId(workspace.id) : false
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -229,9 +232,10 @@ export function WorkspaceFolderManagementPanel({
           </p>
         ) : null}
 
-        {isTauriRuntime && workspaces.length === 0 ? (
+        {isTauriRuntime && projectWorkspaces.length === 0 ? (
           <p className="text-text-3 mb-3 text-xs leading-snug">
-            No folders yet—create or add one below.
+            No project folders yet—create or add one below. Simple chats always
+            use the built-in “Simple chats” location.
           </p>
         ) : null}
 
@@ -287,7 +291,12 @@ export function WorkspaceFolderManagementPanel({
                 variant="outline"
                 size="sm"
                 className="text-destructive hover:text-destructive gap-1.5"
-                disabled={busy || !workspace}
+                disabled={busy || !workspace || isPersonalWs}
+                title={
+                  isPersonalWs
+                    ? 'Simple chats cannot be removed from the app.'
+                    : undefined
+                }
                 onClick={() => void onRemove()}
               >
                 <Trash2 className="size-3.5" aria-hidden />

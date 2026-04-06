@@ -54,7 +54,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { DETACHED_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
+import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
 import { cn } from '@/lib/utils'
@@ -71,29 +71,57 @@ import { useWorkspace } from './workspace-context'
 const VISIBLE_WORKSPACES_DEFAULT = 8
 const VISIBLE_CHATS_DEFAULT = 6
 
-function NewAgentSidebarItem({ pathname }: { pathname: string }) {
+function NewSimpleChatSidebarItem({ pathname }: { pathname: string }) {
   const navigate = useNavigate()
-  const sessionKey = chatSessionKey(DETACHED_WORKSPACE_SESSION_ID, null)
-  const generating = useSessionGenerating(sessionKey)
+  const {
+    createConversationInWorkspace,
+    setActiveWorkspaceId,
+    isTauriRuntime,
+  } = useWorkspace()
+  const [pending, setPending] = useState(false)
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         type="button"
-        onClick={() => navigate({ to: '/chat/new' })}
+        disabled={pending}
+        onClick={() => {
+          if (!isTauriRuntime) {
+            navigate({ to: '/chat/new' })
+            return
+          }
+          setPending(true)
+          void (async () => {
+            try {
+              const id = await createConversationInWorkspace(
+                PERSONAL_WORKSPACE_SESSION_ID,
+              )
+              setActiveWorkspaceId(PERSONAL_WORKSPACE_SESSION_ID)
+              navigate({
+                to: '/chat/$conversationId',
+                params: { conversationId: id },
+              })
+            } catch (err) {
+              console.error(err)
+              const msg = err instanceof Error ? err.message : String(err)
+              window.alert(msg)
+            } finally {
+              setPending(false)
+            }
+          })()
+        }}
         isActive={pathname === '/chat/new'}
-        tooltip="New agent (move to a workspace when you want a saved project thread)"
+        tooltip="Start a new simple chat (saved under Simple chats until you move it to a project)"
       >
-        <Plus className="size-4 shrink-0" aria-hidden />
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate">New agent</span>
-          {generating ? (
-            <Loader2
-              className="text-sidebar-foreground/70 size-3.5 shrink-0 animate-spin"
-              aria-label="Generating reply"
-            />
-          ) : null}
-        </span>
+        {pending ? (
+          <Loader2
+            className="text-sidebar-foreground/70 size-4 shrink-0 animate-spin"
+            aria-hidden
+          />
+        ) : (
+          <Plus className="size-4 shrink-0" aria-hidden />
+        )}
+        <span className="truncate">New simple chat</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   )
@@ -305,6 +333,7 @@ function WorkspaceConversationGroup({
   navigate,
   createConversationInWorkspace,
   setActiveWorkspaceId,
+  hideFolderSettings = false,
 }: {
   workspace: WorkspaceDto
   conversations: WorkspaceConversation[]
@@ -319,6 +348,8 @@ function WorkspaceConversationGroup({
   navigate: ReturnType<typeof useNavigate>
   createConversationInWorkspace: (id: string) => Promise<string>
   setActiveWorkspaceId: (id: string) => void
+  /** Built-in Simple chats: no per-folder MCP/settings entry. */
+  hideFolderSettings?: boolean
 }) {
   const [newPending, setNewPending] = useState(false)
 
@@ -410,28 +441,30 @@ function WorkspaceConversationGroup({
           />
         </SidebarMenuButton>
 
-        <SidebarMenuAction
-          className="text-sidebar-foreground/80 right-9 z-30 size-7 [&>svg]:size-4"
-          aria-label={`Workspace settings for ${workspace.name}`}
-          title="Workspace settings (Connections)"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            setActiveWorkspaceId(workspace.id)
-            navigate({
-              to: '/workspace/$workspaceId/settings',
-              params: { workspaceId: workspace.id },
-            })
-          }}
-        >
-          <Settings
-            className={cn(
-              pathname === `/workspace/${workspace.id}/settings` &&
-                'text-sidebar-accent-foreground',
-            )}
-            aria-hidden
-          />
-        </SidebarMenuAction>
+        {hideFolderSettings ? null : (
+          <SidebarMenuAction
+            className="text-sidebar-foreground/80 right-9 z-30 size-7 [&>svg]:size-4"
+            aria-label={`Workspace settings for ${workspace.name}`}
+            title="Workspace settings (Connections)"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setActiveWorkspaceId(workspace.id)
+              navigate({
+                to: '/workspace/$workspaceId/settings',
+                params: { workspaceId: workspace.id },
+              })
+            }}
+          >
+            <Settings
+              className={cn(
+                pathname === `/workspace/${workspace.id}/settings` &&
+                  'text-sidebar-accent-foreground',
+              )}
+              aria-hidden
+            />
+          </SidebarMenuAction>
+        )}
 
         <SidebarMenuAction
           className="text-sidebar-foreground/80 right-3 z-30 size-7 [&>svg]:size-4"
@@ -495,7 +528,8 @@ export function AppSidebar() {
   const router = useRouter()
   const navigate = useNavigate()
   const {
-    workspaces,
+    projectWorkspaces,
+    personalWorkspace,
     activeWorkspaceId,
     conversationsByWorkspace,
     refreshConversations,
@@ -519,10 +553,11 @@ export function AppSidebar() {
     Record<string, boolean>
   >({})
 
-  const visibleWorkspaces = showAllWorkspaces
-    ? workspaces
-    : workspaces.slice(0, VISIBLE_WORKSPACES_DEFAULT)
-  const hasMoreWorkspaces = workspaces.length > VISIBLE_WORKSPACES_DEFAULT
+  const visibleProjectWorkspaces = showAllWorkspaces
+    ? projectWorkspaces
+    : projectWorkspaces.slice(0, VISIBLE_WORKSPACES_DEFAULT)
+  const hasMoreWorkspaces =
+    projectWorkspaces.length > VISIBLE_WORKSPACES_DEFAULT
 
   const openRename = (c: WorkspaceConversation) => {
     setRenameTargetId(c.id)
@@ -587,15 +622,39 @@ export function AppSidebar() {
 
   const workspacesMenu = (
     <SidebarMenu>
-      <NewAgentSidebarItem pathname={pathname} />
-      {workspaces.length === 0 ? (
+      <NewSimpleChatSidebarItem pathname={pathname} />
+      {personalWorkspace ? (
+        <WorkspaceConversationGroup
+          key={personalWorkspace.id}
+          workspace={personalWorkspace}
+          conversations={conversationsByWorkspace[personalWorkspace.id] ?? []}
+          pathname={pathname}
+          activeWorkspaceId={activeWorkspaceId}
+          expandedChats={expandedChatsByWs[personalWorkspace.id] ?? true}
+          onExpandChats={() =>
+            setExpandedChatsByWs((prev) => ({
+              ...prev,
+              [personalWorkspace.id]: true,
+            }))
+          }
+          onRename={openRename}
+          onDelete={confirmDelete}
+          deleteTargetId={deleteTargetId}
+          isTauriRuntime={isTauriRuntime}
+          navigate={navigate}
+          createConversationInWorkspace={createConversationInWorkspace}
+          setActiveWorkspaceId={setActiveWorkspaceId}
+          hideFolderSettings
+        />
+      ) : null}
+      {projectWorkspaces.length === 0 ? (
         <p className="text-sidebar-foreground/60 px-2 py-3 text-xs leading-relaxed">
           Open the <span className="font-medium">dashboard</span> from the logo
-          or add a folder workspace there to list chats here.
+          or add a folder workspace there to list project chats here.
         </p>
       ) : (
         <>
-          {visibleWorkspaces.map((ws) => (
+          {visibleProjectWorkspaces.map((ws) => (
             <WorkspaceConversationGroup
               key={ws.id}
               workspace={ws}

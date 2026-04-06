@@ -217,11 +217,11 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
   )
 
   it(
-    'Workspace skills — detached session omits skills sections (no workspace folder)',
+    'Workspace skills — simple-chats workspace omits skills sections (no project folder)',
     { timeout: 60_000 },
     () => {
       const snap = runDumpRequest('List workspace skills.', {
-        workspaceId: '__braian_detached__',
+        workspaceId: '__braian_personal__',
         conversationId: null,
         agentMode: 'document',
       })

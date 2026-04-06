@@ -37,6 +37,9 @@ pub fn run() {
       if let Err(e) = workspace::ensure_default_workspace(app.handle()) {
         log::error!("Failed to ensure default workspace: {e}");
       }
+      if let Err(e) = workspace::ensure_personal_workspace(app.handle()) {
+        log::error!("Failed to ensure personal workspace: {e}");
+      }
       app.manage(workspace_webapp_dev::WebappDevState::default());
       app.manage(workspace_webapp_static::WebappStaticServerState::start(
         app.handle().clone(),
@@ -73,6 +76,7 @@ pub fn run() {
       braian_store::conversation_set_pinned,
       braian_store::conversation_set_unread,
       braian_store::conversation_delete,
+      braian_store::conversation_move_to_workspace,
       braian_store::canvas_document_write,
       ai_settings::ai_settings_get,
       ai_settings::ai_settings_set,

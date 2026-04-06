@@ -91,6 +91,10 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(
       r.toolsDisplay.some((t) => t.name === 'open_document_canvas'),
     ).toBe(true)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'add_workspace_memory'),
+    ).toBe(true)
+    expect(r.systemSections[0]?.text).toContain('add_workspace_memory')
     expect(r.systemSections[0]?.text).toContain('apply_document_canvas_patch')
     expect(r.systemSections[0]?.text).not.toContain('Unsaved chat')
   })
@@ -455,6 +459,9 @@ describe('buildTanStackChatTurnArgs', () => {
       'update_user_profile',
       'web_search',
     ])
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'add_workspace_memory'),
+    ).toBe(false)
     expect(r.systemSections[0]?.text).toBe(PROFILE_COACH_SYSTEM)
     expect(
       r.systemSections.some((s) => s.id === 'profile-state'),
@@ -464,11 +471,11 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.maxIterations).toBe(16)
   })
 
-  it('omits webapp tools when workspace is detached even in app mode', async () => {
+  it('omits webapp tools when workspace is simple-chats bucket even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
-        workspaceId: '__braian_detached__',
+        workspaceId: '__braian_personal__',
         conversationId: 'c1',
         agentMode: 'app',
       },
@@ -485,6 +492,9 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections.some((s) => s.id === 'skills-create')).toBe(false)
     expect(
       r.toolsDisplay.some((t) => t.name === 'list_workspace_skills'),
+    ).toBe(false)
+    expect(
+      r.toolsDisplay.some((t) => t.name === 'add_workspace_memory'),
     ).toBe(false)
     expect(r.systemSections[0]?.text).not.toContain('switch_to_app_builder')
     expect(r.systemSections[0]?.text).not.toContain('switch_to_code_agent')

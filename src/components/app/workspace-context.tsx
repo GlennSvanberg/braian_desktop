@@ -12,6 +12,7 @@ import {
   registerConversationListRefresh,
   unregisterConversationListRefresh,
 } from '@/lib/conversation-list-refresh'
+import { isPersonalWorkspaceSessionId } from '@/lib/chat-sessions/detached'
 import { isTauri } from '@/lib/tauri-env'
 import {
   type ConversationDto,
@@ -30,6 +31,10 @@ export type WorkspaceConversation = ConversationDto & {
 
 type WorkspaceContextValue = {
   workspaces: WorkspaceDto[]
+  /** Folder workspaces only (excludes built-in Simple chats). */
+  projectWorkspaces: WorkspaceDto[]
+  /** Built-in simple chats workspace, if present in `workspaces`. */
+  personalWorkspace: WorkspaceDto | null
   activeWorkspaceId: string
   activeWorkspace: WorkspaceDto | null
   setActiveWorkspaceId: (id: string) => void
@@ -199,6 +204,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [isTauriRuntime],
   )
 
+  const projectWorkspaces = useMemo(
+    () => workspaces.filter((w) => !isPersonalWorkspaceSessionId(w.id)),
+    [workspaces],
+  )
+
+  const personalWorkspace = useMemo(
+    () => workspaces.find((w) => isPersonalWorkspaceSessionId(w.id)) ?? null,
+    [workspaces],
+  )
+
   const activeWorkspace = useMemo(() => {
     return workspaces.find((w) => w.id === activeWorkspaceId) ?? null
   }, [workspaces, activeWorkspaceId])
@@ -228,6 +243,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       workspaces,
+      projectWorkspaces,
+      personalWorkspace,
       activeWorkspaceId,
       activeWorkspace,
       setActiveWorkspaceId,
@@ -246,6 +263,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }),
     [
       workspaces,
+      projectWorkspaces,
+      personalWorkspace,
       activeWorkspaceId,
       activeWorkspace,
       setActiveWorkspaceId,

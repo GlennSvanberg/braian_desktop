@@ -1,21 +1,24 @@
-/** Session key workspace segment for /chat/new (no folder until user moves the thread). */
-export const DETACHED_WORKSPACE_SESSION_ID = '__braian_detached__'
+/** App-managed simple chats root (SQLite + `personal-chats/` under app data). */
+export const PERSONAL_WORKSPACE_SESSION_ID = '__braian_personal__'
 
 /** Synthetic workspace id for sidebar → You (global profile chat, localStorage). */
 export const USER_PROFILE_WORKSPACE_SESSION_ID = '__braian_user_profile__'
 
-export function isDetachedWorkspaceSessionId(workspaceId: string): boolean {
-  return workspaceId === DETACHED_WORKSPACE_SESSION_ID
+export function isPersonalWorkspaceSessionId(workspaceId: string): boolean {
+  return workspaceId === PERSONAL_WORKSPACE_SESSION_ID
 }
 
 export function isUserProfileSessionId(workspaceId: string): boolean {
   return workspaceId === USER_PROFILE_WORKSPACE_SESSION_ID
 }
 
-/** No workspace folder on disk — file tools and MEMORY.md do not apply. */
+/**
+ * Chats without a user project folder for tooling: simple chats bucket and profile coach.
+ * File tools, @-mentions of project files, and workspace git/memory hooks should not apply.
+ */
 export function isNonWorkspaceScopedSessionId(workspaceId: string): boolean {
   return (
-    isDetachedWorkspaceSessionId(workspaceId) ||
+    isPersonalWorkspaceSessionId(workspaceId) ||
     isUserProfileSessionId(workspaceId)
   )
 }

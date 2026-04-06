@@ -23,7 +23,7 @@ import {
 } from '@/lib/workspace-api'
 
 import {
-  isDetachedWorkspaceSessionId,
+  isNonWorkspaceScopedSessionId,
   isUserProfileSessionId,
   USER_PROFILE_WORKSPACE_SESSION_ID,
 } from '@/lib/chat-sessions/detached'
@@ -563,10 +563,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         | Awaited<ReturnType<typeof loadContextFilesForModel>>
         | undefined
       if (prev.contextFiles.length > 0) {
-        if (
-          isDetachedWorkspaceSessionId(workspaceId) ||
-          isUserProfileSessionId(workspaceId)
-        ) {
+        if (isNonWorkspaceScopedSessionId(workspaceId)) {
           contextFiles = undefined
         } else if (!isTauri()) {
           contextFiles = prev.contextFiles.map((f) => ({
@@ -603,10 +600,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         | undefined
       const ccEntries = prev.contextConversations ?? []
       if (ccEntries.length > 0) {
-        if (
-          isDetachedWorkspaceSessionId(workspaceId) ||
-          isUserProfileSessionId(workspaceId)
-        ) {
+        if (isNonWorkspaceScopedSessionId(workspaceId)) {
           contextPriorConversations = undefined
         } else if (!isTauri()) {
           contextPriorConversations = ccEntries.map((c) => ({
@@ -805,7 +799,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         if (
           isTauri() &&
           !isUserProfileSessionId(mcpWsId) &&
-          !isDetachedWorkspaceSessionId(mcpWsId)
+          !isNonWorkspaceScopedSessionId(mcpWsId)
         ) {
           await workspaceMcpSessionsDisconnect(mcpWsId)
         }
@@ -831,7 +825,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
 
       if (
         conversationId &&
-        !isDetachedWorkspaceSessionId(workspaceId) &&
+        !isNonWorkspaceScopedSessionId(workspaceId) &&
         !isUserProfileSessionId(workspaceId)
       ) {
         const last = after.messages.at(-1)
@@ -875,7 +869,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           streamCompletedOk &&
           conversationId &&
           isTauri() &&
-          !isDetachedWorkspaceSessionId(workspaceId) &&
+          !isNonWorkspaceScopedSessionId(workspaceId) &&
           !isUserProfileSessionId(workspaceId)
         ) {
           void import('@/lib/workspace/workspace-activity').then((m) =>

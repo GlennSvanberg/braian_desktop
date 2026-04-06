@@ -8,6 +8,7 @@ use tauri::AppHandle;
 use uuid::Uuid;
 
 use crate::db;
+use crate::workspace::PERSONAL_WORKSPACE_ID;
 
 const CONVERSATION_SCHEMA_VERSION: u32 = 4;
 
@@ -788,6 +789,85 @@ pub fn conversation_delete(
     fs::remove_file(&canvas_md).map_err(|e| e.to_string())?;
   }
   fs::remove_file(&path).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationMoveToWorkspaceInput {
+  pub id: String,
+  pub from_workspace_id: String,
+  pub to_workspace_id: String,
+}
+
+/// Moves a conversation from the personal (simple chats) workspace to a project workspace.
+/// Preserves conversation id; copies conversation JSON, artifact JSON, and canvas markdown when present.
+#[tauri::command]
+pub fn conversation_move_to_workspace(
+  app: AppHandle,
+  input: ConversationMoveToWorkspaceInput,
+) -> Result<(), String> {
+  if input.from_workspace_id != PERSONAL_WORKSPACE_ID {
+    return Err("Only chats in Simple chats can be moved to a project this way.".to_string());
+  }
+  if input.to_workspace_id == PERSONAL_WORKSPACE_ID {
+    return Err("Pick a project workspace, not Simple chats.".to_string());
+  }
+  if input.from_workspace_id == input.to_workspace_id {
+    return Ok(());
+  }
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let to_exists: i64 = conn
+    .query_row(
+      "SELECT COUNT(*) FROM workspaces WHERE id = ?1",
+      params![&input.to_workspace_id],
+      |r| r.get(0),
+    )
+    .map_err(|e| e.to_string())?;
+  if to_exists == 0 {
+    return Err("Target workspace not found.".to_string());
+  }
+
+  let (from_root, mut file) = find_conversation_root(&conn, &input.id)?;
+  if file.workspace_id != input.from_workspace_id {
+    return Err("Conversation workspace mismatch.".to_string());
+  }
+
+  let to_root = workspace_root_path(&conn, &input.to_workspace_id)?;
+  let to_conv = conversation_path(&to_root, &input.id);
+  if to_conv.is_file() {
+    return Err("That conversation already exists in the target workspace.".to_string());
+  }
+
+  ensure_braian_layout(&to_root)?;
+
+  let from_art = artifact_path(&from_root, &input.id);
+  let to_art = artifact_path(&to_root, &input.id);
+  if from_art.is_file() {
+    let data = fs::read_to_string(&from_art).map_err(|e| e.to_string())?;
+    fs::write(&to_art, data).map_err(|e| e.to_string())?;
+    fs::remove_file(&from_art).map_err(|e| e.to_string())?;
+  }
+
+  let from_md = canvas_md_path(&from_root, &input.id);
+  let to_md = canvas_md_path(&to_root, &input.id);
+  if from_md.is_file() {
+    fs::create_dir_all(canvas_dir(&to_root)).map_err(|e| e.to_string())?;
+    let data = fs::read_to_string(&from_md).map_err(|e| e.to_string())?;
+    fs::write(&to_md, data).map_err(|e| e.to_string())?;
+    fs::remove_file(&from_md).map_err(|e| e.to_string())?;
+  }
+
+  file.workspace_id = input.to_workspace_id.clone();
+  file.updated_at_ms = now_ms();
+  let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+  fs::write(&to_conv, json).map_err(|e| e.to_string())?;
+
+  let from_conv = conversation_path(&from_root, &input.id);
+  if from_conv.is_file() {
+    fs::remove_file(&from_conv).map_err(|e| e.to_string())?;
+  }
+
   Ok(())
 }
 

@@ -9,6 +9,8 @@ export type BuildRoutingPromptOptions = {
   hasMcpTools: boolean
   /** OpenAI/Anthropic `web_search` or Gemini `google_search` is registered for this turn. */
   hasProviderWebSearch?: boolean
+  /** `add_workspace_memory` — append to `.braian/MEMORY.md` for this workspace. */
+  hasWorkspaceMemoryTool?: boolean
   mcpServerNames?: string[]
 }
 
@@ -71,6 +73,13 @@ function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null 
   return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.`
 }
 
+function buildWorkspaceMemoryRoutingLine(
+  options: BuildRoutingPromptOptions,
+): string | null {
+  if (!options.hasWorkspaceMemoryTool) return null
+  return '**Workspace memory:** When the user asks to **remember** something for **this workspace** (coding conventions, project names, “always do X”, durable preferences), call **`add_workspace_memory`** with concise markdown (usually bullets). Do not use `update_user_profile` for workspace-only facts; do not rely on file-write tools for this when `add_workspace_memory` is available. Never store secrets or API keys.'
+}
+
 function buildUnsavedChatLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasCanvasTools || options.hasCanvasSnapshot) return null
   return '**Unsaved chat:** if the user asks for side-panel document edits, explain that saving the conversation enables the document canvas workflow.'
@@ -87,6 +96,7 @@ export function buildBraianRoutingPrompt(
     buildCodeRoutingLine(options),
     buildCanvasRoutingLine(options),
     buildSkillsRoutingLine(options),
+    buildWorkspaceMemoryRoutingLine(options),
     buildMcpRoutingLine(options),
     buildUnsavedChatLine(options),
   ].filter((line): line is string => Boolean(line))

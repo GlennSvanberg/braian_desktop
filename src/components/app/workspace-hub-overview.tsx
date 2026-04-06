@@ -25,6 +25,7 @@ import {
   workspaceWebappPreviewPathSet,
   workspaceWebappPublishStatus,
 } from '@/lib/workspace-api'
+import { MEMORY_INJECT_MAX_BYTES, MEMORY_RELATIVE_PATH } from '@/lib/memory/constants'
 import { workspaceGitListCheckpoints, workspaceGitStatus } from '@/lib/workspace/git-history-api'
 import { isTauri } from '@/lib/tauri-env'
 import { cn } from '@/lib/utils'
@@ -115,7 +116,11 @@ export function WorkspaceHubOverview({
         workspaceWebappPublishStatus(workspaceId),
         workspaceGitStatus(workspaceId),
         workspaceMcpConfigGet(workspaceId),
-        workspaceReadTextFile(workspaceId, 'MEMORY.md', 8192).catch(() => null),
+        workspaceReadTextFile(
+          workspaceId,
+          MEMORY_RELATIVE_PATH,
+          MEMORY_INJECT_MAX_BYTES,
+        ).catch(() => null),
       ])
       setSnapshot(snap)
       setPublishStatus(pub)
