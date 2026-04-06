@@ -1,6 +1,8 @@
 use std::io::Read;
+use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -16,6 +18,57 @@ use crate::workspace_mcp_stdio::{
   read_response_for_id, spawn_stdio_server, start_stdout_line_channel, trim_stderr,
   write_json_line, MCP_RPC_DEADLINE, MCP_STDERR_CAP,
 };
+
+/// After `kill`, reap the child so stdio pipes close and reader threads can finish.
+const PROBE_CHILD_WAIT: Duration = Duration::from_secs(12);
+/// Avoid hanging the probe if a stdio helper thread never exits.
+const PROBE_THREAD_JOIN: Duration = Duration::from_secs(4);
+
+fn try_wait_child_bounded(child: &mut std::process::Child) {
+  let start = Instant::now();
+  while start.elapsed() < PROBE_CHILD_WAIT {
+    match child.try_wait() {
+      Ok(Some(_)) => return,
+      Ok(None) => thread::sleep(Duration::from_millis(40)),
+      Err(_) => return,
+    }
+  }
+}
+
+fn join_stdout_reader_bounded(handle: JoinHandle<()>) {
+  let (tx, rx) = mpsc::channel::<()>();
+  thread::spawn(move || {
+    let _ = handle.join();
+    let _ = tx.send(());
+  });
+  let _ = rx.recv_timeout(PROBE_THREAD_JOIN);
+}
+
+fn join_stderr_collector_bounded(handle: JoinHandle<String>) -> String {
+  let (tx, rx) = mpsc::channel::<String>();
+  thread::spawn(move || {
+    let s = handle.join().unwrap_or_default();
+    let _ = tx.send(s);
+  });
+  rx.recv_timeout(PROBE_THREAD_JOIN).unwrap_or_default()
+}
+
+fn cleanup_stdio_probe(
+  child: &mut std::process::Child,
+  reader: JoinHandle<()>,
+  stderr_handle: JoinHandle<String>,
+) -> String {
+  let _ = child.kill();
+  try_wait_child_bounded(child);
+  join_stdout_reader_bounded(reader);
+  join_stderr_collector_bounded(stderr_handle)
+}
+
+fn cleanup_stderr_only(child: &mut std::process::Child, stderr_handle: JoinHandle<String>) {
+  let _ = child.kill();
+  try_wait_child_bounded(child);
+  let _ = join_stderr_collector_bounded(stderr_handle);
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,7 +135,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   let stdout = match child.stdout.take() {
     Some(s) => s,
     None => {
-      let _ = child.kill();
+      cleanup_stderr_only(&mut child, stderr_handle);
       return McpConnectionProbeResult {
         ok: false,
         tool_count: None,
@@ -96,7 +149,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   let mut stdin = match child.stdin.take() {
     Some(s) => s,
     None => {
-      let _ = child.kill();
+      cleanup_stderr_only(&mut child, stderr_handle);
       return McpConnectionProbeResult {
         ok: false,
         tool_count: None,
@@ -122,9 +175,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   });
 
   if let Err(e) = write_json_line(&mut stdin, &init_req) {
-    let _ = child.kill();
-    let _ = reader.join();
-    let _ = stderr_handle.join();
+    let _ = cleanup_stdio_probe(&mut child, reader, stderr_handle);
     return McpConnectionProbeResult {
       ok: false,
       tool_count: None,
@@ -137,9 +188,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   let init_res = match read_response_for_id(&rx, deadline, 1) {
     Ok(v) => v,
     Err(e) => {
-      let _ = child.kill();
-      let _ = reader.join();
-      let stderr = stderr_handle.join().unwrap_or_default();
+      let stderr = cleanup_stdio_probe(&mut child, reader, stderr_handle);
       return McpConnectionProbeResult {
         ok: false,
         tool_count: None,
@@ -151,9 +200,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   };
 
   if let Some(err) = init_res.get("error") {
-    let _ = child.kill();
-    let _ = reader.join();
-    let stderr = stderr_handle.join().unwrap_or_default();
+    let stderr = cleanup_stdio_probe(&mut child, reader, stderr_handle);
     let msg = err
       .get("message")
       .and_then(|m| m.as_str())
@@ -172,9 +219,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
     "method": "notifications/initialized"
   });
   if let Err(e) = write_json_line(&mut stdin, &notif) {
-    let _ = child.kill();
-    let _ = reader.join();
-    let stderr = stderr_handle.join().unwrap_or_default();
+    let stderr = cleanup_stdio_probe(&mut child, reader, stderr_handle);
     return McpConnectionProbeResult {
       ok: false,
       tool_count: None,
@@ -192,9 +237,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   });
 
   if let Err(e) = write_json_line(&mut stdin, &list_req) {
-    let _ = child.kill();
-    let _ = reader.join();
-    let stderr = stderr_handle.join().unwrap_or_default();
+    let stderr = cleanup_stdio_probe(&mut child, reader, stderr_handle);
     return McpConnectionProbeResult {
       ok: false,
       tool_count: None,
@@ -207,9 +250,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
   let list_res = match read_response_for_id(&rx, deadline, 2) {
     Ok(v) => v,
     Err(e) => {
-      let _ = child.kill();
-      let _ = reader.join();
-      let stderr = stderr_handle.join().unwrap_or_default();
+      let stderr = cleanup_stdio_probe(&mut child, reader, stderr_handle);
       return McpConnectionProbeResult {
         ok: false,
         tool_count: None,
@@ -220,10 +261,7 @@ fn probe_stdio(entry: &Map<String, Value>, workspace_root: &std::path::Path) -> 
     }
   };
 
-  let _ = child.kill();
-  let _ = child.wait();
-  let _ = reader.join();
-  let stderr = stderr_handle.join().unwrap_or_default();
+  let stderr = cleanup_stdio_probe(&mut child, reader, stderr_handle);
 
   if let Some(err) = list_res.get("error") {
     let msg = err
@@ -276,21 +314,15 @@ fn probe_remote(entry: &Map<String, Value>) -> McpConnectionProbeResult {
   }
 }
 
-#[tauri::command]
-pub fn workspace_mcp_probe_connection(
+fn workspace_mcp_probe_connection_sync(
   app: AppHandle,
   workspace_id: String,
-  server_name: String,
+  name: String,
 ) -> Result<McpConnectionProbeResult, String> {
-  let name = server_name.trim();
-  if name.is_empty() {
-    return Err("Server name is required.".to_string());
-  }
-
   let cfg = load_workspace_mcp_config(&app, &workspace_id)?;
   let entry_val = cfg
     .mcp_servers
-    .get(name)
+    .get(&name)
     .ok_or_else(|| format!("Unknown server \"{name}\"."))?;
 
   let entry = entry_val
@@ -326,4 +358,25 @@ pub fn workspace_mcp_probe_connection(
   };
 
   Ok(result)
+}
+
+/// Runs the MCP handshake on a blocking thread pool so a slow or stuck server
+/// cannot freeze the async runtime that also drives other desktop IPC.
+#[tauri::command]
+pub async fn workspace_mcp_probe_connection(
+  app: AppHandle,
+  workspace_id: String,
+  server_name: String,
+) -> Result<McpConnectionProbeResult, String> {
+  let name = server_name.trim().to_string();
+  if name.is_empty() {
+    return Err("Server name is required.".to_string());
+  }
+
+  let app = app.clone();
+  tauri::async_runtime::spawn_blocking(move || {
+    workspace_mcp_probe_connection_sync(app, workspace_id, name)
+  })
+  .await
+  .map_err(|e| format!("Connection check task failed: {e}"))?
 }

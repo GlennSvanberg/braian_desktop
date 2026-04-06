@@ -2,6 +2,40 @@ import { invoke } from '@tauri-apps/api/core'
 
 import { isTauri } from '@/lib/tauri-env'
 
+/** After chat goes idle, drop MCP stdio/remote sessions so helper processes do not linger forever. */
+const MCP_IDLE_DISCONNECT_MS = 90_000
+
+const mcpIdleDisconnectTimers = new Map<
+  string,
+  ReturnType<typeof setTimeout>
+>()
+
+/**
+ * Clears a pending idle disconnect for this workspace (call when a new chat turn starts).
+ */
+export function cancelWorkspaceMcpIdleDisconnect(workspaceId: string): void {
+  const t = mcpIdleDisconnectTimers.get(workspaceId)
+  if (t !== undefined) {
+    clearTimeout(t)
+    mcpIdleDisconnectTimers.delete(workspaceId)
+  }
+}
+
+/**
+ * After {@link MCP_IDLE_DISCONNECT_MS} without a new turn, disconnect MCP sessions for this workspace.
+ */
+export function scheduleWorkspaceMcpIdleDisconnect(workspaceId: string): void {
+  if (!isTauri()) return
+  cancelWorkspaceMcpIdleDisconnect(workspaceId)
+  const t = setTimeout(() => {
+    mcpIdleDisconnectTimers.delete(workspaceId)
+    void workspaceMcpSessionsDisconnect(workspaceId).catch((e) => {
+      console.error('[braian] MCP idle session cleanup', e)
+    })
+  }, MCP_IDLE_DISCONNECT_MS)
+  mcpIdleDisconnectTimers.set(workspaceId, t)
+}
+
 export type McpListToolsServerDto = {
   name: string
   description?: string | null

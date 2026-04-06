@@ -1,0 +1,41 @@
+diff --git a/node_modules/@tanstack/ai/dist/esm/activities/chat/tools/tool-calls.js b/node_modules/@tanstack/ai/dist/esm/activities/chat/tools/tool-calls.js
+index 83ea212..cd16c93 100644
+--- a/node_modules/@tanstack/ai/dist/esm/activities/chat/tools/tool-calls.js
++++ b/node_modules/@tanstack/ai/dist/esm/activities/chat/tools/tool-calls.js
+@@ -53,7 +53,11 @@ class ToolCallManager {
+     for (const [, toolCall] of this.toolCallsMap.entries()) {
+       if (toolCall.id === event.toolCallId) {
+         if (event.input !== void 0) {
+-          toolCall.function.arguments = JSON.stringify(event.input);
++          const accumulated = toolCall.function.arguments?.trim() ?? "";
++          const inputIsEmptyObject = event.input !== null && typeof event.input === "object" && !Array.isArray(event.input) && Object.keys(event.input).length === 0;
++          if (!(inputIsEmptyObject && accumulated.length > 0)) {
++            toolCall.function.arguments = JSON.stringify(event.input);
++          }
+         }
+         break;
+       }
+diff --git a/node_modules/@tanstack/ai/src/activities/chat/tools/tool-calls.ts b/node_modules/@tanstack/ai/src/activities/chat/tools/tool-calls.ts
+index c05b759..0c6fdf3 100644
+--- a/node_modules/@tanstack/ai/src/activities/chat/tools/tool-calls.ts
++++ b/node_modules/@tanstack/ai/src/activities/chat/tools/tool-calls.ts
+@@ -127,7 +127,18 @@ export class ToolCallManager {
+     for (const [, toolCall] of this.toolCallsMap.entries()) {
+       if (toolCall.id === event.toolCallId) {
+         if (event.input !== undefined) {
+-          toolCall.function.arguments = JSON.stringify(event.input)
++          const accumulated = toolCall.function.arguments?.trim() ?? ''
++          const inputIsEmptyObject =
++            event.input !== null &&
++            typeof event.input === 'object' &&
++            !Array.isArray(event.input) &&
++            Object.keys(event.input as Record<string, unknown>).length === 0
++          // Do not replace non-empty streamed JSON with `{}` when the adapter
++          // sends an empty parsed object (OpenAI Responses often finalizes args
++          // only via deltas; a bogus `{}` would wipe real tool parameters).
++          if (!(inputIsEmptyObject && accumulated.length > 0)) {
++            toolCall.function.arguments = JSON.stringify(event.input)
++          }
+         }
+         break
+       }

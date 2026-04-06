@@ -3,6 +3,7 @@ import {
   Braces,
   Camera,
   Check,
+  ChevronDown,
   Copy,
   CornerDownLeft,
   FileText,
@@ -42,6 +43,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -57,6 +65,7 @@ import {
 } from '@/lib/chat-mentions'
 import {
   isPersonalWorkspaceSessionId,
+  PERSONAL_WORKSPACE_SESSION_ID,
   USER_PROFILE_WORKSPACE_SESSION_ID,
 } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
@@ -320,6 +329,7 @@ export function ChatWorkbench({
     refreshConversations,
     refreshConversationLists,
     projectWorkspaces,
+    personalWorkspace,
     setActiveWorkspaceId,
     isTauriRuntime,
   } = useWorkspace()
@@ -1254,6 +1264,341 @@ export function ChatWorkbench({
     </button>
   )
 
+  const centeredEmptyComposer =
+    !isProfileSession && messages.length === 0 && !showArtifactPanel
+
+  const simpleChatsLabel = personalWorkspace?.name ?? 'Simple chats'
+  const lockedWorkspaceLabel = isPersonalSimpleChat
+    ? simpleChatsLabel
+    : (projectWorkspaces.find((w) => w.id === conversationMeta?.workspaceId)
+        ?.name ??
+      conversationMeta?.workspaceId ??
+      'Workspace')
+
+  const workspaceTargetRow =
+    conversationMeta && centeredEmptyComposer ? (
+      <div className="mb-4 flex w-full justify-start">
+        {isTauriRuntime &&
+        isPersonalSimpleChat &&
+        projectWorkspaces.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild disabled={moveBusy || generating}>
+              <button
+                type="button"
+                className={cn(
+                  'text-text-1 hover:text-text-2 inline-flex max-w-full items-center gap-1.5 rounded-md py-1 text-left text-sm font-medium',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                  'disabled:pointer-events-none disabled:opacity-50',
+                )}
+                aria-label="Workspace for this chat"
+                aria-haspopup="menu"
+              >
+                <span className="min-w-0 truncate">{lockedWorkspaceLabel}</span>
+                <ChevronDown
+                  className="text-text-2 size-4 shrink-0 opacity-90"
+                  aria-hidden
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-48 max-w-[min(100vw-2rem,24rem)]">
+              <DropdownMenuRadioGroup
+                value={conversationMeta.workspaceId}
+                onValueChange={(next) => {
+                  if (moveBusy || generating || next === conversationMeta.workspaceId)
+                    return
+                  void runMoveToWorkspace(next)
+                }}
+              >
+                <DropdownMenuRadioItem value={PERSONAL_WORKSPACE_SESSION_ID}>
+                  {simpleChatsLabel}
+                </DropdownMenuRadioItem>
+                {projectWorkspaces.map((w) => (
+                  <DropdownMenuRadioItem key={w.id} value={w.id}>
+                    {w.name}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div
+            className="text-text-1 inline-flex max-w-full items-center gap-1.5 py-1 text-sm font-medium"
+            aria-label="Workspace for this chat"
+          >
+            <span className="min-w-0 truncate">{lockedWorkspaceLabel}</span>
+            <ChevronDown
+              className="text-text-2 size-4 shrink-0 opacity-60"
+              aria-hidden
+            />
+          </div>
+        )}
+      </div>
+    ) : null
+
+  const contextBadgesSection = (
+    <>
+      {contextFiles.length > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {contextFiles.map((f) => (
+            <Badge
+              key={f.relativePath}
+              variant="secondary"
+              className="text-text-2 border-border max-w-full gap-1 pr-0.5 font-normal"
+              title={f.relativePath}
+            >
+              <FileText
+                className="text-text-3 size-3.5 shrink-0"
+                aria-hidden
+              />
+              <span className="max-w-[14rem] truncate">
+                {f.displayName?.trim() ||
+                  f.relativePath.split('/').pop() ||
+                  f.relativePath}
+              </span>
+              <button
+                type="button"
+                className="hover:bg-muted rounded-full p-0.5"
+                aria-label={`Remove file ${f.displayName?.trim() || f.relativePath}`}
+                onClick={() =>
+                  removeContextFileEntry(sessionKey, f.relativePath)
+                }
+              >
+                <X className="size-3 opacity-70" aria-hidden />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {contextConversations.length > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {contextConversations.map((c) => {
+            const label = c.title?.trim() || c.conversationId
+            return (
+              <Badge
+                key={c.conversationId}
+                variant="outline"
+                className="text-accent-700 border-accent-500/35 max-w-full gap-1 pr-0.5 font-normal dark:text-accent-500"
+                title={c.conversationId}
+              >
+                <MessageSquare
+                  className="text-accent-600 size-3.5 shrink-0 dark:text-accent-500"
+                  aria-hidden
+                />
+                <span className="max-w-[14rem] truncate">Chat: {label}</span>
+                <button
+                  type="button"
+                  className="hover:bg-accent-500/10 rounded-full p-0.5"
+                  aria-label={`Remove chat from context: ${label}`}
+                  onClick={() =>
+                    removeContextConversationEntry(
+                      sessionKey,
+                      c.conversationId,
+                    )
+                  }
+                >
+                  <X className="size-3 opacity-70" aria-hidden />
+                </button>
+              </Badge>
+            )
+          })}
+        </div>
+      ) : null}
+    </>
+  )
+
+  const composerCardSection = (
+    <div
+      className={cn(
+        'bg-background border-border/40 focus-within:ring-ring/20 relative rounded-[20px] border shadow-sm focus-within:ring-2 transition-all duration-200',
+        fileDragHighlight &&
+          'ring-accent-500/50 border-accent-500/60 ring-2',
+      )}
+    >
+      {showMentionList ? (
+        <div
+          className="border-border bg-popover text-popover-foreground absolute bottom-full left-2 right-2 z-20 mb-1 max-h-52 overflow-hidden rounded-lg border shadow-md"
+          role="listbox"
+          aria-label="Attach workspace file or conversation"
+        >
+          <ScrollArea className="max-h-52">
+            <ul className="py-1">
+              {mentionOptions.length === 0 ? (
+                <li className="text-text-3 px-3 py-2 text-xs">
+                  No matching files or chats
+                </li>
+              ) : (
+                mentionOptions.map((opt, idx) => {
+                  const showFilesHeader =
+                    opt.kind === 'file' &&
+                    (idx === 0 || mentionOptions[idx - 1]?.kind !== 'file')
+                  const showChatsHeader =
+                    opt.kind === 'chat' &&
+                    (idx === 0 || mentionOptions[idx - 1]?.kind === 'file')
+                  const rowKey =
+                    opt.kind === 'file'
+                      ? `f:${opt.file.relativePath}`
+                      : `c:${opt.conversation.id}`
+                  return (
+                    <li key={rowKey} className="list-none">
+                      {showFilesHeader ? (
+                        <div className="text-text-3 px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide uppercase">
+                          Files
+                        </div>
+                      ) : null}
+                      {showChatsHeader ? (
+                        <div className="text-accent-600 px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide uppercase dark:text-accent-500">
+                          Chats
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={idx === mentionHighlight}
+                        className={cn(
+                          'hover:bg-muted/80 flex w-full items-start gap-2 px-3 py-2 text-left text-xs',
+                          idx === mentionHighlight && 'bg-muted',
+                        )}
+                        onMouseEnter={() => setMentionHighlight(idx)}
+                        onMouseDown={(ev) => {
+                          ev.preventDefault()
+                          pickMention(opt)
+                        }}
+                      >
+                        {opt.kind === 'file' ? (
+                          <FileText
+                            className="text-text-3 mt-0.5 size-3.5 shrink-0"
+                            aria-hidden
+                          />
+                        ) : (
+                          <MessageSquare
+                            className="text-accent-600 mt-0.5 size-3.5 shrink-0 dark:text-accent-500"
+                            aria-hidden
+                          />
+                        )}
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-text-1 font-medium">
+                            {opt.kind === 'file'
+                              ? opt.file.name
+                              : opt.conversation.title}
+                          </span>
+                          <span className="text-text-3 truncate">
+                            {opt.kind === 'file'
+                              ? opt.file.relativePath
+                              : `Conversation · ${opt.conversation.id.slice(0, 8)}…`}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })
+              )}
+            </ul>
+          </ScrollArea>
+        </div>
+      ) : null}
+      <Textarea
+        ref={textareaRef}
+        placeholder="Message Braian…"
+        value={draft}
+        onChange={(e) => {
+          setChatDraft(sessionKey, e.target.value)
+          setCaretPos(e.target.selectionStart)
+        }}
+        onKeyDown={onKeyDown}
+        onKeyUp={syncCaretFromTextarea}
+        onClick={syncCaretFromTextarea}
+        onSelect={syncCaretFromTextarea}
+        className="min-h-[120px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-sm shadow-none focus-visible:ring-0"
+      />
+      <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between">
+        <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
+          {isTauriRuntime &&
+          activeWorkspace?.rootPath &&
+          !isPersonalSimpleChat &&
+          !isProfileSession ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-text-3 hover:text-text-2 hover:bg-muted/50 size-8 shrink-0 rounded-full transition-colors"
+              onClick={() => void onAttachFiles()}
+              aria-label="Attach files"
+              title="Attach files to this chat"
+            >
+              <Paperclip className="size-4" aria-hidden />
+            </Button>
+          ) : null}
+          {reasoningModeGroup}
+          {queuedCount > 0 ? (
+            <p className="text-accent-600 font-medium text-xs">
+              {queuedCount} message{queuedCount === 1 ? '' : 's'} queued
+            </p>
+          ) : null}
+        </div>
+        <div className="pointer-events-auto pr-1">
+          <Button
+            type="button"
+            size="icon"
+            className={cn(
+              'size-8 shrink-0 rounded-full transition-all duration-200',
+              draft.trim()
+                ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                : 'bg-muted text-text-3 opacity-50',
+            )}
+            onClick={sendMessage}
+            disabled={!draft.trim()}
+            aria-label="Send message"
+            title="Send message"
+          >
+            <CornerDownLeft className="size-4" aria-hidden />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const centeredTopHints =
+    centeredEmptyComposer &&
+    (memoryUpdateHint ||
+      snapshotHint ||
+      desktopToolsUnavailable ||
+      contextFiles.length > 0 ||
+      contextConversations.length > 0) ? (
+      <div className="border-border/60 bg-background/80 shrink-0 border-b px-4 py-2 md:px-6">
+        <div className="mx-auto flex max-w-5xl flex-col gap-2">
+          {memoryUpdateHint ? (
+            <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
+          ) : null}
+          {snapshotHint ? (
+            <p className="text-text-3 text-xs">{snapshotHint}</p>
+          ) : null}
+          {desktopToolsUnavailable ? (
+            <p className="text-text-3 text-xs">
+              Workspace scripts and file tools need the desktop app.
+            </p>
+          ) : null}
+          {contextFiles.length > 0 ? (
+            <p
+              className="text-text-3 text-xs"
+              title="Attached file contents are sent to your configured AI provider when you send a message."
+            >
+              {contextFiles.length} file
+              {contextFiles.length === 1 ? '' : 's'} in context
+            </p>
+          ) : null}
+          {contextConversations.length > 0 ? (
+            <p
+              className="text-text-3 text-xs"
+              title="Attached chat transcripts are sent to your configured AI provider when you send a message."
+            >
+              {contextConversations.length} other chat
+              {contextConversations.length === 1 ? '' : 's'} in context
+            </p>
+          ) : null}
+        </div>
+      </div>
+    ) : null
+
   const chatColumn = (
     <div
       className={cn(
@@ -1271,10 +1616,43 @@ export function ChatWorkbench({
           </div>
         </div>
       ) : null}
-      <ScrollArea
-        className="min-h-0 flex-1"
-        viewportRef={chatScrollViewportRef}
-      >
+      {centeredEmptyComposer ? (
+        <>
+          {centeredTopHints}
+          <div
+            ref={composerDropZoneRef}
+            className="flex min-h-0 flex-1 flex-col justify-center px-4 py-6 md:px-6 md:py-10"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'copy'
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (isProfileSession) return
+              const dropped = Array.from(e.dataTransfer.files)
+              const paths: string[] = []
+              for (const f of dropped) {
+                const path = (f as File & { path?: string }).path
+                if (typeof path === 'string' && path.length > 0) {
+                  paths.push(path)
+                }
+              }
+              if (paths.length > 0) void onNativeFileDrop(paths)
+            }}
+          >
+            <div className="mx-auto w-full max-w-5xl">
+              {workspaceTargetRow}
+              {contextBadgesSection}
+              {composerCardSection}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <ScrollArea
+            className="min-h-0 flex-1"
+            viewportRef={chatScrollViewportRef}
+          >
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 md:px-6">
           <div className="flex flex-col gap-2">
             {memoryUpdateHint ? (
@@ -1421,245 +1799,34 @@ export function ChatWorkbench({
           )}
         </div>
       </ScrollArea>
-      <div
-        ref={composerDropZoneRef}
-        className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t py-3 backdrop-blur-md md:py-4"
-        onDragOver={(e) => {
-          e.preventDefault()
-          e.dataTransfer.dropEffect = 'copy'
-        }}
-        onDrop={(e) => {
-          e.preventDefault()
-          if (isProfileSession) return
-          const dropped = Array.from(e.dataTransfer.files)
-          const paths: string[] = []
-          for (const f of dropped) {
-            const path = (f as File & { path?: string }).path
-            if (typeof path === 'string' && path.length > 0) {
-              paths.push(path)
-            }
-          }
-          if (paths.length > 0) void onNativeFileDrop(paths)
-        }}
-      >
-        <div className="mx-auto w-full max-w-5xl px-4 md:px-6">
-        {contextFiles.length > 0 ? (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {contextFiles.map((f) => (
-              <Badge
-                key={f.relativePath}
-                variant="secondary"
-                className="text-text-2 border-border max-w-full gap-1 pr-0.5 font-normal"
-                title={f.relativePath}
-              >
-                <FileText
-                  className="text-text-3 size-3.5 shrink-0"
-                  aria-hidden
-                />
-                <span className="max-w-[14rem] truncate">
-                  {f.displayName?.trim() ||
-                    f.relativePath.split('/').pop() ||
-                    f.relativePath}
-                </span>
-                <button
-                  type="button"
-                  className="hover:bg-muted rounded-full p-0.5"
-                  aria-label={`Remove file ${f.displayName?.trim() || f.relativePath}`}
-                  onClick={() =>
-                    removeContextFileEntry(sessionKey, f.relativePath)
-                  }
-                >
-                  <X className="size-3 opacity-70" aria-hidden />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        ) : null}
-        {contextConversations.length > 0 ? (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {contextConversations.map((c) => {
-              const label = c.title?.trim() || c.conversationId
-              return (
-                <Badge
-                  key={c.conversationId}
-                  variant="outline"
-                  className="text-accent-700 border-accent-500/35 max-w-full gap-1 pr-0.5 font-normal dark:text-accent-500"
-                  title={c.conversationId}
-                >
-                  <MessageSquare
-                    className="text-accent-600 size-3.5 shrink-0 dark:text-accent-500"
-                    aria-hidden
-                  />
-                  <span className="max-w-[14rem] truncate">Chat: {label}</span>
-                  <button
-                    type="button"
-                    className="hover:bg-accent-500/10 rounded-full p-0.5"
-                    aria-label={`Remove chat from context: ${label}`}
-                    onClick={() =>
-                      removeContextConversationEntry(
-                        sessionKey,
-                        c.conversationId,
-                      )
-                    }
-                  >
-                    <X className="size-3 opacity-70" aria-hidden />
-                  </button>
-                </Badge>
-              )
-            })}
-          </div>
-        ) : null}
-        <div
-          className={cn(
-            'bg-background border-border/40 focus-within:ring-ring/20 relative rounded-[20px] border shadow-sm focus-within:ring-2 transition-all duration-200',
-            fileDragHighlight &&
-              'ring-accent-500/50 border-accent-500/60 ring-2',
-          )}
-        >
-          {showMentionList ? (
-            <div
-              className="border-border bg-popover text-popover-foreground absolute bottom-full left-2 right-2 z-20 mb-1 max-h-52 overflow-hidden rounded-lg border shadow-md"
-              role="listbox"
-              aria-label="Attach workspace file or conversation"
-            >
-              <ScrollArea className="max-h-52">
-                <ul className="py-1">
-                  {mentionOptions.length === 0 ? (
-                    <li className="text-text-3 px-3 py-2 text-xs">
-                      No matching files or chats
-                    </li>
-                  ) : (
-                    mentionOptions.map((opt, idx) => {
-                      const showFilesHeader =
-                        opt.kind === 'file' &&
-                        (idx === 0 || mentionOptions[idx - 1]?.kind !== 'file')
-                      const showChatsHeader =
-                        opt.kind === 'chat' &&
-                        (idx === 0 ||
-                          mentionOptions[idx - 1]?.kind === 'file')
-                      const rowKey =
-                        opt.kind === 'file'
-                          ? `f:${opt.file.relativePath}`
-                          : `c:${opt.conversation.id}`
-                      return (
-                        <li key={rowKey} className="list-none">
-                          {showFilesHeader ? (
-                            <div className="text-text-3 px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide uppercase">
-                              Files
-                            </div>
-                          ) : null}
-                          {showChatsHeader ? (
-                            <div className="text-accent-600 px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide uppercase dark:text-accent-500">
-                              Chats
-                            </div>
-                          ) : null}
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={idx === mentionHighlight}
-                            className={cn(
-                              'hover:bg-muted/80 flex w-full items-start gap-2 px-3 py-2 text-left text-xs',
-                              idx === mentionHighlight && 'bg-muted',
-                            )}
-                            onMouseEnter={() => setMentionHighlight(idx)}
-                            onMouseDown={(ev) => {
-                              ev.preventDefault()
-                              pickMention(opt)
-                            }}
-                          >
-                            {opt.kind === 'file' ? (
-                              <FileText
-                                className="text-text-3 mt-0.5 size-3.5 shrink-0"
-                                aria-hidden
-                              />
-                            ) : (
-                              <MessageSquare
-                                className="text-accent-600 mt-0.5 size-3.5 shrink-0 dark:text-accent-500"
-                                aria-hidden
-                              />
-                            )}
-                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <span className="text-text-1 font-medium">
-                                {opt.kind === 'file'
-                                  ? opt.file.name
-                                  : opt.conversation.title}
-                              </span>
-                              <span className="text-text-3 truncate">
-                                {opt.kind === 'file'
-                                  ? opt.file.relativePath
-                                  : `Conversation · ${opt.conversation.id.slice(0, 8)}…`}
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      )
-                    })
-                  )}
-                </ul>
-              </ScrollArea>
-            </div>
-          ) : null}
-          <Textarea
-            ref={textareaRef}
-            placeholder="Message Braian…"
-            value={draft}
-            onChange={(e) => {
-              setChatDraft(sessionKey, e.target.value)
-              setCaretPos(e.target.selectionStart)
+          <div
+            ref={composerDropZoneRef}
+            className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t py-3 backdrop-blur-md md:py-4"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'copy'
             }}
-            onKeyDown={onKeyDown}
-            onKeyUp={syncCaretFromTextarea}
-            onClick={syncCaretFromTextarea}
-            onSelect={syncCaretFromTextarea}
-            className="min-h-[120px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-sm shadow-none focus-visible:ring-0"
-          />
-          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between">
-            <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
-              {isTauriRuntime &&
-              activeWorkspace?.rootPath &&
-              !isPersonalSimpleChat &&
-              !isProfileSession ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-text-3 hover:text-text-2 hover:bg-muted/50 size-8 shrink-0 rounded-full transition-colors"
-                  onClick={() => void onAttachFiles()}
-                  aria-label="Attach files"
-                  title="Attach files to this chat"
-                >
-                  <Paperclip className="size-4" aria-hidden />
-                </Button>
-              ) : null}
-              {reasoningModeGroup}
-              {queuedCount > 0 ? (
-                <p className="text-accent-600 font-medium text-xs">
-                  {queuedCount} message{queuedCount === 1 ? '' : 's'} queued
-                </p>
-              ) : null}
-            </div>
-            <div className="pointer-events-auto pr-1">
-              <Button
-                type="button"
-                size="icon"
-                className={cn(
-                  "size-8 shrink-0 rounded-full transition-all duration-200",
-                  draft.trim() 
-                    ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90" 
-                    : "bg-muted text-text-3 opacity-50"
-                )}
-                onClick={sendMessage}
-                disabled={!draft.trim()}
-                aria-label="Send message"
-                title="Send message"
-              >
-                <CornerDownLeft className="size-4" aria-hidden />
-              </Button>
+            onDrop={(e) => {
+              e.preventDefault()
+              if (isProfileSession) return
+              const dropped = Array.from(e.dataTransfer.files)
+              const paths: string[] = []
+              for (const f of dropped) {
+                const path = (f as File & { path?: string }).path
+                if (typeof path === 'string' && path.length > 0) {
+                  paths.push(path)
+                }
+              }
+              if (paths.length > 0) void onNativeFileDrop(paths)
+            }}
+          >
+            <div className="mx-auto w-full max-w-5xl px-4 md:px-6">
+              {contextBadgesSection}
+              {composerCardSection}
             </div>
           </div>
-        </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 

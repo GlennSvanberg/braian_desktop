@@ -4,6 +4,10 @@ import {
   EMPTY_MCP_CONFIG,
   type WorkspaceMcpConfigDocument,
 } from '@/lib/mcp-config-types'
+import {
+  cancelWorkspaceMcpIdleDisconnect,
+  workspaceMcpSessionsDisconnect,
+} from '@/lib/mcp-runtime-api'
 import { isTauri } from '@/lib/tauri-env'
 
 /** Payload matching Rust `WorkspaceMcpConfigDto` (camelCase). */
@@ -63,6 +67,8 @@ export async function workspaceMcpConfigSet(
     workspaceId,
     config: documentToDto(config),
   })
+  cancelWorkspaceMcpIdleDisconnect(workspaceId)
+  await workspaceMcpSessionsDisconnect(workspaceId)
 }
 
 export type McpToolProbeSummary = {

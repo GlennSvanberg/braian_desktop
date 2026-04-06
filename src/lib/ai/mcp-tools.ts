@@ -12,8 +12,10 @@ import type { ChatTurnContext } from './types'
 
 import type { JSONSchema, Tool } from '@tanstack/ai'
 
-const MCP_TOOL_CATALOG_TTL_MS = 15_000
-const MCP_TOOL_LIST_TIMEOUT_MS = 4_000
+/** Reuse catalog across turns while sessions may still be warm (see idle disconnect in mcp-runtime-api). */
+const MCP_TOOL_CATALOG_TTL_MS = 60_000
+/** Must cover cold `npx`/stdio startup; Rust uses ~25s per RPC (`MCP_RPC_DEADLINE`). */
+const MCP_TOOL_LIST_TIMEOUT_MS = 30_000
 
 type McpCatalog = Awaited<ReturnType<typeof workspaceMcpListTools>>
 
@@ -130,6 +132,127 @@ function stripPropertyNamesFromJsonSchema(node: unknown): unknown {
 }
 
 /**
+ * OpenAI function parameters reject object schemas that declare `properties` but omit
+ * `additionalProperties: false` (including under `items`, `oneOf`, etc.). MCP servers
+ * often emit draft/loose JSON Schema; normalize recursively before sending tools.
+ */
+function ensureAdditionalPropertiesFalseForOpenAi(node: unknown): unknown {
+  if (node === null || typeof node !== 'object') return node
+  if (Array.isArray(node)) {
+    return node.map(ensureAdditionalPropertiesFalseForOpenAi)
+  }
+
+  const o = node as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+
+  for (const [key, val] of Object.entries(o)) {
+    switch (key) {
+      case 'properties':
+      case 'patternProperties':
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          const mapped: Record<string, unknown> = {}
+          for (const [pk, pv] of Object.entries(val)) {
+            mapped[pk] = ensureAdditionalPropertiesFalseForOpenAi(pv)
+          }
+          out[key] = mapped
+        } else {
+          out[key] = val
+        }
+        break
+      case 'items':
+        if (Array.isArray(val)) {
+          out[key] = val.map(ensureAdditionalPropertiesFalseForOpenAi)
+        } else {
+          out[key] = ensureAdditionalPropertiesFalseForOpenAi(val)
+        }
+        break
+      case 'prefixItems':
+        out[key] = Array.isArray(val)
+          ? val.map(ensureAdditionalPropertiesFalseForOpenAi)
+          : val
+        break
+      case 'additionalProperties':
+        if (typeof val === 'boolean') {
+          out[key] = val
+        } else {
+          out[key] = ensureAdditionalPropertiesFalseForOpenAi(val)
+        }
+        break
+      case 'oneOf':
+      case 'anyOf':
+      case 'allOf':
+        out[key] = Array.isArray(val)
+          ? val.map(ensureAdditionalPropertiesFalseForOpenAi)
+          : val
+        break
+      case 'not':
+      case 'if':
+      case 'then':
+      case 'else':
+        out[key] = ensureAdditionalPropertiesFalseForOpenAi(val)
+        break
+      case 'definitions':
+      case '$defs':
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          const mapped: Record<string, unknown> = {}
+          for (const [dk, dv] of Object.entries(val)) {
+            mapped[dk] = ensureAdditionalPropertiesFalseForOpenAi(dv)
+          }
+          out[key] = mapped
+        } else {
+          out[key] = val
+        }
+        break
+      default:
+        out[key] = val
+    }
+  }
+
+  const props = out.properties
+  const hasProperties =
+    props != null && typeof props === 'object' && !Array.isArray(props)
+
+  // OpenAI requires `additionalProperties: false` on every object that declares
+  // `properties`. Do not gate on `type === 'object'` only — MCP / JSON Schema
+  // often uses `type: ['object', 'null']` (or omits `type`), which would skip
+  // the flag and reproduce: "context=('properties', 'rows', 'items')".
+  if (hasProperties) {
+    out.additionalProperties = false
+    if (out.type === undefined) {
+      out.type = 'object'
+    }
+  } else {
+    const t = out.type
+    const objectish =
+      t === 'object' ||
+      (Array.isArray(t) && (t as unknown[]).includes('object'))
+    if (objectish && !('additionalProperties' in out)) {
+      out.additionalProperties = false
+    }
+  }
+
+  return out
+}
+
+/**
+ * Deep-clone and normalize MCP `inputSchema` JSON when forwarding to providers
+ * (e.g. Anthropic). OpenAI / OpenAI-compatible: use `useLooseMcpInputSchemaForOpenAi`
+ * in `buildMcpTools` instead of forwarding.
+ */
+export function normalizeMcpToolInputJsonSchemaForOpenAi(raw: unknown): unknown {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return raw
+  }
+  try {
+    const cloned = JSON.parse(JSON.stringify(raw))
+    const stripped = stripPropertyNamesFromJsonSchema(cloned)
+    return ensureAdditionalPropertiesFalseForOpenAi(stripped)
+  } catch {
+    return raw
+  }
+}
+
+/**
  * When present, forward the MCP tool's JSON Schema to the LLM so `required` and property
  * types are visible (avoids empty `{}` tool calls). Falls back to passthrough when unusable.
  */
@@ -137,13 +260,7 @@ function mcpInputSchemaForProvider(raw: unknown): JSONSchema | undefined {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
     return undefined
   }
-  let cloned: unknown
-  try {
-    cloned = JSON.parse(JSON.stringify(raw))
-  } catch {
-    return undefined
-  }
-  const stripped = stripPropertyNamesFromJsonSchema(cloned)
+  const stripped = normalizeMcpToolInputJsonSchemaForOpenAi(raw)
   if (
     stripped === null ||
     typeof stripped !== 'object' ||
@@ -190,11 +307,22 @@ export type BuildMcpToolsResult = {
   serverNames: string[]
 }
 
+export type BuildMcpToolsOptions = {
+  /**
+   * OpenAI tool `strict` mode + TanStack’s schema pass cannot represent many
+   * real-world MCP JSON Schemas (nested `rows.items`, nullable unions, etc.).
+   * When true, register MCP tools with a loose object schema and put a truncated
+   * JSON Schema excerpt in the description so the model still sees arg shape.
+   */
+  useLooseMcpInputSchemaForOpenAi?: boolean
+}
+
 /**
  * Dynamic MCP tools from workspace Connections (stdio + remote), desktop only.
  */
 export async function buildMcpTools(
   context: ChatTurnContext | undefined,
+  options?: BuildMcpToolsOptions,
 ): Promise<BuildMcpToolsResult> {
   const warnings: string[] = []
   if (
@@ -220,6 +348,7 @@ export async function buildMcpTools(
 
   const usedNames = new Set<string>()
   const tools: Tool[] = []
+  const useLooseForOpenAi = options?.useLooseMcpInputSchemaForOpenAi === true
 
   for (const server of catalog.servers) {
     if (server.error?.trim()) {
@@ -241,10 +370,12 @@ export async function buildMcpTools(
           ? (t as { description: string }).description
           : ''
       const schemaRaw = (t as { inputSchema?: unknown }).inputSchema
-      const providerSchema = mcpInputSchemaForProvider(schemaRaw)
+      const providerSchema = useLooseForOpenAi
+        ? undefined
+        : mcpInputSchemaForProvider(schemaRaw)
       const schemaHint =
-        providerSchema == null && schemaRaw != null
-          ? ` inputSchema (not forwarded; excerpt): ${JSON.stringify(schemaRaw).slice(0, 900)}`
+        schemaRaw != null && (providerSchema == null || useLooseForOpenAi)
+          ? ` inputSchema (excerpt — call with a JSON object matching this shape): ${JSON.stringify(schemaRaw).slice(0, 900)}`
           : ''
 
       let toolSlug = slugPart(name, 'tool')

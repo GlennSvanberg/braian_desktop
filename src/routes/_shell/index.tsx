@@ -5,5 +5,7 @@ export const Route = createFileRoute('/_shell/')({
 })
 
 function ShellIndexRedirect() {
-  return <Navigate to="/dashboard" replace />
+  return (
+    <Navigate to="/dashboard" search={{ tab: 'overview' }} replace />
+  )
 }

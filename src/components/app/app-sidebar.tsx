@@ -27,6 +27,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -67,6 +68,7 @@ import {
 
 import type { WorkspaceConversation } from './workspace-context'
 import { useWorkspace } from './workspace-context'
+import { parseDashboardTabFromSearchStr } from './workspace-dashboard'
 
 const VISIBLE_WORKSPACES_DEFAULT = 8
 const VISIBLE_CHATS_DEFAULT = 6
@@ -323,6 +325,7 @@ function WorkspaceConversationGroup({
   workspace,
   conversations,
   pathname,
+  routerSearchStr,
   activeWorkspaceId,
   expandedChats,
   onExpandChats,
@@ -338,6 +341,8 @@ function WorkspaceConversationGroup({
   workspace: WorkspaceDto
   conversations: WorkspaceConversation[]
   pathname: string
+  /** Current `location.searchStr` (used with `/dashboard` for tab-aware UI). */
+  routerSearchStr: string
   activeWorkspaceId: string
   expandedChats: boolean
   onExpandChats: () => void
@@ -364,6 +369,15 @@ function WorkspaceConversationGroup({
     ? sortedConversations
     : sortedConversations.slice(0, VISIBLE_CHATS_DEFAULT)
   const hasMoreChats = sortedConversations.length > VISIBLE_CHATS_DEFAULT
+
+  const dashboardTab = pathname.startsWith('/dashboard')
+    ? parseDashboardTabFromSearchStr(routerSearchStr)
+    : null
+  const workspaceSettingsGearActive =
+    pathname === `/workspace/${workspace.id}/settings` ||
+    (pathname.startsWith('/dashboard') &&
+      dashboardTab === 'workspace-settings' &&
+      workspace.id === activeWorkspaceId)
 
   const onNewInWorkspace = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -451,15 +465,14 @@ function WorkspaceConversationGroup({
               e.stopPropagation()
               setActiveWorkspaceId(workspace.id)
               navigate({
-                to: '/workspace/$workspaceId/settings',
-                params: { workspaceId: workspace.id },
+                to: '/dashboard',
+                search: { tab: 'workspace-settings' },
               })
             }}
           >
             <Settings
               className={cn(
-                pathname === `/workspace/${workspace.id}/settings` &&
-                  'text-sidebar-accent-foreground',
+                workspaceSettingsGearActive && 'text-sidebar-accent-foreground',
               )}
               aria-hidden
             />
@@ -538,6 +551,9 @@ export function AppSidebar() {
     isTauriRuntime,
   } = useWorkspace()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const routerSearchStr = useRouterState({
+    select: (s) => s.location.searchStr,
+  })
   const docsActive = pathname.startsWith('/docs')
   const userPageActive = pathname.startsWith('/user')
   const [renameOpen, setRenameOpen] = useState(false)
@@ -548,6 +564,9 @@ export function AppSidebar() {
   >(null)
   const [renameBusy, setRenameBusy] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deletePrompt, setDeletePrompt] = useState<WorkspaceConversation | null>(
+    null,
+  )
   const [showAllWorkspaces, setShowAllWorkspaces] = useState(false)
   const [expandedChatsByWs, setExpandedChatsByWs] = useState<
     Record<string, boolean>
@@ -593,11 +612,14 @@ export function AppSidebar() {
     })()
   }
 
-  const confirmDelete = (c: WorkspaceConversation) => {
-    const ok = window.confirm(
-      `Delete “${c.title}”? This cannot be undone.`,
-    )
-    if (!ok) return
+  const requestDeleteChat = (c: WorkspaceConversation) => {
+    setDeletePrompt(c)
+  }
+
+  const executeDeleteChat = () => {
+    const c = deletePrompt
+    if (!c) return
+    setDeletePrompt(null)
     setDeleteTargetId(c.id)
     void (async () => {
       try {
@@ -629,6 +651,7 @@ export function AppSidebar() {
           workspace={personalWorkspace}
           conversations={conversationsByWorkspace[personalWorkspace.id] ?? []}
           pathname={pathname}
+          routerSearchStr={routerSearchStr}
           activeWorkspaceId={activeWorkspaceId}
           expandedChats={expandedChatsByWs[personalWorkspace.id] ?? true}
           onExpandChats={() =>
@@ -638,7 +661,7 @@ export function AppSidebar() {
             }))
           }
           onRename={openRename}
-          onDelete={confirmDelete}
+          onDelete={requestDeleteChat}
           deleteTargetId={deleteTargetId}
           isTauriRuntime={isTauriRuntime}
           navigate={navigate}
@@ -660,6 +683,7 @@ export function AppSidebar() {
               workspace={ws}
               conversations={conversationsByWorkspace[ws.id] ?? []}
               pathname={pathname}
+              routerSearchStr={routerSearchStr}
               activeWorkspaceId={activeWorkspaceId}
               expandedChats={expandedChatsByWs[ws.id] ?? false}
               onExpandChats={() =>
@@ -669,7 +693,7 @@ export function AppSidebar() {
                 }))
               }
               onRename={openRename}
-              onDelete={confirmDelete}
+              onDelete={requestDeleteChat}
               deleteTargetId={deleteTargetId}
               isTauriRuntime={isTauriRuntime}
               navigate={navigate}
@@ -708,7 +732,7 @@ export function AppSidebar() {
               tooltip="Braian home"
               className="group-data-[collapsible=icon]:!size-11 group-data-[collapsible=icon]:!min-h-11 group-data-[collapsible=icon]:!min-w-11 group-data-[collapsible=icon]:!p-1.5"
             >
-              <Link to="/dashboard">
+              <Link to="/dashboard" search={{ tab: 'overview' }}>
                 <img
                   src="/braian-logo.png"
                   alt=""
@@ -757,7 +781,7 @@ export function AppSidebar() {
               isActive={userPageActive}
               tooltip="Your profile"
             >
-              <Link to="/user">
+              <Link to="/user" search={{ tab: 'profile' }}>
                 <UserRound />
                 <span>You</span>
               </Link>
@@ -829,6 +853,42 @@ export function AppSidebar() {
               ) : (
                 'Save'
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deletePrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletePrompt(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete chat?</DialogTitle>
+            <DialogDescription>
+              Delete{' '}
+              <span className="text-foreground font-medium">
+                “{deletePrompt?.title ?? ''}”
+              </span>
+              ? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeletePrompt(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={executeDeleteChat}
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

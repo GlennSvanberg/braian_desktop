@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -9,6 +10,118 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::workspace_files::safe_join_workspace;
+
+/// Extra directories prepended to `PATH` so `npx` / `node` / `npm` resolve when the desktop shell
+/// inherits a minimal PATH (common on Windows GUI launches).
+fn extra_path_prefixes_for_node_cli() -> Vec<PathBuf> {
+  let mut v: Vec<PathBuf> = Vec::new();
+
+  #[cfg(windows)]
+  {
+    v.push(PathBuf::from(r"C:\Program Files\nodejs"));
+    v.push(PathBuf::from(r"C:\Program Files (x86)\nodejs"));
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+      v.push(Path::new(&local).join("Programs").join("node"));
+    }
+    if let Ok(roam) = std::env::var("APPDATA") {
+      v.push(Path::new(&roam).join("npm"));
+    }
+    if let Ok(nvm_symlink) = std::env::var("NVM_SYMLINK") {
+      if !nvm_symlink.is_empty() {
+        v.push(PathBuf::from(nvm_symlink));
+      }
+    }
+    if let Ok(nvm_home) = std::env::var("NVM_HOME") {
+      if !nvm_home.is_empty() {
+        v.push(Path::new(&nvm_home).join("node"));
+      }
+    }
+  }
+
+  #[cfg(target_os = "macos")]
+  {
+    v.push(PathBuf::from("/opt/homebrew/bin"));
+    v.push(PathBuf::from("/usr/local/bin"));
+  }
+
+  #[cfg(all(unix, not(target_os = "macos")))]
+  {
+    v.push(PathBuf::from("/usr/local/bin"));
+  }
+
+  if let Ok(node_home) = std::env::var("NODE_HOME") {
+    if !node_home.is_empty() {
+      let p = PathBuf::from(&node_home);
+      v.push(p.join("bin"));
+      v.push(p);
+    }
+  }
+
+  if let Ok(fnm_ms) = std::env::var("FNM_MULTISHELL_PATH") {
+    if !fnm_ms.is_empty() {
+      v.push(PathBuf::from(fnm_ms));
+    }
+  }
+
+  if let Ok(volta) = std::env::var("VOLTA_HOME") {
+    if !volta.is_empty() {
+      v.push(Path::new(&volta).join("bin"));
+    }
+  }
+
+  v
+}
+
+fn prepend_existing_dirs_to_path(base: &str) -> String {
+  #[cfg(windows)]
+  let sep = ';';
+  #[cfg(not(windows))]
+  let sep = ':';
+
+  let mut seen = std::collections::HashSet::<String>::new();
+  let mut parts: Vec<String> = Vec::new();
+
+  for dir in extra_path_prefixes_for_node_cli() {
+    if !dir.is_dir() {
+      continue;
+    }
+    let Some(s) = dir.to_str().map(|t| t.trim_end_matches(['/', '\\'])) else {
+      continue;
+    };
+    if s.is_empty() {
+      continue;
+    }
+    let key = s.to_lowercase();
+    #[cfg(windows)]
+    let key = key.replace('/', "\\");
+    if !seen.insert(key) {
+      continue;
+    }
+    parts.push(s.to_string());
+  }
+
+  if parts.is_empty() {
+    return base.to_string();
+  }
+  let prefix = parts.join(&sep.to_string());
+  if base.trim().is_empty() {
+    prefix
+  } else {
+    format!("{prefix}{sep}{base}")
+  }
+}
+
+fn apply_mcp_stdio_path(entry: &serde_json::Map<String, Value>, cmd: &mut Command) {
+  let parent_path = std::env::var("PATH").unwrap_or_default();
+  let base_path = entry
+    .get("env")
+    .and_then(|e| e.as_object())
+    .and_then(|m| m.get("PATH"))
+    .and_then(|v| v.as_str())
+    .unwrap_or(&parent_path);
+  let augmented = prepend_existing_dirs_to_path(base_path);
+  cmd.env("PATH", augmented);
+}
 
 pub(crate) const MCP_RPC_DEADLINE: Duration = Duration::from_secs(25);
 pub(crate) const MCP_STDERR_CAP: usize = 12_000;
@@ -72,8 +185,13 @@ pub(crate) fn spawn_stdio_server(
   cmd.stdout(Stdio::piped());
   cmd.stderr(Stdio::piped());
 
+  apply_mcp_stdio_path(entry, &mut cmd);
+
   if let Some(env_obj) = entry.get("env").and_then(|e| e.as_object()) {
     for (k, v) in env_obj {
+      if k == "PATH" {
+        continue;
+      }
       if let Some(s) = v.as_str() {
         cmd.env(k, s);
       }

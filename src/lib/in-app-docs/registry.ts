@@ -55,7 +55,7 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'dashboard',
     title: 'Workspace dashboard',
     description:
-      'Dashboard route: Overview (hub), published Apps iframe, App settings; Vite project under .braian/webapp.',
+      'Dashboard route: Dashboard (hub), Apps, App settings, Workspace settings; Vite project under .braian/webapp.',
     body: dashboardMd,
   },
   {

@@ -25,7 +25,9 @@ function NotFoundPage() {
         </p>
       </div>
       <Button asChild>
-        <Link to="/dashboard">Return to dashboard</Link>
+        <Link to="/dashboard" search={{ tab: 'overview' }}>
+          Return to dashboard
+        </Link>
       </Button>
     </div>
   )

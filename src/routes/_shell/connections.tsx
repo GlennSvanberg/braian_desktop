@@ -18,12 +18,16 @@ function ConnectionsRedirect() {
     if (loading) return
     if (activeWorkspaceId) {
       void navigate({
-        to: '/workspace/$workspaceId/settings',
-        params: { workspaceId: activeWorkspaceId },
+        to: '/dashboard',
+        search: { tab: 'workspace-settings' },
         replace: true,
       })
     } else {
-      void navigate({ to: '/dashboard', replace: true })
+      void navigate({
+        to: '/dashboard',
+        search: { tab: 'overview' },
+        replace: true,
+      })
     }
   }, [loading, activeWorkspaceId, navigate])
 

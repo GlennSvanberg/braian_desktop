@@ -1,20 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { WorkspaceDashboard } from '@/components/app/workspace-dashboard'
-import type { DashboardTab } from '@/components/app/workspace-dashboard'
+import {
+  parseDashboardTab,
+  WorkspaceDashboard,
+  type DashboardTab,
+} from '@/components/app/workspace-dashboard'
 import { WorkspaceFolderManagementPanel } from '@/components/app/workspace-folder-management-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
 
 type DashboardSearch = {
   tab: DashboardTab
-}
-
-function parseDashboardTab(raw: Record<string, unknown>): DashboardTab {
-  const t = raw.tab
-  if (t === 'apps' || t === 'app-settings' || t === 'overview') {
-    return t
-  }
-  return 'overview'
 }
 
 export const Route = createFileRoute('/_shell/dashboard')({

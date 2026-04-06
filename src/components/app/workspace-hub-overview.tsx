@@ -3,13 +3,11 @@ import {
   ArrowRight,
   Calculator,
   FileText,
-  LayoutDashboard,
   MessageSquare,
   Sparkles,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { WorkspaceFolderManagementPanel } from '@/components/app/workspace-folder-management-panel'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
@@ -234,17 +232,6 @@ export function WorkspaceHubOverview({
                 <Button type="button" variant="default" size="sm" asChild>
                   <Link to="/chat/new">New agent</Link>
                 </Button>
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <Link to="/dashboard" search={{ tab: 'apps' }}>
-                    <LayoutDashboard className="size-3.5" aria-hidden />
-                    Apps
-                  </Link>
-                </Button>
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <Link to="/workspace/$workspaceId/settings" params={{ workspaceId }}>
-                    Workspace settings
-                  </Link>
-                </Button>
               </div>
             </div>
           </section>
@@ -444,7 +431,7 @@ export function WorkspaceHubOverview({
   if (!snapshot && isTauriRuntime) {
     return (
       <div className="text-text-3 flex flex-1 items-center justify-center p-8 text-sm">
-        Loading overview…
+        Loading dashboard…
       </div>
     )
   }
@@ -453,7 +440,6 @@ export function WorkspaceHubOverview({
     <ScrollArea className="min-h-0 flex-1">
       <div className="w-full min-w-0 px-4 pb-10 pt-1 md:px-6 md:pb-12">
         <div className="flex w-full min-w-0 flex-col gap-6">
-          <WorkspaceFolderManagementPanel workspaceId={workspaceId} />
           {welcomeSections.map((s) => (
             <div key={s.id} className="w-full min-w-0">
               {renderSection(s)}

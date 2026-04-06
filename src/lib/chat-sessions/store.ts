@@ -15,7 +15,10 @@ import { loadContextConversationsForModel } from '@/lib/context-conversations-fo
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
 import { getConversationById } from '@/lib/mock-workspace-data'
-import { workspaceMcpSessionsDisconnect } from '@/lib/mcp-runtime-api'
+import {
+  cancelWorkspaceMcpIdleDisconnect,
+  scheduleWorkspaceMcpIdleDisconnect,
+} from '@/lib/mcp-runtime-api'
 import { isTauri } from '@/lib/tauri-env'
 import {
   deriveAgentModeFromPersisted,
@@ -536,6 +539,13 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
     let firstChunkSeen = false
     try {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
+      if (
+        isTauri() &&
+        !isUserProfileSessionId(workspaceId) &&
+        !isNonWorkspaceScopedSessionId(workspaceId)
+      ) {
+        cancelWorkspaceMcpIdleDisconnect(workspaceId)
+      }
       const threadNow = getThread(sessionKey)
       const agentMode = threadNow.agentMode ?? 'document'
       const ap = threadNow.artifactPayload
@@ -801,7 +811,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           !isUserProfileSessionId(mcpWsId) &&
           !isNonWorkspaceScopedSessionId(mcpWsId)
         ) {
-          await workspaceMcpSessionsDisconnect(mcpWsId)
+          scheduleWorkspaceMcpIdleDisconnect(mcpWsId)
         }
       } catch (e) {
         console.error('[braian] MCP session cleanup', e)

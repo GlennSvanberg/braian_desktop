@@ -44,7 +44,7 @@ The **Connections** list can **check** each configured server:
 When a server is **on** in Braian (not in `braian.disabledMcpServers`), its MCP tools are offered to the model in **workspace chats** (desktop app only):
 
 - Tool names are namespaced as `mcp__<server>__<tool>` (safe slugged identifiers).
-- Each turn, the app calls **`tools/list`** on enabled servers (stdio and remote), builds TanStack tools, then tears down MCP sessions when the reply stream finishes so local processes are not left running.
+- Each turn, the app calls **`tools/list`** on enabled servers (stdio and remote) and builds TanStack tools. MCP sessions stay warm across turns for faster follow-ups; **~90 seconds** after the last chat turn completes, sessions disconnect so local helper processes are not left running indefinitely.
 - If one server fails listing, other servers still work; you may see a short warning in the turn’s settings warnings.
 - **Remote** servers use the same JSON-RPC POST session as the status check; very custom gateways may need a URL that speaks MCP over HTTP as above.
 

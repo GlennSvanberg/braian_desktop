@@ -1,0 +1,71 @@
+diff --git a/node_modules/@tanstack/ai-openai/dist/esm/adapters/text.js b/node_modules/@tanstack/ai-openai/dist/esm/adapters/text.js
+index ae00bb3..c997dae 100644
+--- a/node_modules/@tanstack/ai-openai/dist/esm/adapters/text.js
++++ b/node_modules/@tanstack/ai-openai/dist/esm/adapters/text.js
+@@ -352,11 +352,14 @@ class OpenAITextAdapter extends BaseTextAdapter {
+           const { item_id } = chunk;
+           const metadata = toolCallMetadata.get(item_id);
+           const name = metadata?.name || "";
+-          let parsedInput = {};
+-          try {
+-            parsedInput = chunk.arguments ? JSON.parse(chunk.arguments) : {};
+-          } catch {
+-            parsedInput = {};
++          let parsedInput = void 0;
++          const rawArgs = chunk.arguments;
++          if (rawArgs != null && String(rawArgs).trim()) {
++            try {
++              parsedInput = JSON.parse(String(rawArgs).trim());
++            } catch {
++              parsedInput = void 0;
++            }
+           }
+           yield {
+             type: "TOOL_CALL_END",
+@@ -364,7 +367,7 @@ class OpenAITextAdapter extends BaseTextAdapter {
+             toolName: name,
+             model: model || options.model,
+             timestamp,
+-            input: parsedInput
++            ...parsedInput !== void 0 ? { input: parsedInput } : {}
+           };
+         }
+         if (chunk.type === "response.completed") {
+diff --git a/node_modules/@tanstack/ai-openai/src/adapters/text.ts b/node_modules/@tanstack/ai-openai/src/adapters/text.ts
+index 1747ce4..773f12e 100644
+--- a/node_modules/@tanstack/ai-openai/src/adapters/text.ts
++++ b/node_modules/@tanstack/ai-openai/src/adapters/text.ts
+@@ -563,12 +563,18 @@ export class OpenAITextAdapter<
+           const metadata = toolCallMetadata.get(item_id)
+           const name = metadata?.name || ''
+ 
+-          // Parse arguments
+-          let parsedInput: unknown = {}
+-          try {
+-            parsedInput = chunk.arguments ? JSON.parse(chunk.arguments) : {}
+-          } catch {
+-            parsedInput = {}
++          // Only attach `input` when the done event carries a non-empty JSON payload.
++          // Otherwise we would emit `input: {}` and TanStack's ToolCallManager would
++          // overwrite argument deltas accumulated from `function_call_arguments.delta`
++          // with an empty object — MCP/tool calls then run with `{}`.
++          let parsedInput: unknown | undefined
++          const rawArgs = chunk.arguments
++          if (rawArgs != null && String(rawArgs).trim()) {
++            try {
++              parsedInput = JSON.parse(String(rawArgs).trim())
++            } catch {
++              parsedInput = undefined
++            }
+           }
+ 
+           yield {
+@@ -577,7 +583,7 @@ export class OpenAITextAdapter<
+             toolName: name,
+             model: model || options.model,
+             timestamp,
+-            input: parsedInput,
++            ...(parsedInput !== undefined ? { input: parsedInput } : {}),
+           }
+         }
+ 

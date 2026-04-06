@@ -463,7 +463,13 @@ export async function buildTanStackChatTurnArgs(
   const webappTools = buildWorkspaceWebappTools(ctx)
   const skillTools = buildSkillTools(ctx)
   const mcpToolsStart = nowMs()
-  const { tools: mcpTools, warnings: mcpWarnings, serverNames: mcpServerNames } = await buildMcpTools(ctx)
+  const providerId = settings.provider as AiProviderId
+  const useLooseMcpForOpenAi =
+    providerId === 'openai' || providerId === 'openai_compatible'
+  const { tools: mcpTools, warnings: mcpWarnings, serverNames: mcpServerNames } =
+    await buildMcpTools(ctx, {
+      useLooseMcpInputSchemaForOpenAi: useLooseMcpForOpenAi,
+    })
   logChatPerf('buildMcpTools', mcpToolsStart)
   for (const w of mcpWarnings) {
     settingsWarnings.push(w)
