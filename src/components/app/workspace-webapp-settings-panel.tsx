@@ -7,7 +7,7 @@ type Props = {
   className?: string
 }
 
-export function WorkspaceWebappPanel({
+export function WorkspaceWebappSettingsPanel({
   workspaceId,
   isTauriRuntime,
   className,
@@ -16,7 +16,7 @@ export function WorkspaceWebappPanel({
     <WorkspaceWebappPreviewCore
       workspaceId={workspaceId}
       isTauriRuntime={isTauriRuntime}
-      layout="published"
+      layout="settings"
       variant="full"
       className={cn(className)}
     />

@@ -5,11 +5,20 @@ import {
   ExternalLink,
   Loader2,
   MonitorPlay,
+  MoreHorizontal,
   Package,
   Square,
 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { WORKSPACE_WEBAPP_RELATIVE_DIR } from '@/lib/workspace-webapp/constants'
 import {
@@ -25,25 +34,29 @@ import {
 } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
 
+export type WebappPreviewLayout = 'published' | 'settings' | 'artifact'
+
 export type WorkspaceWebappPreviewCoreProps = {
   workspaceId: string
   isTauriRuntime: boolean
   className?: string
-  /** Sidebar: published app + publish; artifact: dev preview for editing. */
-  surface?: 'sidebar' | 'artifact'
-  /** Page route: title + long help. Embedded: compact chrome for artifact rail. */
+  /** Published main route, webapp settings route, or App-mode artifact. */
+  layout: WebappPreviewLayout
   variant?: 'full' | 'embedded'
-  /** Parent can bump after AI edits to force iframe reload. */
   iframeKeyOffset?: number
-  /** When this flips from true to false (turn finished), reload the iframe once. */
   generating?: boolean
+}
+
+function isInitAlreadyExistsError(e: unknown): boolean {
+  const s = e instanceof Error ? e.message : String(e)
+  return s.includes('already exists')
 }
 
 export function WorkspaceWebappPreviewCore({
   workspaceId,
   isTauriRuntime,
   className,
-  surface = 'sidebar',
+  layout,
   variant = 'full',
   iframeKeyOffset = 0,
   generating = false,
@@ -58,6 +71,15 @@ export function WorkspaceWebappPreviewCore({
   const [iframeKey, setIframeKey] = useState(0)
   const [pathInput, setPathInput] = useState('/')
   const prevGenerating = useRef(!!generating)
+  const devUserStoppedArtifact = useRef(false)
+  const publishedPrepConsumed = useRef(false)
+  const artifactBootstrapConsumed = useRef(false)
+
+  useEffect(() => {
+    devUserStoppedArtifact.current = false
+    publishedPrepConsumed.current = false
+    artifactBootstrapConsumed.current = false
+  }, [workspaceId])
 
   useEffect(() => {
     if (prevGenerating.current && !generating) {
@@ -76,28 +98,33 @@ export function WorkspaceWebappPreviewCore({
     }
   }, [status?.previewPath])
 
-  const refreshStatus = useCallback(async () => {
+  const loadDevStatus = useCallback(async () => {
     try {
-      const s = await workspaceWebappDevStatus(workspaceId)
-      setStatus(s)
-      if (surface === 'sidebar') {
-        try {
-          const p = await workspaceWebappPublishStatus(workspaceId)
-          setPublishStatus(p)
-        } catch {
-          setPublishStatus(null)
-        }
-      }
+      return await workspaceWebappDevStatus(workspaceId)
     } catch {
-      setStatus({
+      return {
         running: false,
+        hasPackageJson: false,
+        hasNodeModules: false,
         lastError: 'Could not read webapp status.',
-      })
-      if (surface === 'sidebar') {
+      } as Awaited<ReturnType<typeof workspaceWebappDevStatus>>
+    }
+  }, [workspaceId])
+
+  const refreshStatus = useCallback(async () => {
+    const s = await loadDevStatus()
+    setStatus(s)
+    if (layout === 'published' || layout === 'settings') {
+      try {
+        const p = await workspaceWebappPublishStatus(workspaceId)
+        setPublishStatus(p)
+      } catch {
         setPublishStatus(null)
       }
+    } else {
+      setPublishStatus(null)
     }
-  }, [workspaceId, surface])
+  }, [workspaceId, layout, loadDevStatus])
 
   useEffect(() => {
     void refreshStatus()
@@ -105,16 +132,163 @@ export function WorkspaceWebappPreviewCore({
     return () => window.clearInterval(t)
   }, [refreshStatus])
 
+  const runNpmInstall = useCallback(async () => {
+    const r = await workspaceRunShell({
+      workspaceId,
+      command: 'npm install',
+      cwd: WORKSPACE_WEBAPP_RELATIVE_DIR,
+      timeoutMs: 600_000,
+      maxOutputBytes: 512_000,
+    })
+    if (r.exitCode !== 0) {
+      setStatus((prev) => ({
+        running: prev?.running ?? false,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
+        port: prev?.port,
+        url: prev?.url,
+        previewPath: prev?.previewPath,
+        previewUrl: prev?.previewUrl,
+        lastError: `npm install failed (exit ${r.exitCode}).\n${r.stderr || r.stdout}`,
+      }))
+    }
+    await refreshStatus()
+  }, [workspaceId, refreshStatus])
+
+  /** Published page: silent init + npm so Publish works without opening settings. */
+  useEffect(() => {
+    if (!isTauriRuntime || layout !== 'published' || !status || busy !== null) {
+      return
+    }
+    if (publishedPrepConsumed.current) {
+      return
+    }
+    if (status.hasPackageJson && status.hasNodeModules) {
+      publishedPrepConsumed.current = true
+      return
+    }
+    publishedPrepConsumed.current = true
+    void (async () => {
+      setBusy('prep-published')
+      try {
+        if (!status.hasPackageJson) {
+          try {
+            await workspaceWebappInit({ workspaceId, overwrite: false })
+          } catch (e) {
+            if (!isInitAlreadyExistsError(e)) {
+              setStatus((prev) => ({
+                running: false,
+                hasPackageJson: prev?.hasPackageJson ?? false,
+                hasNodeModules: prev?.hasNodeModules ?? false,
+                lastError: e instanceof Error ? e.message : String(e),
+              }))
+              return
+            }
+          }
+        }
+        const s = await loadDevStatus()
+        if (!s.hasNodeModules) {
+          await runNpmInstall()
+        }
+        await refreshStatus()
+      } finally {
+        setBusy(null)
+      }
+    })()
+  }, [
+    isTauriRuntime,
+    layout,
+    status?.hasPackageJson,
+    status?.hasNodeModules,
+    busy,
+    workspaceId,
+    loadDevStatus,
+    runNpmInstall,
+    refreshStatus,
+  ])
+
+  /** Artifact: one-shot init → npm → dev start (no auto-restart after user Stop). */
+  useEffect(() => {
+    if (!isTauriRuntime || layout !== 'artifact' || !status || busy !== null) {
+      return
+    }
+    const needsInit = !status.hasPackageJson
+    const needsNpm = !status.hasNodeModules
+    const needsStart = !status.running && !devUserStoppedArtifact.current
+    if (!needsInit && !needsNpm && !needsStart) {
+      return
+    }
+    if (artifactBootstrapConsumed.current) {
+      return
+    }
+    artifactBootstrapConsumed.current = true
+    void (async () => {
+      setBusy('bootstrap')
+      try {
+        if (needsInit) {
+          try {
+            await workspaceWebappInit({ workspaceId, overwrite: false })
+          } catch (e) {
+            if (!isInitAlreadyExistsError(e)) {
+              setStatus((prev) => ({
+                running: false,
+                hasPackageJson: prev?.hasPackageJson ?? false,
+                hasNodeModules: prev?.hasNodeModules ?? false,
+                lastError: e instanceof Error ? e.message : String(e),
+              }))
+              return
+            }
+          }
+        }
+        let s = await loadDevStatus()
+        if (!s.hasNodeModules) {
+          await runNpmInstall()
+          s = await loadDevStatus()
+        }
+        if (!s.running && !devUserStoppedArtifact.current) {
+          try {
+            await workspaceWebappDevStart(workspaceId)
+            setIframeKey((k) => k + 1)
+          } catch (e) {
+            setStatus((prev) => ({
+              ...prev,
+              running: prev?.running ?? false,
+              hasPackageJson: s.hasPackageJson,
+              hasNodeModules: s.hasNodeModules,
+              lastError: e instanceof Error ? e.message : String(e),
+            }))
+          }
+        }
+        await refreshStatus()
+      } finally {
+        setBusy(null)
+      }
+    })()
+  }, [
+    isTauriRuntime,
+    layout,
+    status?.hasPackageJson,
+    status?.hasNodeModules,
+    status?.running,
+    busy,
+    workspaceId,
+    loadDevStatus,
+    runNpmInstall,
+    refreshStatus,
+  ])
+
   const onInit = async () => {
     setBusy('init')
     try {
       await workspaceWebappInit({ workspaceId, overwrite: false })
       await refreshStatus()
     } catch (e) {
-      setStatus({
+      setStatus((prev) => ({
         running: false,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
         lastError: e instanceof Error ? e.message : String(e),
-      })
+      }))
     } finally {
       setBusy(null)
     }
@@ -126,10 +300,12 @@ export function WorkspaceWebappPreviewCore({
       await workspaceWebappInit({ workspaceId, overwrite: true })
       await refreshStatus()
     } catch (e) {
-      setStatus({
+      setStatus((prev) => ({
         running: false,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
         lastError: e instanceof Error ? e.message : String(e),
-      })
+      }))
     } finally {
       setBusy(null)
     }
@@ -138,29 +314,14 @@ export function WorkspaceWebappPreviewCore({
   const onNpmInstall = async () => {
     setBusy('npm')
     try {
-      const r = await workspaceRunShell({
-        workspaceId,
-        command: 'npm install',
-        cwd: WORKSPACE_WEBAPP_RELATIVE_DIR,
-        timeoutMs: 600_000,
-        maxOutputBytes: 512_000,
-      })
-      if (r.exitCode !== 0) {
-        setStatus((prev) => ({
-          running: prev?.running ?? false,
-          port: prev?.port,
-          url: prev?.url,
-          previewPath: prev?.previewPath,
-          previewUrl: prev?.previewUrl,
-          lastError: `npm install failed (exit ${r.exitCode}).\n${r.stderr || r.stdout}`,
-        }))
-      }
-      await refreshStatus()
+      await runNpmInstall()
     } catch (e) {
-      setStatus({
-        running: false,
+      setStatus((prev) => ({
+        running: prev?.running ?? false,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
         lastError: e instanceof Error ? e.message : String(e),
-      })
+      }))
     } finally {
       setBusy(null)
     }
@@ -185,35 +346,43 @@ export function WorkspaceWebappPreviewCore({
   }
 
   const onStart = async () => {
+    devUserStoppedArtifact.current = false
     setBusy('start')
     try {
       await workspaceWebappDevStart(workspaceId)
       setIframeKey((k) => k + 1)
       await refreshStatus()
     } catch (e) {
-      setStatus({
+      setStatus((prev) => ({
         running: false,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
         lastError: e instanceof Error ? e.message : String(e),
-      })
+      }))
     } finally {
       setBusy(null)
     }
   }
 
   const onStop = async () => {
+    if (layout === 'artifact') {
+      devUserStoppedArtifact.current = true
+    }
     setBusy('stop')
     try {
       await workspaceWebappDevStop(workspaceId)
       await refreshStatus()
     } catch (e) {
-      setStatus({
+      setStatus((prev) => ({
         running: status?.running ?? false,
-        port: status?.port,
-        url: status?.url,
-        previewPath: status?.previewPath,
-        previewUrl: status?.previewUrl,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
+        port: prev?.port,
+        url: prev?.url,
+        previewPath: prev?.previewPath,
+        previewUrl: prev?.previewUrl,
         lastError: e instanceof Error ? e.message : String(e),
-      })
+      }))
     } finally {
       setBusy(null)
     }
@@ -231,6 +400,8 @@ export function WorkspaceWebappPreviewCore({
     } catch (e) {
       setStatus((prev) => ({
         running: prev?.running ?? false,
+        hasPackageJson: prev?.hasPackageJson ?? false,
+        hasNodeModules: prev?.hasNodeModules ?? false,
         port: prev?.port,
         url: prev?.url,
         previewPath: prev?.previewPath,
@@ -239,16 +410,6 @@ export function WorkspaceWebappPreviewCore({
       }))
     } finally {
       setBusy(null)
-    }
-  }
-
-  const copyPublishedUrl = async () => {
-    const href = publishStatus?.publishedPreviewUrl
-    if (!href) return
-    try {
-      await navigator.clipboard.writeText(href)
-    } catch {
-      /* ignore */
     }
   }
 
@@ -266,267 +427,395 @@ export function WorkspaceWebappPreviewCore({
   }
 
   const webHint =
-    'Requires Node.js and npm on your PATH. One Vite app per workspace lives in ' +
+    'Requires Node.js and npm on your PATH. The Vite app lives in ' +
     WORKSPACE_WEBAPP_RELATIVE_DIR +
     '.'
 
   const embedded = variant === 'embedded'
-  const isSidebar = surface === 'sidebar'
-
   const publishedUrl = publishStatus?.publishedPreviewUrl ?? null
-  const showPublishedIframe = isSidebar && Boolean(publishedUrl)
+  const showPublishedIframe =
+    layout === 'published' && Boolean(publishedUrl)
+  const preppingPublished = busy === 'prep-published'
+  const bootstrappingArtifact = busy === 'bootstrap'
+
+  const settingsButtonRow = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="default"
+        size="sm"
+        disabled={busy !== null}
+        onClick={() => void onInit()}
+      >
+        {busy === 'init' ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        ) : null}
+        Init from template
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy !== null}
+        onClick={() => void onInitOverwrite()}
+      >
+        Reset template (overwrite)
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy !== null}
+        onClick={() => void onNpmInstall()}
+      >
+        {busy === 'npm' ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        ) : (
+          <Package className="size-4" aria-hidden />
+        )}
+        Install deps
+      </Button>
+      <Button
+        type="button"
+        variant="default"
+        size="sm"
+        disabled={busy !== null}
+        onClick={() => void onPublish()}
+      >
+        {busy === 'publish' ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        ) : (
+          <CloudUpload className="size-4" aria-hidden />
+        )}
+        Publish
+      </Button>
+    </div>
+  )
+
+  const previewPathRow = (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <label
+        htmlFor={`webapp-preview-path-${workspaceId}`}
+        className="text-text-3 shrink-0 text-xs whitespace-nowrap"
+      >
+        Preview path
+      </label>
+      <Input
+        id={`webapp-preview-path-${workspaceId}`}
+        value={pathInput}
+        onChange={(e) => setPathInput(e.target.value)}
+        placeholder="/calculator"
+        className="border-border bg-background text-text-1 h-8 min-w-[8rem] flex-1 font-mono text-xs md:max-w-xs"
+        disabled={busy !== null}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            void onApplyPreviewPath()
+          }
+        }}
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={busy !== null}
+        onClick={() => void onApplyPreviewPath()}
+      >
+        {busy === 'path' ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        ) : null}
+        Apply
+      </Button>
+    </div>
+  )
+
+  const devControlsRow = (
+    <div className="flex flex-wrap items-center gap-2">
+      {status?.running ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={busy !== null}
+          onClick={() => void onStop()}
+        >
+          {busy === 'stop' ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Square className="size-4" aria-hidden />
+          )}
+          Stop dev preview
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy !== null}
+          onClick={() => void onStart()}
+        >
+          {busy === 'start' ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <MonitorPlay className="size-4" aria-hidden />
+          )}
+          Start dev preview
+        </Button>
+      )}
+      {status?.url ? (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void copyDevUrl()}
+          >
+            <Copy className="size-4" aria-hidden />
+            Copy dev URL
+          </Button>
+          <Button type="button" variant="ghost" size="sm" asChild>
+            <a
+              href={
+                status.previewUrl && status.running
+                  ? status.previewUrl
+                  : status.url
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="gap-1.5"
+            >
+              <ExternalLink className="size-4" aria-hidden />
+              Open dev in browser
+            </a>
+          </Button>
+        </>
+      ) : null}
+    </div>
+  )
+
+  const artifactAdvancedMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy !== null && busy !== 'bootstrap'}
+          className="gap-1.5"
+        >
+          <MoreHorizontal className="size-4" aria-hidden />
+          Advanced
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[14rem]">
+        <DropdownMenuItem
+          disabled={busy !== null}
+          onSelect={() => void onInit()}
+        >
+          Init from template
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={busy !== null}
+          onSelect={() => void onInitOverwrite()}
+        >
+          Reset template (overwrite)
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={busy !== null}
+          onSelect={() => void onNpmInstall()}
+        >
+          Install deps
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={busy !== null}
+          onSelect={() => void onPublish()}
+        >
+          Publish (sidebar build)
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {status?.running ? (
+          <DropdownMenuItem
+            disabled={busy !== null}
+            onSelect={() => void onStop()}
+          >
+            Stop dev preview
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            disabled={busy !== null}
+            onSelect={() => void onStart()}
+          >
+            Start dev preview
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
+  const publishedFullBleed = layout === 'published' && !embedded
 
   return (
     <div
       className={cn(
         embedded
           ? 'flex min-h-0 flex-1 flex-col gap-2 p-2 md:p-3'
-          : 'flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6',
+          : publishedFullBleed
+            ? 'flex h-full min-h-0 flex-1 flex-col gap-0 p-0'
+            : 'flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6',
         className,
       )}
     >
-      {!embedded ? (
+      {!embedded && layout !== 'published' ? (
         <header className="space-y-1">
           <h1 className="text-text-1 text-xl font-semibold tracking-tight md:text-2xl">
-            Workspace webapp
+            {layout === 'settings' ? 'Webapp settings' : 'Workspace webapp'}
           </h1>
           <p className="text-text-2 max-w-2xl text-sm leading-relaxed">
-            {isSidebar ? (
+            {layout === 'settings' ? (
               <>
-                {webHint} Use <strong className="text-text-1 font-medium">Init</strong>,{' '}
-                <strong className="text-text-1 font-medium">Install deps</strong>, then{' '}
-                <strong className="text-text-1 font-medium">Publish</strong> to show the
-                production build here. The sidebar always shows the{' '}
-                <strong className="text-text-1 font-medium">last published</strong> version
-                until you publish again. Use <strong className="text-text-1 font-medium">
-                  Dev preview
-                </strong>{' '}
-                below for hot reload while editing.
+                {webHint} Manage the Vite project, dev server, and publishing.{' '}
+                <Link
+                  to="/workspace/$workspaceId/webapp"
+                  params={{ workspaceId }}
+                  className="text-text-1 font-medium underline-offset-2 hover:underline"
+                >
+                  Open published view
+                </Link>
+                .
               </>
             ) : (
               <>
-                {webHint} This panel is for{' '}
+                {webHint}{' '}
                 <strong className="text-text-1 font-medium">Dev preview</strong> (hot
-                reload). The <strong className="text-text-1 font-medium">Webapp</strong>{' '}
-                sidebar shows the published build. Use{' '}
-                <strong className="text-text-1 font-medium">Publish</strong> on that page
-                (or below) to update what the sidebar shows.
+                reload) starts automatically when possible. The sidebar{' '}
+                <strong className="text-text-1 font-medium">Webapp</strong> page shows the
+                published build. Use <strong className="text-text-1 font-medium">
+                  Advanced
+                </strong>{' '}
+                for manual steps or <strong className="text-text-1 font-medium">
+                  Publish
+                </strong>{' '}
+                to refresh the sidebar.
               </>
             )}
           </p>
         </header>
-      ) : (
-        <div className="space-y-1 px-0.5">
-          <p className="text-text-3 text-xs leading-snug">
-            Vite app in{' '}
-            <code className="text-text-2">{WORKSPACE_WEBAPP_RELATIVE_DIR}</code> — Init,
-            install, then <strong className="text-text-2">Start preview</strong> for hot
-            reload. Sidebar Webapp shows the published build; publish from there or use
-            Publish below.
-          </p>
+      ) : null}
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-2 px-0.5">
+          {artifactAdvancedMenu}
+          {bootstrappingArtifact || busy === 'prep-published' ? (
+            <span className="text-text-3 inline-flex items-center gap-1.5 text-xs">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              Preparing preview…
+            </span>
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       {!isTauriRuntime ? (
-        <p className="text-text-3 text-sm">
+        <p
+          className={cn(
+            'text-text-3 text-sm',
+            publishedFullBleed && 'p-4',
+          )}
+        >
           Web preview is only available in the Braian Desktop app.
         </p>
-      ) : (
+      ) : layout === 'published' ? (
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          {publishError ? (
+            <div className="border-destructive/40 bg-destructive/10 text-destructive absolute top-2 right-2 left-2 z-20 max-h-36 overflow-auto rounded-md border px-3 py-2 text-xs whitespace-pre-wrap shadow-sm">
+              {publishError}
+            </div>
+          ) : null}
+          {preppingPublished ? (
+            <div className="bg-background/85 absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 backdrop-blur-[1px]">
+              <Loader2
+                className="text-text-2 size-8 animate-spin"
+                aria-hidden
+              />
+              <p className="text-text-2 text-sm">Preparing project…</p>
+            </div>
+          ) : null}
+          {showPublishedIframe ? (
+            <iframe
+              key={
+                iframeKey +
+                iframeKeyOffset +
+                (publishStatus?.publishedAtMs ?? 0)
+              }
+              title="Published workspace webapp"
+              src={publishedUrl!}
+              className="min-h-0 w-full flex-1 border-0 bg-[var(--app-bg-0)]"
+            />
+          ) : (
+            <div className="text-text-3 flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm">
+              <p className="text-text-2">Nothing published yet.</p>
+              <p className="text-text-3 max-w-sm text-xs leading-relaxed">
+                Use the <strong className="text-text-2">gear</strong> next to Webapp in
+                the sidebar to publish and manage the app.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : layout === 'settings' ? (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() => void onInit()}
-            >
-              {busy === 'init' ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : null}
-              Init from template
-            </Button>
-            {!embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={busy !== null}
-                onClick={() => void onInitOverwrite()}
-              >
-                Reset template (overwrite)
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() => void onNpmInstall()}
-            >
-              {busy === 'npm' ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <Package className="size-4" aria-hidden />
-              )}
-              Install deps
-            </Button>
-            {isSidebar ? (
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                disabled={busy !== null}
-                onClick={() => void onPublish()}
-              >
-                {busy === 'publish' ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <CloudUpload className="size-4" aria-hidden />
-                )}
-                Publish
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={busy !== null}
-                onClick={() => void onPublish()}
-              >
-                {busy === 'publish' ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <CloudUpload className="size-4" aria-hidden />
-                )}
-                Publish
-              </Button>
-            )}
-          </div>
-
-          {isSidebar &&
-          publishStatus?.hasUnpublishedChanges &&
-          publishStatus.hasPublishedDist ? (
-            <div className="border-border bg-muted/40 text-text-2 rounded-lg border px-3 py-2 text-sm">
-              Unpublished changes — the sidebar still shows the last published version
-              until you <strong className="text-text-1 font-medium">Publish</strong>.
-            </div>
-          ) : null}
-
-          {isSidebar &&
-          publishStatus?.hasUnpublishedChanges &&
-          !publishStatus.hasPublishedDist ? (
-            <div className="border-border bg-muted/40 text-text-2 rounded-lg border px-3 py-2 text-sm">
-              No published build yet. Run <strong className="text-text-1 font-medium">
-                Publish
-              </strong>{' '}
-              after install to show the app here.
-            </div>
-          ) : null}
-
+          {settingsButtonRow}
           {publishError ? (
             <div className="border-destructive/30 bg-destructive/5 text-destructive max-h-48 overflow-auto rounded-lg border px-3 py-2 text-xs whitespace-pre-wrap">
               {publishError}
             </div>
           ) : null}
-
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <label
-              htmlFor={`webapp-preview-path-${workspaceId}`}
-              className="text-text-3 shrink-0 text-xs whitespace-nowrap"
-            >
-              Preview path
-            </label>
-            <Input
-              id={`webapp-preview-path-${workspaceId}`}
-              value={pathInput}
-              onChange={(e) => setPathInput(e.target.value)}
-              placeholder="/calculator"
-              className="border-border bg-background text-text-1 h-8 min-w-[8rem] flex-1 font-mono text-xs md:max-w-xs"
-              disabled={busy !== null}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  void onApplyPreviewPath()
-                }
-              }}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() => void onApplyPreviewPath()}
-            >
-              {busy === 'path' ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : null}
-              Apply
-            </Button>
-          </div>
-
-          {isSidebar && publishedUrl ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void copyPublishedUrl()}
-              >
-                <Copy className="size-4" aria-hidden />
-                Copy published URL
-              </Button>
-              <Button type="button" variant="ghost" size="sm" asChild>
-                <a
-                  href={publishedUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="gap-1.5"
-                >
-                  <ExternalLink className="size-4" aria-hidden />
-                  Open published in browser
-                </a>
-              </Button>
-            </div>
-          ) : null}
-
+          {previewPathRow}
           {status?.lastError ? (
             <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border px-3 py-2 text-sm whitespace-pre-wrap">
               {status.lastError}
             </div>
           ) : null}
-
+          <div className="border-border space-y-3 border-t pt-4">
+            <h2 className="text-text-1 text-sm font-semibold tracking-tight">
+              Dev preview (hot reload)
+            </h2>
+            <p className="text-text-3 max-w-2xl text-xs leading-relaxed">
+              Live Vite server for editing. The published page does not update until you
+              publish again.
+            </p>
+            {devControlsRow}
+          </div>
+        </>
+      ) : (
+        <>
+          {!embedded ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {artifactAdvancedMenu}
+              {bootstrappingArtifact ? (
+                <span className="text-text-3 inline-flex items-center gap-1.5 text-xs">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Preparing preview…
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {previewPathRow}
+          {publishError ? (
+            <div className="border-destructive/30 bg-destructive/5 text-destructive max-h-48 overflow-auto rounded-lg border px-3 py-2 text-xs whitespace-pre-wrap">
+              {publishError}
+            </div>
+          ) : null}
+          {status?.lastError ? (
+            <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border px-3 py-2 text-sm whitespace-pre-wrap">
+              {status.lastError}
+            </div>
+          ) : null}
           <div
             className={cn(
               'border-border bg-card flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-sm',
               embedded ? 'min-h-[200px]' : 'min-h-[420px]',
             )}
           >
-            {isSidebar ? (
-              showPublishedIframe ? (
-                <iframe
-                  key={
-                    iframeKey +
-                    iframeKeyOffset +
-                    (publishStatus?.publishedAtMs ?? 0)
-                  }
-                  title="Published workspace webapp"
-                  src={publishedUrl!}
-                  className="h-full min-h-[200px] w-full flex-1 border-0 bg-[var(--app-bg-0)]"
-                />
-              ) : (
-                <div className="text-text-3 flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm">
-                  <p>No published app to show yet.</p>
-                  <p className="max-w-md">
-                    After <strong className="text-text-2">Init</strong> and{' '}
-                    <strong className="text-text-2">Install deps</strong>, choose{' '}
-                    <strong className="text-text-2">Publish</strong> to build and load the
-                    app here. Use <strong className="text-text-2">Dev preview</strong>{' '}
-                    below while editing; publish again when you want the sidebar to match.
-                  </p>
-                </div>
-              )
-            ) : status?.running && (status.previewUrl ?? status.url) ? (
+            {status?.running && (status.previewUrl ?? status.url) ? (
               <iframe
                 key={iframeKey + iframeKeyOffset}
                 title="Workspace webapp dev preview"
@@ -537,149 +826,18 @@ export function WorkspaceWebappPreviewCore({
               <div className="text-text-3 flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm">
                 <p>Dev preview is not running.</p>
                 <p className="max-w-md">
-                  After <strong className="text-text-2">Init</strong> and{' '}
-                  <strong className="text-text-2">Install deps</strong>, choose{' '}
-                  <strong className="text-text-2">Start preview</strong> to load the Vite
-                  dev server here.
+                  {bootstrappingArtifact ? (
+                    <>Starting the dev server…</>
+                  ) : (
+                    <>
+                      Use <strong className="text-text-2">Advanced</strong> to start the
+                      preview or fix setup.
+                    </>
+                  )}
                 </p>
               </div>
             )}
           </div>
-
-          {isSidebar ? (
-            <div className="border-border space-y-3 border-t pt-4">
-              <h2 className="text-text-1 text-sm font-semibold tracking-tight">
-                Dev preview (hot reload)
-              </h2>
-              <p className="text-text-3 max-w-2xl text-xs leading-relaxed">
-                Live Vite server for editing. Changes are not shown in the published
-                iframe above until you publish.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {status?.running ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() => void onStop()}
-                  >
-                    {busy === 'stop' ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden />
-                    ) : (
-                      <Square className="size-4" aria-hidden />
-                    )}
-                    Stop dev preview
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() => void onStart()}
-                  >
-                    {busy === 'start' ? (
-                      <Loader2 className="size-4 animate-spin" aria-hidden />
-                    ) : (
-                      <MonitorPlay className="size-4" aria-hidden />
-                    )}
-                    Start dev preview
-                  </Button>
-                )}
-                {status?.url ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void copyDevUrl()}
-                    >
-                      <Copy className="size-4" aria-hidden />
-                      Copy dev URL
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm" asChild>
-                      <a
-                        href={
-                          status.previewUrl && status.running
-                            ? status.previewUrl
-                            : status.url
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="gap-1.5"
-                      >
-                        <ExternalLink className="size-4" aria-hidden />
-                        Open dev in browser
-                      </a>
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {status?.running ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => void onStop()}
-                >
-                  {busy === 'stop' ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Square className="size-4" aria-hidden />
-                  )}
-                  Stop preview
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => void onStart()}
-                >
-                  {busy === 'start' ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <MonitorPlay className="size-4" aria-hidden />
-                  )}
-                  Start preview
-                </Button>
-              )}
-              {status?.url ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void copyDevUrl()}
-                  >
-                    <Copy className="size-4" aria-hidden />
-                    Copy URL
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" asChild>
-                    <a
-                      href={
-                        status.previewUrl && status.running
-                          ? status.previewUrl
-                          : status.url
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="gap-1.5"
-                    >
-                      <ExternalLink className="size-4" aria-hidden />
-                      Open in browser
-                    </a>
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          )}
         </>
       )}
     </div>

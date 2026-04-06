@@ -31,6 +31,10 @@ pub struct WebappDevStartResult {
 #[serde(rename_all = "camelCase")]
 pub struct WebappDevStatus {
   pub running: bool,
+  /// True when `.braian/webapp/package.json` exists.
+  pub has_package_json: bool,
+  /// True when `.braian/webapp/node_modules` exists as a directory.
+  pub has_node_modules: bool,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub port: Option<u16>,
   /// Base dev server URL (`http://127.0.0.1:<port>/`).
@@ -431,21 +435,29 @@ pub fn webapp_dev_status(
 
   let preview_path_stored = workspace::webapp_preview_path_get(&app, &workspace_id).ok();
 
+  let (has_package_json, has_node_modules) = webapp_dir_for(&app, &workspace_id)
+    .map(|p| {
+      (
+        p.join("package.json").is_file(),
+        p.join("node_modules").is_dir(),
+      )
+    })
+    .unwrap_or((false, false));
+
   if !running {
-    let pkg_ok = webapp_dir_for(&app, &workspace_id)
-      .map(|p| p.join("package.json").is_file())
-      .unwrap_or(false);
     return Ok(WebappDevStatus {
       running: false,
+      has_package_json,
+      has_node_modules,
       port: None,
       url: None,
       preview_path: preview_path_stored,
       preview_url: None,
-      last_error: if pkg_ok {
+      last_error: if has_package_json {
         last_error
       } else {
         Some(format!(
-          "Webapp not initialized. Create {WEBAPP_RELATIVE_DIR} from the Webapp screen."
+          "Webapp not initialized. Use Webapp settings (gear) or App mode to create {WEBAPP_RELATIVE_DIR}."
         ))
       },
     });
@@ -469,6 +481,8 @@ pub fn webapp_dev_status(
 
   Ok(WebappDevStatus {
     running: true,
+    has_package_json,
+    has_node_modules,
     port: Some(port),
     url: Some(base_url),
     preview_path: Some(path_for_url),

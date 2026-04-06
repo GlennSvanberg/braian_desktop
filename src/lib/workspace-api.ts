@@ -628,6 +628,8 @@ export type WorkspaceWebappDevStartResult = {
 
 export type WorkspaceWebappDevStatus = {
   running: boolean
+  hasPackageJson: boolean
+  hasNodeModules: boolean
   port?: number
   /** Base dev server URL (`http://127.0.0.1:<port>/`). */
   url?: string
@@ -694,6 +696,8 @@ export async function workspaceWebappDevStatus(
   if (!isTauri()) {
     return {
       running: false,
+      hasPackageJson: false,
+      hasNodeModules: false,
       lastError: 'Open Braian Desktop to use the workspace webapp preview.',
     }
   }
