@@ -11,8 +11,18 @@ import { WindowControls } from './window-controls'
 
 type ChatRouteContext = { conversation: ConversationDto }
 
+function dashboardTabFromSearchStr(searchStr: string): 'apps' | 'app-settings' {
+  const raw = searchStr.startsWith('?') ? searchStr.slice(1) : searchStr
+  const tab = new URLSearchParams(raw).get('tab')
+  return tab === 'app-settings' ? 'app-settings' : 'apps'
+}
+
 export function AppHeader() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const dashboardSearchStr = useRouterState({
+    select: (s) =>
+      s.location.pathname.startsWith('/dashboard') ? s.location.searchStr : '',
+  })
   const matches = useMatches()
   const { activeWorkspace, conversationsByWorkspace, workspaces } =
     useWorkspace()
@@ -38,12 +48,20 @@ export function AppHeader() {
     /^\/workspace\/([^/]+)\/settings$/,
   )
   const isWorkspaceSettings = Boolean(workspaceSettingsMatch)
+  const workspaceWebappSettingsMatch = pathname.match(
+    /^\/workspace\/([^/]+)\/webapp\/settings$/,
+  )
+  const workspaceWebappMatch = pathname.match(
+    /^\/workspace\/([^/]+)\/webapp$/,
+  )
 
   const title = (() => {
     if (isHome) return 'Welcome'
     if (isDashboard) return 'Dashboard'
     if (isSettings) return 'Settings'
     if (isWorkspaceSettings) return 'Workspace settings'
+    if (workspaceWebappSettingsMatch) return 'App settings'
+    if (workspaceWebappMatch) return 'Apps'
     if (isNewChatRoute) return 'New agent'
     if (
       conversationIdFromPath &&
@@ -71,7 +89,21 @@ export function AppHeader() {
       const w = workspaces.find((x) => x.id === id)
       return `${w?.name ?? 'Workspace'} · Connections (MCP)`
     }
-    if (isDashboard) return `${wsName} · Overview`
+    if (isDashboard) {
+      const tab = dashboardTabFromSearchStr(dashboardSearchStr)
+      if (tab === 'app-settings') return `${wsName} · App settings`
+      return `${wsName} · Apps`
+    }
+    if (workspaceWebappSettingsMatch) {
+      const id = workspaceWebappSettingsMatch[1]
+      const w = workspaces.find((x) => x.id === id)
+      return `${w?.name ?? wsName} · Template, deps, preview`
+    }
+    if (workspaceWebappMatch) {
+      const id = workspaceWebappMatch[1]
+      const w = workspaces.find((x) => x.id === id)
+      return `${w?.name ?? wsName} · Published app`
+    }
     if (isNewChatRoute) return 'No workspace · move when ready'
     if (routeConversation) return `${wsName} · Chat`
     return wsName

@@ -5,7 +5,7 @@ description: Braian workspace webapp (Vite in .braian/webapp). Use after switch_
 
 ## Workspace webapp (Vite + React + TypeScript)
 
-The interactive UI for this workspace lives under **`.braian/webapp/`** (bundled template: Vite 7, React 19, Tailwind v4, **react-router-dom**). The sidebar **Webapp** route shows the **published** production build (large iframe). **Dev preview** (hot reload) runs from **Start dev preview** on that page or from the chat **artifact** in App mode.
+The interactive UI for this workspace lives under **`.braian/webapp/`** (bundled template: Vite 7, React 19, Tailwind v4, **react-router-dom**). **Dashboard → Apps** shows the **published** production build (large iframe). **Dev preview** (hot reload) runs from **Dashboard → App settings** or from the chat **artifact** in App mode.
 
 **Visual system:** Use **semantic Tailwind classes** from the template: `bg-app-bg-0`, `bg-app-bg-1`, `text-app-text-1`, `border-app-border`, `text-app-accent-600`, etc. (defined in **`src/index.css`**). **Do not** replace the app with plain white pages and default black text — that breaks Braian theming. The root layout **`BraianShell`** in **`src/layouts/BraianShell.tsx`** wraps all routes; keep it in **`App.tsx`**.
 
@@ -36,11 +36,11 @@ The interactive UI for this workspace lives under **`.braian/webapp/`** (bundled
 
 - Use **`run_workspace_shell`** with **`cwd: ".braian/webapp"`** for `npm install`, typecheck, etc.
 - **Do not** run **`npm run dev`** via the shell tool — it is long-running. Braian starts the dev server via **Start dev preview** in the UI or the artifact panel.
-- To refresh what the **sidebar** shows, call **`publish_workspace_webapp`** or ask the user to click **Publish** in Braian (runs `npm run build` with the correct `--base` for the static server). Until then, **unpublished** source edits are not what the sidebar iframe shows.
+- To refresh what **Dashboard → Apps** shows, call **`publish_workspace_webapp`** or ask the user to click **Publish** in Braian (runs `npm run build` with the correct `--base` for the static server). Until then, **unpublished** source edits are not what the published iframe shows.
 
 ### Published app vs dev preview
 
-- **Publish** (tool or UI) updates **`dist/`** and the sidebar **Webapp** iframe. The UI shows when there are **unpublished changes** compared to the last publish.
+- **Publish** (tool or UI) updates **`dist/`** and the **Dashboard → Apps** iframe. The UI shows when there are **unpublished changes** compared to the last publish.
 - **Dev preview** is for editing: **Start dev preview** / **Stop dev preview**. The **Preview path** field and **`set_workspace_webapp_preview_path`** apply to **both** published and dev URLs.
 - To inspect dev server output after a start failure or runtime errors, call **`read_workspace_webapp_dev_logs`** (ring buffer from the managed dev process).
 

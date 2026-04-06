@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { getThreadSnapshot } from '@/lib/chat-sessions/store'
 
+import { coerceTabularCellValue } from './braian-artifact-from-custom'
 import { applyDocumentCanvasPatches } from './document-canvas-patch'
 import { getDocumentCanvasLivePayload } from './document-canvas-live'
 import { emitWorkspaceDurableActivity } from '@/lib/workspace/workspace-activity'
@@ -260,10 +261,25 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
       if (!Array.isArray(rows)) {
         return { ok: false as const, error: 'rowsJson must encode a JSON array.' }
       }
+      const normalizedRows: Record<string, string | number | boolean | null>[] = []
+      for (const row of rows) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+          return {
+            ok: false as const,
+            error: 'rowsJson must be an array of objects (one object per row).',
+          }
+        }
+        const o = row as Record<string, unknown>
+        const out: Record<string, string | number | boolean | null> = {}
+        for (const k of Object.keys(o)) {
+          out[k] = coerceTabularCellValue(o[k])
+        }
+        normalizedRows.push(out)
+      }
       toolCtx?.emitCustomEvent('braian-artifact', {
         kind: 'tabular',
         columns: input.columns,
-        rows,
+        rows: normalizedRows,
         ...(input.title ? { title: input.title } : {}),
         ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
       })

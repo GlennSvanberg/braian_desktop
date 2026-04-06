@@ -3,10 +3,10 @@ import {
   maxIterations,
   type AnyTextAdapter,
 } from '@tanstack/ai'
-import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { AiSettingsDto } from '@/lib/ai-settings-api'
 import { isTauri } from '@/lib/tauri-env'
 
+import { braianArtifactFromCustomValue } from './braian-artifact-from-custom'
 import {
   buildTanStackChatTurnArgs,
   type BuildTanStackChatTurnArgsResult,
@@ -17,25 +17,6 @@ import type {
   ChatTurnContext,
   PriorChatMessage,
 } from './types'
-
-function braianArtifactFromCustomValue(
-  value: unknown,
-): WorkspaceArtifactPayload | null {
-  if (!value || typeof value !== 'object') return null
-  const v = value as Record<string, unknown>
-  if (v.kind !== 'document' || typeof v.body !== 'string') return null
-  const revRaw = v.canvasRevision
-  const canvasRevision =
-    typeof revRaw === 'number' && Number.isFinite(revRaw)
-      ? Math.trunc(revRaw)
-      : undefined
-  return {
-    kind: 'document',
-    body: v.body,
-    ...(typeof v.title === 'string' ? { title: v.title } : {}),
-    ...(canvasRevision !== undefined ? { canvasRevision } : {}),
-  }
-}
 
 function mergeAbortParent(signal: AbortSignal | undefined): AbortController {
   const ac = new AbortController()

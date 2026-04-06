@@ -9,7 +9,7 @@ import {
   Package,
   Square,
 } from 'lucide-react'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -61,6 +61,9 @@ export function WorkspaceWebappPreviewCore({
   iframeKeyOffset = 0,
   generating = false,
 }: WorkspaceWebappPreviewCoreProps) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const onDashboard = pathname.startsWith('/dashboard')
+
   const [status, setStatus] = useState<Awaited<
     ReturnType<typeof workspaceWebappDevStatus>
   > | null>(null)
@@ -631,7 +634,7 @@ export function WorkspaceWebappPreviewCore({
           disabled={busy !== null}
           onSelect={() => void onPublish()}
         >
-          Publish (sidebar build)
+          Publish (Apps tab)
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {status?.running ? (
@@ -675,28 +678,38 @@ export function WorkspaceWebappPreviewCore({
             {layout === 'settings' ? (
               <>
                 {webHint} Manage the Vite project, dev server, and publishing.{' '}
-                <Link
-                  to="/workspace/$workspaceId/webapp"
-                  params={{ workspaceId }}
-                  className="text-text-1 font-medium underline-offset-2 hover:underline"
-                >
-                  Open published view
-                </Link>
+                {onDashboard ? (
+                  <Link
+                    to="/dashboard"
+                    search={{ tab: 'apps' }}
+                    className="text-text-1 font-medium underline-offset-2 hover:underline"
+                  >
+                    Open published view
+                  </Link>
+                ) : (
+                  <Link
+                    to="/workspace/$workspaceId/webapp"
+                    params={{ workspaceId }}
+                    className="text-text-1 font-medium underline-offset-2 hover:underline"
+                  >
+                    Open published view
+                  </Link>
+                )}
                 .
               </>
             ) : (
               <>
                 {webHint}{' '}
                 <strong className="text-text-1 font-medium">Dev preview</strong> (hot
-                reload) starts automatically when possible. The sidebar{' '}
-                <strong className="text-text-1 font-medium">Webapp</strong> page shows the
+                reload) starts automatically when possible. The Dashboard{' '}
+                <strong className="text-text-1 font-medium">Apps</strong> tab shows the
                 published build. Use <strong className="text-text-1 font-medium">
                   Advanced
                 </strong>{' '}
                 for manual steps or <strong className="text-text-1 font-medium">
                   Publish
                 </strong>{' '}
-                to refresh the sidebar.
+                to refresh it.
               </>
             )}
           </p>
@@ -754,8 +767,31 @@ export function WorkspaceWebappPreviewCore({
             <div className="text-text-3 flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm">
               <p className="text-text-2">Nothing published yet.</p>
               <p className="text-text-3 max-w-sm text-xs leading-relaxed">
-                Use the <strong className="text-text-2">gear</strong> next to Webapp in
-                the sidebar to publish and manage the app.
+                {onDashboard ? (
+                  <>
+                    Open the{' '}
+                    <Link
+                      to="/dashboard"
+                      search={{ tab: 'app-settings' }}
+                      className="text-text-2 font-medium underline-offset-2 hover:underline"
+                    >
+                      App settings
+                    </Link>{' '}
+                    tab on the Dashboard to publish and manage the app.
+                  </>
+                ) : (
+                  <>
+                    Open{' '}
+                    <Link
+                      to="/workspace/$workspaceId/webapp/settings"
+                      params={{ workspaceId }}
+                      className="text-text-2 font-medium underline-offset-2 hover:underline"
+                    >
+                      webapp settings
+                    </Link>{' '}
+                    for this workspace to publish and manage the app.
+                  </>
+                )}
               </p>
             </div>
           )}

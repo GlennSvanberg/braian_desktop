@@ -53,7 +53,7 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'dashboard',
     title: 'Workspace webapp',
     description:
-      'Vite app under .braian/webapp: published Webapp page, gear → Webapp settings, App-mode artifact dev preview.',
+      'Vite app under .braian/webapp: Dashboard → Apps (published), App settings tab, App-mode artifact dev preview.',
     body: dashboardMd,
   },
   {

@@ -76,7 +76,7 @@ export function buildWorkspaceWebappTools(
   const previewPathTool = toolDefinition({
     name: 'set_workspace_webapp_preview_path',
     description:
-      'Set the preview iframe route. After building or editing a mini-app, set this to that app path (e.g. /email-checker) — not /. Using / is only for the My apps index; do not point / at new feature UI you implemented. Applies to both the published sidebar iframe and the dev preview.',
+      'Set the preview iframe route. After building or editing a mini-app, set this to that app path (e.g. /email-checker) — not /. Using / is only for the My apps index; do not point / at new feature UI you implemented. Applies to both the published iframe (Dashboard → Apps) and the dev preview.',
     inputSchema: setPreviewPathSchema,
     ...lazyOpt,
   })
@@ -84,7 +84,7 @@ export function buildWorkspaceWebappTools(
   const publishTool = toolDefinition({
     name: 'publish_workspace_webapp',
     description:
-      'Run a production build of `.braian/webapp` with the correct base path and update the published app on the sidebar **Webapp** page. Use after meaningful UI changes when the user wants that view refreshed — not for every tiny edit. The user can also click **Publish** in Braian (main Webapp page or Webapp settings). Dev preview (hot reload) is under **Webapp settings** (gear) or the App-mode artifact.',
+      'Run a production build of `.braian/webapp` with the correct base path and update the published app on **Dashboard → Apps**. Use after meaningful UI changes when the user wants that view refreshed — not for every tiny edit. The user can also click **Publish** in Braian (Apps tab or App settings). Dev preview (hot reload) is under **Dashboard → App settings** or the App-mode artifact.',
     inputSchema: publishSchema,
     ...lazyOpt,
   })

@@ -37,13 +37,13 @@ export function buildSwitchToAppBuilderTool(context: ChatTurnContext | undefined
 
   return toolDefinition({
     name: 'switch_to_app_builder',
-    description: `Switch this chat to **App agent mode**: workspace **Vite + React** app at \`.braian/webapp\` (preview in sidebar **Webapp** and the chat artifact). The user does not need to select App mode in the UI manually.
+    description: `Switch this chat to **App agent mode**: workspace **Vite + React** app at \`.braian/webapp\` (published preview on **Dashboard → Apps** and dev preview in the chat artifact). The user does not need to select App mode in the UI manually.
 
-**Required workflow after this tool returns successfully:** immediately call \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use file/shell tools for \`.braian/webapp/\`, \`init_workspace_webapp\` when the template is missing, \`publish_workspace_webapp\` when the sidebar should show the latest build, and \`read_workspace_webapp_dev_logs\` when diagnosing the managed dev server.
+**Required workflow after this tool returns successfully:** immediately call \`__lazy__tool__discovery__\` with argument toolNames exactly: ${discoveryNamesJson}. Then use file/shell tools for \`.braian/webapp/\`, \`init_workspace_webapp\` when the template is missing, \`publish_workspace_webapp\` when **Dashboard → Apps** should show the latest build, and \`read_workspace_webapp_dev_logs\` when diagnosing the managed dev server.
 
 **Sub-routes (mandatory):** For any new or "simple" app the user asks for, implement it on a **dedicated path** (e.g. \`/email-checker\`): new file under \`src/pages/\`, new entry in \`src/app-routes.tsx\`, then \`set_workspace_webapp_preview_path\` to that path. **Never** put the feature on \`/\` or replace \`MyAppsLandingPage\` / the root route with feature UI.
 
-**Interactive UI:** Implement real components under **\`.braian/webapp/src/**\`. **Do not** run \`npm run dev\` via the shell tool. **Dev preview** auto-starts in the App-mode artifact when possible; **Webapp settings** (gear next to sidebar Webapp) has manual dev controls. **Publish** updates the sidebar’s published Webapp page.
+**Interactive UI:** Implement real components under **\`.braian/webapp/src/**\`. **Do not** run \`npm run dev\` via the shell tool. **Dev preview** auto-starts in the App-mode artifact when possible; **Dashboard → App settings** has manual dev controls. **Publish** updates the published app on **Dashboard → Apps**.
 
 Call this when the user wants an in-workspace webapp or Vite-based UI.`,
     inputSchema: switchInputSchema,

@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import {
   BookOpen,
   ChevronDown,
+  LayoutDashboard,
   Loader2,
-  MonitorPlay,
   MoreHorizontal,
   PanelLeftIcon,
   Pin,
@@ -398,8 +398,8 @@ function WorkspaceConversationGroup({
           onClick={() => {
             setActiveWorkspaceId(workspace.id)
             navigate({
-              to: '/workspace/$workspaceId/webapp',
-              params: { workspaceId: workspace.id },
+              to: '/dashboard',
+              search: { tab: 'apps' },
             })
           }}
         >
@@ -455,62 +455,6 @@ function WorkspaceConversationGroup({
 
         <CollapsibleContent asChild>
           <SidebarMenu className="border-sidebar-border mx-1 ml-1 mt-0.5 border-l pl-1.5">
-            <SidebarMenuItem
-              className={cn(
-                'rounded-md transition-colors',
-                'hover:bg-sidebar-accent focus-within:bg-sidebar-accent',
-                'has-[[data-slot=sidebar-menu-button][data-active=true]]:bg-sidebar-chat-selected',
-                'has-[[data-slot=sidebar-menu-button][data-active=true]]:hover:bg-sidebar-chat-selected-hover',
-                'has-[[data-slot=sidebar-menu-button][data-active=true]]:focus-within:bg-sidebar-chat-selected-hover',
-              )}
-            >
-              <SidebarMenuButton
-                asChild
-                tooltip="Published webapp (main view)"
-                className="group-has-data-[sidebar=menu-action]/menu-item:!pr-2 !bg-transparent"
-                isActive={
-                  pathname === `/workspace/${workspace.id}/webapp` &&
-                  workspace.id === activeWorkspaceId
-                }
-              >
-                <Link
-                  to="/workspace/$workspaceId/webapp"
-                  params={{ workspaceId: workspace.id }}
-                  className="truncate"
-                  onClick={() => {
-                    if (workspace.id !== activeWorkspaceId) {
-                      setActiveWorkspaceId(workspace.id)
-                    }
-                  }}
-                >
-                  <MonitorPlay className="size-4 shrink-0 opacity-70" aria-hidden />
-                  <span className="truncate">Webapp</span>
-                </Link>
-              </SidebarMenuButton>
-              <SidebarMenuAction
-                className="text-sidebar-foreground/80 z-30 size-7 [&>svg]:size-4"
-                aria-label={`Webapp settings for ${workspace.name}`}
-                title="Webapp settings (template, deps, dev preview)"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setActiveWorkspaceId(workspace.id)
-                  navigate({
-                    to: '/workspace/$workspaceId/webapp/settings',
-                    params: { workspaceId: workspace.id },
-                  })
-                }}
-              >
-                <Settings
-                  className={cn(
-                    pathname ===
-                      `/workspace/${workspace.id}/webapp/settings` &&
-                      'text-sidebar-accent-foreground',
-                  )}
-                  aria-hidden
-                />
-              </SidebarMenuAction>
-            </SidebarMenuItem>
             {sortedConversations.length === 0 ? (
               <p className="text-sidebar-foreground/55 px-2 py-1.5 text-[11px] leading-snug">
                 No saved threads yet.
@@ -741,11 +685,11 @@ export function AppSidebar() {
                         pathname ===
                           `/workspace/${activeWorkspaceId}/webapp/settings`))
                   }
-                  tooltip="Workspace webapp (published view or settings)"
+                  tooltip="Workspace dashboard (published apps and app settings)"
                 >
-                  <Link to="/dashboard">
-                    <MonitorPlay />
-                    <span>Webapp</span>
+                  <Link to="/dashboard" search={{ tab: 'apps' }}>
+                    <LayoutDashboard />
+                    <span>Dashboard</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
