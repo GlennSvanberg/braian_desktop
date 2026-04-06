@@ -1,5 +1,6 @@
 import {
   Brain,
+  Camera,
   Check,
   Copy,
   CornerDownLeft,
@@ -93,6 +94,7 @@ import {
   type ConversationDto,
   type WorkspaceFileIndexEntry,
 } from '@/lib/workspace-api'
+import { workspaceGitTryCommit } from '@/lib/workspace/git-history-api'
 import { cn } from '@/lib/utils'
 
 function normalizeCanvasKind(
@@ -190,6 +192,8 @@ export function ChatWorkbench({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [memoryUpdateBusy, setMemoryUpdateBusy] = useState(false)
   const [memoryUpdateHint, setMemoryUpdateHint] = useState<string | null>(null)
+  const [snapshotBusy, setSnapshotBusy] = useState(false)
+  const [snapshotHint, setSnapshotHint] = useState<string | null>(null)
   const [workspaceFileIndex, setWorkspaceFileIndex] = useState<
     WorkspaceFileIndexEntry[]
   >([])
@@ -920,6 +924,56 @@ export function ChatWorkbench({
       })
   }, [activeWorkspaceId, conversationId, memoryUpdateBusy])
 
+  const onSaveSnapshotNow = useCallback(() => {
+    if (
+      !conversationId ||
+      !threadWorkspaceId ||
+      snapshotBusy ||
+      generating ||
+      isDetachedSession ||
+      isProfileSession
+    ) {
+      return
+    }
+    setSnapshotBusy(true)
+    setSnapshotHint(null)
+    void (async () => {
+      try {
+        if (metaForSave) {
+          await conversationSave(
+            buildConversationSavePayload(thread, metaForSave),
+          )
+          await refreshConversations()
+        }
+        const oid = await workspaceGitTryCommit(threadWorkspaceId, 'manual')
+        if (oid) {
+          setSnapshotHint('Workspace snapshot saved.')
+        } else {
+          setSnapshotHint(
+            'No snapshot created. Turn on workspace snapshots in settings, or nothing changed on disk.',
+          )
+        }
+      } catch (e) {
+        setSnapshotHint(
+          e instanceof Error ? e.message : 'Could not save snapshot.',
+        )
+      } finally {
+        setSnapshotBusy(false)
+        window.setTimeout(() => setSnapshotHint(null), 8000)
+      }
+    })()
+  }, [
+    conversationId,
+    threadWorkspaceId,
+    snapshotBusy,
+    generating,
+    isDetachedSession,
+    isProfileSession,
+    metaForSave,
+    thread,
+    refreshConversations,
+  ])
+
   const desktopToolsUnavailable =
     (agentMode === 'code' || agentMode === 'app') && !isTauriRuntime
 
@@ -1064,6 +1118,31 @@ export function ChatWorkbench({
                 {!generating &&
                 conversationId &&
                 isTauriRuntime &&
+                !isProfileSession &&
+                !isDetachedSession ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-text-2 hover:text-text-1 hover:bg-muted/50 border-border/40 h-8 gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors"
+                    disabled={snapshotBusy}
+                    title="Save the workspace folder to Git now (after saving this chat)"
+                    onClick={onSaveSnapshotNow}
+                  >
+                    {snapshotBusy ? (
+                      <Loader2
+                        className="size-3.5 shrink-0 animate-spin"
+                        aria-hidden
+                      />
+                    ) : (
+                      <Camera className="size-3.5 shrink-0" aria-hidden />
+                    )}
+                    Save snapshot
+                  </Button>
+                ) : null}
+                {!generating &&
+                conversationId &&
+                isTauriRuntime &&
                 !isProfileSession ? (
                   <Button
                     type="button"
@@ -1088,6 +1167,9 @@ export function ChatWorkbench({
             </div>
             {memoryUpdateHint ? (
               <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
+            ) : null}
+            {snapshotHint ? (
+              <p className="text-text-3 text-xs">{snapshotHint}</p>
             ) : null}
             {isProfileSession ? (
               <p className="text-text-3 text-xs leading-relaxed">

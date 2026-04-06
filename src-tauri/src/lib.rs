@@ -9,6 +9,7 @@ mod workspace_mcp_http;
 mod workspace_mcp_runtime;
 mod workspace_mcp_stdio;
 mod workspace_mcp_probe;
+mod workspace_git;
 mod workspace_webapp_dev;
 mod workspace_webapp_static;
 
@@ -49,6 +50,12 @@ pub fn run() {
       workspace::workspace_remove,
       workspace::workspace_rename,
       workspace::workspace_touch,
+      workspace_git::workspace_git_status,
+      workspace_git::workspace_git_set_enabled,
+      workspace_git::workspace_git_ensure,
+      workspace_git::workspace_git_list_checkpoints,
+      workspace_git::workspace_git_try_commit,
+      workspace_git::workspace_git_restore_full,
       workspace_files::workspace_read_text_file,
       workspace_files::workspace_write_text_file,
       workspace_files::workspace_import_file,

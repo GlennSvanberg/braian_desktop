@@ -868,8 +868,10 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           !isDetachedWorkspaceSessionId(workspaceId) &&
           !isUserProfileSessionId(workspaceId)
         ) {
-          void import('@/lib/memory/scheduler').then((m) =>
-            m.scheduleMemoryReviewAfterIdle(workspaceId, conversationId),
+          void import('@/lib/workspace/workspace-activity').then((m) =>
+            m.emitWorkspaceDurableActivity(workspaceId, {
+              conversationId,
+            }),
           )
         }
       }

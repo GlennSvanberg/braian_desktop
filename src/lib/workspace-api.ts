@@ -13,6 +13,7 @@ import {
 import type { ChatThreadState, ReasoningMode } from '@/lib/chat-sessions/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import { isTauri } from '@/lib/tauri-env'
+import { emitWorkspaceDurableActivity } from '@/lib/workspace/workspace-activity'
 
 export type WorkspaceDto = {
   id: string
@@ -406,6 +407,7 @@ export async function conversationOpen(
 export async function conversationSave(input: ConversationSavePayload): Promise<void> {
   if (!isTauri()) return
   await invoke('conversation_save', { input })
+  emitWorkspaceDurableActivity(input.workspaceId)
 }
 
 /** Snapshot for persisting; normalizes streaming messages to complete for disk. */
@@ -489,6 +491,7 @@ export async function workspaceWriteTextFile(
     relativePath,
     content,
   })
+  emitWorkspaceDurableActivity(workspaceId)
 }
 
 export type WorkspaceRunCommandResult = {
@@ -550,10 +553,12 @@ export async function workspaceImportFile(
   if (!isTauri()) {
     throw new Error('Importing files requires the desktop app.')
   }
-  return invoke<WorkspaceImportFileResult>('workspace_import_file', {
+  const result = await invoke<WorkspaceImportFileResult>('workspace_import_file', {
     workspaceId,
     sourcePath,
   })
+  emitWorkspaceDurableActivity(workspaceId)
+  return result
 }
 
 export type WorkspaceDirEntryDto = {

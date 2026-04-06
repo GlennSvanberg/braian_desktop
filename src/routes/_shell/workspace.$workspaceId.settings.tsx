@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { WorkspaceHistoryPanel } from '@/components/app/workspace-history-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
 import {
   workspaceMcpConfigGet,
@@ -541,8 +542,10 @@ function ConnectionsPage() {
             Workspace settings
           </h1>
           <p className="text-text-3 mt-1 text-sm leading-relaxed">
-            <span className="text-text-2 font-medium">Connections (MCP)</span>{' '}
-            for this workspace only. Configuration lives in{' '}
+            <span className="text-text-2 font-medium">Snapshots</span> for file
+            history and rollback, and{' '}
+            <span className="text-text-2 font-medium">connections (MCP)</span>{' '}
+            for this workspace. MCP config lives in{' '}
             <code className="text-text-2 text-xs">.braian/mcp.json</code> using
             the same <code className="text-text-2 text-xs">mcpServers</code>{' '}
             shape as Cursor. Status uses a real MCP handshake (stdio or HTTP).
@@ -552,10 +555,14 @@ function ConnectionsPage() {
           </p>
         </div>
 
+        {tauri && wsId ? (
+          <WorkspaceHistoryPanel workspaceId={wsId} />
+        ) : null}
+
         {!tauri ? (
           <p className="text-text-3 border-border rounded-xl border p-4 text-sm">
-            Editing connections requires the Braian desktop app. Web preview
-            cannot read or write workspace files.
+            Snapshots and connections require the Braian desktop app. Web
+            preview cannot read or write workspace files.
           </p>
         ) : null}
 

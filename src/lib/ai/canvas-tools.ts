@@ -7,6 +7,8 @@ import { getThreadSnapshot } from '@/lib/chat-sessions/store'
 
 import { applyDocumentCanvasPatches } from './document-canvas-patch'
 import { getDocumentCanvasLivePayload } from './document-canvas-live'
+import { emitWorkspaceDurableActivity } from '@/lib/workspace/workspace-activity'
+
 import type { ChatTurnContext } from './types'
 
 const replacementSchema = z.object({
@@ -193,6 +195,8 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
         return { ok: false as const, error: msg }
       }
 
+      emitWorkspaceDurableActivity(workspaceId)
+
       toolCtx?.emitCustomEvent('braian-artifact', {
         kind: 'document',
         body: applied.markdown,
@@ -228,6 +232,8 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
         const msg = e instanceof Error ? e.message : String(e)
         return { ok: false as const, error: msg }
       }
+
+      emitWorkspaceDurableActivity(workspaceId)
 
       toolCtx?.emitCustomEvent('braian-artifact', {
         kind: 'document',
