@@ -108,6 +108,7 @@ import {
 } from '@/lib/workspace-api'
 import { workspaceHubRecentFileTouch } from '@/lib/workspace-hub-api'
 import { workspaceGitTryCommit } from '@/lib/workspace/git-history-api'
+import { formatRelativeTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 
 function normalizeCanvasKind(
@@ -958,6 +959,22 @@ export function ChatWorkbench({
     }
   }, [isTauriRuntime, isProfileSession, onNativeFileDrop])
 
+  const onInternalFileDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      const path = e.dataTransfer.getData('application/x-braian-file-path')
+      if (path && !isProfileSession) {
+        const name = e.dataTransfer.getData('text/plain') || path.split('/').pop() || path
+        addContextFileEntry(sessionKey, {
+          relativePath: path,
+          displayName: name,
+        })
+        appendDraftMentions([`@${name}`])
+      }
+    },
+    [addContextFileEntry, appendDraftMentions, isProfileSession, sessionKey]
+  )
+
   const pickMention = useCallback(
     (pick: MentionPick) => {
       const ta = textareaRef.current
@@ -1746,6 +1763,14 @@ export function ChatWorkbench({
             onDrop={(e) => {
               e.preventDefault()
               if (isProfileSession) return
+
+              // Handle internal drag from filetree
+              const internalPath = e.dataTransfer.getData('application/x-braian-file-path')
+              if (internalPath) {
+                void onInternalFileDrop(e)
+                return
+              }
+
               const dropped = Array.from(e.dataTransfer.files)
               const paths: string[] = []
               for (const f of dropped) {
@@ -1871,6 +1896,16 @@ export function ChatWorkbench({
                           )}
                         </Button>
                       ) : null}
+                      {m.createdAtMs ? (
+                        <div
+                          className={cn(
+                            'text-text-3 absolute right-1 bottom-1 z-10 text-[10px] font-medium tabular-nums select-none',
+                            'opacity-0 transition-opacity md:group-hover/message:opacity-100',
+                          )}
+                        >
+                          {formatRelativeTime(m.createdAtMs)}
+                        </div>
+                      ) : null}
                       <div
                         className={cn(
                           'text-[15px] leading-relaxed',
@@ -1926,6 +1961,14 @@ export function ChatWorkbench({
             onDrop={(e) => {
               e.preventDefault()
               if (isProfileSession) return
+
+              // Handle internal drag from filetree
+              const internalPath = e.dataTransfer.getData('application/x-braian-file-path')
+              if (internalPath) {
+                void onInternalFileDrop(e)
+                return
+              }
+
               const dropped = Array.from(e.dataTransfer.files)
               const paths: string[] = []
               for (const f of dropped) {

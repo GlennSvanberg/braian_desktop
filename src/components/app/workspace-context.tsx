@@ -39,6 +39,8 @@ type WorkspaceContextValue = {
   activeWorkspace: WorkspaceDto | null
   setActiveWorkspaceId: (id: string) => void
   refreshWorkspaces: (opts?: { silent?: boolean }) => Promise<void>
+  fileTreeOpen: boolean
+  setFileTreeOpen: (open: boolean) => void
   conversations: WorkspaceConversation[]
   conversationsByWorkspace: Record<string, WorkspaceConversation[]>
   refreshConversations: () => Promise<void>
@@ -70,6 +72,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     string | null
   >(null)
   const [loading, setLoading] = useState(true)
+  const [fileTreeOpen, setFileTreeOpen] = useState(true)
   const isTauriRuntime = isTauri()
 
   const refreshWorkspaces = useCallback(async (opts?: { silent?: boolean }) => {
@@ -258,6 +261,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createConversation,
       createConversationInWorkspace,
       defaultWorkspacesRoot,
+      fileTreeOpen,
+      setFileTreeOpen,
       loading,
       isTauriRuntime,
     }),
@@ -278,6 +283,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createConversation,
       createConversationInWorkspace,
       defaultWorkspacesRoot,
+      fileTreeOpen,
       loading,
       isTauriRuntime,
     ],

@@ -36,6 +36,7 @@ export type UserChatMessage = {
   id: string
   role: 'user'
   content: string
+  createdAtMs?: number
 }
 
 export type AssistantChatMessage = {
@@ -45,6 +46,7 @@ export type AssistantChatMessage = {
   status?: 'streaming' | 'complete'
   /** Ordered segments (text + tool calls). If absent, render `content` as Markdown only. */
   parts?: AssistantPart[]
+  createdAtMs?: number
 }
 
 export type ChatMessage = UserChatMessage | AssistantChatMessage

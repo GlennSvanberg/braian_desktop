@@ -326,12 +326,18 @@ function mapInvokeThreadToState(
           : undefined
       const role = m.role as 'user' | 'assistant'
       if (role === 'user') {
-        return { id: m.id, role: 'user' as const, content: m.content }
+        return {
+          id: m.id,
+          role: 'user' as const,
+          content: m.content,
+          createdAtMs: (m as any).createdAtMs,
+        }
       }
       return {
         id: m.id,
         role: 'assistant' as const,
         content: m.content,
+        createdAtMs: (m as any).createdAtMs,
         ...(status ? { status } : {}),
       }
     }),
@@ -456,6 +462,7 @@ export function buildConversationSavePayload(
       id: m.id,
       role: m.role,
       content: m.content,
+      createdAtMs: m.createdAtMs,
       status:
         m.role === 'assistant'
           ? m.status === 'streaming'

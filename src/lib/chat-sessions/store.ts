@@ -502,6 +502,7 @@ export function seedCanvasPreviewIfEmpty(
           id: `seed-${conversationId}-${i}`,
           role: 'user' as const,
           content: m.content,
+          createdAtMs: Date.now() - (demoMessages.length - i) * 60000,
         }
       }
       return {
@@ -509,6 +510,7 @@ export function seedCanvasPreviewIfEmpty(
         role: 'assistant' as const,
         content: m.content,
         status: 'complete' as const,
+        createdAtMs: Date.now() - (demoMessages.length - i) * 60000,
       }
     }),
     artifactOpen: false,
@@ -540,6 +542,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
     id: createId(),
     role: 'user' as const,
     content: userContent,
+    createdAtMs: Date.now(),
   }
   const assistantId = createId()
   const assistantMsg: AssistantChatMessage = {
@@ -547,6 +550,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
     role: 'assistant',
     content: '',
     status: 'streaming',
+    createdAtMs: Date.now(),
   }
 
   setGenerating(sessionKey, true)
