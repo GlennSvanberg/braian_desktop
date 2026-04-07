@@ -2,6 +2,7 @@ import { createFileRoute, Outlet } from '@tanstack/react-router'
 
 import { AppHeader } from '@/components/app/app-header'
 import { AppSidebar } from '@/components/app/app-sidebar'
+import { MainSidebarExpandRail } from '@/components/app/main-sidebar-expand-rail'
 import { WorkspaceFileTreeSidebar } from '@/components/app/file-tree'
 import { ShellHeaderToolbarProvider } from '@/components/app/shell-header-toolbar'
 import { WorkspaceProvider } from '@/components/app/workspace-context'
@@ -14,10 +15,9 @@ export const Route = createFileRoute('/_shell')({
 function ShellLayout() {
   return (
     <WorkspaceProvider>
-      <div className="flex h-svh w-full overflow-hidden">
-        <SidebarProvider defaultOpen>
-          <AppSidebar />
-        </SidebarProvider>
+      <SidebarProvider defaultOpen>
+        <AppSidebar />
+        <MainSidebarExpandRail />
         <WorkspaceFileTreeSidebar />
         <SidebarInset className="flex max-h-svh flex-col overflow-hidden">
           <ShellHeaderToolbarProvider>
@@ -27,7 +27,7 @@ function ShellLayout() {
             </div>
           </ShellHeaderToolbarProvider>
         </SidebarInset>
-      </div>
+      </SidebarProvider>
     </WorkspaceProvider>
   )
 }

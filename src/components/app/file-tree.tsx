@@ -8,7 +8,8 @@ import {
   FileCode,
   FileImage,
   FileArchive,
-  Loader2
+  Loader2,
+  PanelLeftClose
 } from 'lucide-react'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { join } from '@tauri-apps/api/path'
@@ -16,6 +17,7 @@ import { join } from '@tauri-apps/api/path'
 import { useWorkspace } from './workspace-context'
 import { workspaceListDir, type WorkspaceDirEntryDto } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 interface FileTreeItemProps {
   item: WorkspaceDirEntryDto
@@ -214,30 +216,39 @@ export function WorkspaceFileTree() {
 }
 
 export function WorkspaceFileTreeSidebar() {
-  const { fileTreeOpen } = useWorkspace()
-  
+  const { fileTreeOpen, setFileTreeOpen } = useWorkspace()
+
   return (
-    <div 
+    <div
       className={cn(
-        "border-r border-sidebar-border/50 transition-[width,margin-left] duration-200 ease-in-out overflow-hidden relative bg-sidebar text-sidebar-foreground",
-        fileTreeOpen ? "w-(--sidebar-width)" : "w-0 border-r-0"
+        'flex shrink-0 flex-col border-r border-sidebar-border/50 bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out',
+        fileTreeOpen
+          ? 'w-(--sidebar-width) overflow-hidden'
+          : 'w-0 overflow-hidden border-r-0',
       )}
       style={{
-        position: 'relative',
         height: '100svh',
         minWidth: fileTreeOpen ? undefined : '0px',
-        flexShrink: 0
+        flexShrink: 0,
       }}
     >
-      <div className={cn(
-        "w-(--sidebar-width) flex flex-col h-full transition-opacity duration-200",
-        !fileTreeOpen && "opacity-0 pointer-events-none"
-      )}>
-        <div className="h-14 border-b border-sidebar-border/50 flex items-center px-4 shrink-0">
-          <span className="text-sm font-semibold truncate">Explorer</span>
+      {fileTreeOpen ? (
+        <div className="flex min-h-0 w-(--sidebar-width) flex-1 flex-col">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border/50 px-4">
+            <span className="truncate text-sm font-semibold">Explorer</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="-mr-2 size-7 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              onClick={() => setFileTreeOpen(false)}
+              title="Close File Explorer"
+            >
+              <PanelLeftClose className="size-4" />
+            </Button>
+          </div>
+          <WorkspaceFileTree />
         </div>
-        <WorkspaceFileTree />
-      </div>
+      ) : null}
     </div>
   )
 }

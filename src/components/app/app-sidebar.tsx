@@ -5,6 +5,7 @@ import {
   Loader2,
   MoreHorizontal,
   PanelLeftIcon,
+  PanelLeftClose,
   Pin,
   Plus,
   Settings,
@@ -53,6 +54,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
@@ -587,6 +589,8 @@ export function AppSidebar() {
     Record<string, boolean>
   >({})
 
+  const { setOpen } = useSidebar()
+
   const visibleProjectWorkspaces = showAllWorkspaces
     ? projectWorkspaces
     : projectWorkspaces.slice(0, VISIBLE_WORKSPACES_DEFAULT)
@@ -739,31 +743,42 @@ export function AppSidebar() {
         className={cn('gap-3', isTauriRuntime ? 'pt-4' : '')}
         data-tauri-drag-region={isTauriRuntime ? true : undefined}
       >
-        <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined}>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              asChild
-              tooltip="Braian home"
-              className="group-data-[collapsible=icon]:!size-11 group-data-[collapsible=icon]:!min-h-11 group-data-[collapsible=icon]:!min-w-11 group-data-[collapsible=icon]:!p-1.5"
-            >
-              <Link to="/dashboard" search={{ tab: 'overview' }}>
-                <img
-                  src="/braian-logo.png"
-                  alt=""
-                  width={48}
-                  height={48}
-                  draggable={false}
-                  className="size-12 shrink-0 object-contain group-data-[collapsible=icon]:size-11"
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold leading-tight">
-                  Braian
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center justify-between">
+          <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined} className="flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="lg"
+                asChild
+                tooltip="Braian home"
+                className="group-data-[collapsible=icon]:!size-11 group-data-[collapsible=icon]:!min-h-11 group-data-[collapsible=icon]:!min-w-11 group-data-[collapsible=icon]:!p-1.5"
+              >
+                <Link to="/dashboard" search={{ tab: 'overview' }}>
+                  <img
+                    src="/braian-logo.png"
+                    alt=""
+                    width={48}
+                    height={48}
+                    draggable={false}
+                    className="size-12 shrink-0 object-contain group-data-[collapsible=icon]:size-11"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold leading-tight">
+                    Braian
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 -mr-1 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            onClick={() => setOpen(false)}
+            title="Close Sidebar"
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+        </div>
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
