@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/collapsible'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { addContextFileEntry } from '@/lib/chat-sessions/store'
+import { workspaceFilePointerDragMaybeStartOnPointerDown } from '@/lib/workspace-file-pointer-dnd'
 import {
   joinRootRelative,
   parentRelativeDir,
@@ -137,14 +138,32 @@ export function WorkspaceFilesPanel({
                 entries.map((e) => (
                   <li
                     key={e.relativePath}
-                    className="hover:bg-muted/60 flex flex-wrap items-center gap-1 rounded-md px-1 py-0.5"
+                    onPointerDownCapture={(pe) => {
+                      if (!e.isDir) {
+                        workspaceFilePointerDragMaybeStartOnPointerDown(pe, {
+                          relativePath: e.relativePath,
+                          displayName: e.name,
+                        })
+                      }
+                    }}
+                    className={cn(
+                      'hover:bg-muted/60 flex flex-wrap items-center gap-1 rounded-md px-1 py-0.5',
+                      !e.isDir && 'cursor-grab select-none active:cursor-grabbing',
+                    )}
                   >
                     <button
                       type="button"
                       className={cn(
                         'text-text-2 min-w-0 flex-1 truncate text-left text-xs',
                         e.isDir && 'font-medium',
+                        !e.isDir &&
+                          'cursor-grab select-none active:cursor-grabbing',
                       )}
+                      title={
+                        e.isDir
+                          ? undefined
+                          : 'Drag into the message field to @ mention, or click to add to context'
+                      }
                       onClick={() => {
                         if (e.isDir) setRelativeDir(e.relativePath)
                         else attachFile(e)
@@ -171,7 +190,7 @@ export function WorkspaceFilesPanel({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-7 shrink-0"
+                          className="size-7 shrink-0 cursor-pointer"
                           title="Add to chat context"
                           onClick={() => attachFile(e)}
                         >
@@ -181,7 +200,7 @@ export function WorkspaceFilesPanel({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-7 shrink-0"
+                          className="size-7 shrink-0 cursor-pointer"
                           title="Show in file manager"
                           onClick={() => onReveal(e)}
                         >

@@ -106,6 +106,7 @@ import {
   type ConversationDto,
   type WorkspaceFileIndexEntry,
 } from '@/lib/workspace-api'
+import { registerWorkspaceFilePointerDropHandler } from '@/lib/workspace-file-pointer-dnd'
 import { workspaceHubRecentFileTouch } from '@/lib/workspace-hub-api'
 import { workspaceGitTryCommit } from '@/lib/workspace/git-history-api'
 import { formatRelativeTime } from '@/lib/time'
@@ -792,6 +793,54 @@ export function ChatWorkbench({
     [appendDraftMentions, attachAbsolutePaths, isProfileSession],
   )
 
+  const applyInternalWorkspaceFileDrop = useCallback(
+    (payload: { relativePath: string; displayName: string }) => {
+      if (isProfileSession || isPersonalSimpleChat) return
+      addContextFileEntry(sessionKey, {
+        relativePath: payload.relativePath,
+        displayName: payload.displayName,
+      })
+      void workspaceHubRecentFileTouch({
+        workspaceId: activeWorkspaceId,
+        relativePath: payload.relativePath,
+        label: payload.displayName,
+      })
+      appendDraftMentions([`@${payload.displayName}`])
+    },
+    [
+      activeWorkspaceId,
+      addContextFileEntry,
+      appendDraftMentions,
+      isPersonalSimpleChat,
+      isProfileSession,
+      sessionKey,
+    ],
+  )
+
+  const handleComposerHtmlDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      if (isProfileSession) return
+
+      const dropped = Array.from(e.dataTransfer.files)
+      const paths: string[] = []
+      for (const f of dropped) {
+        const path = (f as File & { path?: string }).path
+        if (typeof path === 'string' && path.length > 0) {
+          paths.push(path)
+        }
+      }
+      if (paths.length > 0) void onNativeFileDrop(paths)
+    },
+    [isProfileSession, onNativeFileDrop],
+  )
+
+  useEffect(() => {
+    return registerWorkspaceFilePointerDropHandler((payload) => {
+      applyInternalWorkspaceFileDrop(payload)
+    })
+  }, [applyInternalWorkspaceFileDrop])
+
   useEffect(() => {
     setMentionHighlight(0)
   }, [mention?.start, mention?.query])
@@ -947,8 +996,12 @@ export function ChatWorkbench({
         if (e.payload.type === 'drop') {
           dragHasFilesRef.current = false
           setFileDragHighlight(false)
-          if (inside && 'paths' in e.payload && e.payload.paths.length > 0) {
-            await onNativeFileDrop(e.payload.paths)
+          const paths =
+            'paths' in e.payload && Array.isArray(e.payload.paths)
+              ? e.payload.paths
+              : []
+          if (inside && paths.length > 0) {
+            await onNativeFileDrop(paths)
           }
         }
       })
@@ -957,23 +1010,7 @@ export function ChatWorkbench({
       alive = false
       unlisten?.()
     }
-  }, [isTauriRuntime, isProfileSession, onNativeFileDrop])
-
-  const onInternalFileDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault()
-      const path = e.dataTransfer.getData('application/x-braian-file-path')
-      if (path && !isProfileSession) {
-        const name = e.dataTransfer.getData('text/plain') || path.split('/').pop() || path
-        addContextFileEntry(sessionKey, {
-          relativePath: path,
-          displayName: name,
-        })
-        appendDraftMentions([`@${name}`])
-      }
-    },
-    [addContextFileEntry, appendDraftMentions, isProfileSession, sessionKey]
-  )
+  }, [isProfileSession, isTauriRuntime, onNativeFileDrop])
 
   const pickMention = useCallback(
     (pick: MentionPick) => {
@@ -1542,6 +1579,7 @@ export function ChatWorkbench({
 
   const composerCardSection = (
     <div
+      data-braian-file-drop-zone="1"
       className={cn(
         'bg-background border-border/40 focus-within:ring-ring/20 relative rounded-[20px] border shadow-sm focus-within:ring-2 transition-all duration-200',
         fileDragHighlight &&
@@ -1642,6 +1680,11 @@ export function ChatWorkbench({
         onKeyUp={syncCaretFromTextarea}
         onClick={syncCaretFromTextarea}
         onSelect={syncCaretFromTextarea}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDrop={handleComposerHtmlDrop}
         className="min-h-[120px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-sm shadow-none focus-visible:ring-0"
       />
       <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between">
@@ -1755,32 +1798,13 @@ export function ChatWorkbench({
           {centeredTopHints}
           <div
             ref={composerDropZoneRef}
+            data-braian-file-drop-zone="1"
             className="flex min-h-0 flex-1 flex-col justify-center px-4 py-6 md:px-6 md:py-10"
             onDragOver={(e) => {
               e.preventDefault()
               e.dataTransfer.dropEffect = 'copy'
             }}
-            onDrop={(e) => {
-              e.preventDefault()
-              if (isProfileSession) return
-
-              // Handle internal drag from filetree
-              const internalPath = e.dataTransfer.getData('application/x-braian-file-path')
-              if (internalPath) {
-                void onInternalFileDrop(e)
-                return
-              }
-
-              const dropped = Array.from(e.dataTransfer.files)
-              const paths: string[] = []
-              for (const f of dropped) {
-                const path = (f as File & { path?: string }).path
-                if (typeof path === 'string' && path.length > 0) {
-                  paths.push(path)
-                }
-              }
-              if (paths.length > 0) void onNativeFileDrop(paths)
-            }}
+            onDrop={handleComposerHtmlDrop}
           >
             <div className="mx-auto w-full max-w-5xl">
               {workspaceTargetRow}
@@ -1953,32 +1977,13 @@ export function ChatWorkbench({
       </ScrollArea>
           <div
             ref={composerDropZoneRef}
+            data-braian-file-drop-zone="1"
             className="border-border bg-background/95 supports-backdrop-filter:bg-background/80 shrink-0 border-t py-3 backdrop-blur-md md:py-4"
             onDragOver={(e) => {
               e.preventDefault()
               e.dataTransfer.dropEffect = 'copy'
             }}
-            onDrop={(e) => {
-              e.preventDefault()
-              if (isProfileSession) return
-
-              // Handle internal drag from filetree
-              const internalPath = e.dataTransfer.getData('application/x-braian-file-path')
-              if (internalPath) {
-                void onInternalFileDrop(e)
-                return
-              }
-
-              const dropped = Array.from(e.dataTransfer.files)
-              const paths: string[] = []
-              for (const f of dropped) {
-                const path = (f as File & { path?: string }).path
-                if (typeof path === 'string' && path.length > 0) {
-                  paths.push(path)
-                }
-              }
-              if (paths.length > 0) void onNativeFileDrop(paths)
-            }}
+            onDrop={handleComposerHtmlDrop}
           >
             <div className="mx-auto w-full max-w-5xl px-4 md:px-6">
               {contextBadgesSection}

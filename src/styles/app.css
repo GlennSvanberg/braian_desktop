@@ -10,6 +10,56 @@
   -webkit-app-region: no-drag;
 }
 
+/* Pointer-based in-app file drag: textarea/input use text cursor by default — override while dragging. */
+body.braian-ws-file-pointer-drag {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+body.braian-ws-file-pointer-drag * {
+  cursor: grabbing !important;
+}
+
+/* Floating label following the pointer (created in workspace-file-pointer-dnd.ts). */
+.braian-ws-file-drag-ghost {
+  position: fixed;
+  z-index: 99999;
+  left: 0;
+  top: 0;
+  max-width: min(18rem, calc(100vw - 2rem));
+  pointer-events: none;
+  padding: 0.35rem 0.55rem 0.35rem 0.45rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-1);
+  color: var(--app-text-1);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow:
+    0 4px 14px color-mix(in srgb, var(--app-text-1) 12%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--app-border) 80%, transparent);
+}
+
+.braian-ws-file-drag-ghost-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.braian-ws-file-drag-ghost-row svg {
+  flex-shrink: 0;
+  color: var(--app-accent-600);
+  opacity: 0.9;
+}
+
+.braian-ws-file-drag-ghost-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Semantic palette: Braian prototype neutrals + semantic colors; green primary (not steel-blue). */
 html.light {
   color-scheme: light;

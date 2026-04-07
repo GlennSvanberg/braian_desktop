@@ -16,6 +16,7 @@ import { join } from '@tauri-apps/api/path'
 
 import { useWorkspace } from './workspace-context'
 import { workspaceListDir, type WorkspaceDirEntryDto } from '@/lib/workspace-api'
+import { workspaceFilePointerDragMaybeStartOnPointerDown } from '@/lib/workspace-file-pointer-dnd'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -100,43 +101,64 @@ const FileTreeItem = ({ item, depth, workspaceId, rootPath }: FileTreeItemProps)
     }
   }, [item.isDir, item.relativePath, rootPath])
 
-  const handleDragStart = (e: React.DragEvent) => {
-    if (item.isDir) return
-    e.dataTransfer.setData('application/x-braian-file-path', item.relativePath)
-    e.dataTransfer.setData('text/plain', item.name)
-    e.dataTransfer.effectAllowed = 'copy'
-  }
+  const rowClassName = cn(
+    'flex w-full items-center gap-2 overflow-hidden rounded-md text-left text-sm ring-sidebar-ring outline-hidden transition-[width,height,padding,color,background-color]',
+    'h-7 py-0 px-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-inset',
+    depth > 0 && 'ml-3 border-l border-sidebar-border/30 pl-2',
+    item.isDir ? 'cursor-default' : 'cursor-grab select-none active:cursor-grabbing',
+  )
+
+  const rowInner = (
+    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      {item.isDir && (
+        <span className="shrink-0">
+          {isOpen ? (
+            <ChevronDown className="size-3 text-muted-foreground/70" />
+          ) : (
+            <ChevronRight className="size-3 text-muted-foreground/70" />
+          )}
+        </span>
+      )}
+      {!item.isDir && <span className="w-3 shrink-0" />}
+      <FileIcon name={item.name} isDir={item.isDir} />
+      <span className="truncate text-xs">{item.name}</span>
+      {loading && (
+        <Loader2 className="size-3 animate-spin text-muted-foreground/50" />
+      )}
+    </div>
+  )
 
   return (
-    <li className="relative min-w-0 list-none">
-      <button
-        className={cn(
-          "flex w-full items-center gap-2 overflow-hidden rounded-md text-left text-sm ring-sidebar-ring outline-hidden transition-[width,height,padding,color,background-color]",
-          "h-7 py-0 px-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-inset",
-          depth > 0 && "ml-3 border-l border-sidebar-border/30 pl-2"
-        )}
-        onClick={item.isDir ? toggleFolder : undefined}
-        onDoubleClick={handleDoubleClick}
-        draggable={!item.isDir}
-        onDragStart={!item.isDir ? handleDragStart : undefined}
-        title={item.relativePath}
-      >
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          {item.isDir && (
-            <span className="shrink-0">
-              {isOpen ? (
-                <ChevronDown className="size-3 text-muted-foreground/70" />
-              ) : (
-                <ChevronRight className="size-3 text-muted-foreground/70" />
-              )}
-            </span>
-          )}
-          {!item.isDir && <span className="w-3 shrink-0" />}
-          <FileIcon name={item.name} isDir={item.isDir} />
-          <span className="truncate text-xs">{item.name}</span>
-          {loading && <Loader2 className="size-3 animate-spin text-muted-foreground/50" />}
+    <li
+      className="relative min-w-0 list-none"
+      onPointerDownCapture={(pe) => {
+        if (!item.isDir) {
+          workspaceFilePointerDragMaybeStartOnPointerDown(pe, {
+            relativePath: item.relativePath,
+            displayName: item.name,
+          })
+        }
+      }}
+    >
+      {item.isDir ? (
+        <button
+          type="button"
+          className={rowClassName}
+          onClick={toggleFolder}
+          onDoubleClick={handleDoubleClick}
+          title={item.relativePath}
+        >
+          {rowInner}
+        </button>
+      ) : (
+        <div
+          className={rowClassName}
+          onDoubleClick={handleDoubleClick}
+          title={`${item.relativePath} — drag into the message field to @ mention in chat`}
+        >
+          {rowInner}
         </div>
-      </button>
+      )}
       
       {isOpen && item.isDir && (
         <ul className="mt-0.5 flex w-full min-w-0 flex-col gap-1 list-none">
