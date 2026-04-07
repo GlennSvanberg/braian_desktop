@@ -560,25 +560,24 @@ export function WorkspaceFileTreeSidebar() {
   return (
     <div
       className={cn(
-        'flex shrink-0 flex-col border-r border-sidebar-border/50 bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out',
+        'box-border flex h-svh min-h-0 shrink-0 flex-col border-r border-sidebar-border/50 bg-sidebar pt-2 text-sidebar-foreground transition-[width] duration-200 ease-in-out',
         fileTreeOpen
           ? 'w-(--sidebar-width) overflow-hidden'
           : 'w-0 overflow-hidden border-r-0',
       )}
       style={{
-        height: '100svh',
         minWidth: fileTreeOpen ? undefined : '0px',
         flexShrink: 0,
       }}
     >
       {fileTreeOpen ? (
         <div className="flex min-h-0 w-(--sidebar-width) flex-1 flex-col">
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border/50 px-4">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border/50 px-2 md:px-3">
             <span className="truncate text-sm font-semibold">Explorer</span>
             <Button
               variant="ghost"
               size="icon"
-              className="-mr-2 size-7 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              className="size-7 shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground"
               onClick={() => setFileTreeOpen(false)}
               title="Close File Explorer"
             >

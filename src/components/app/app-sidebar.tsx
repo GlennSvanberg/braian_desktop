@@ -740,26 +740,25 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
       <SidebarHeader
-        className={cn('gap-3', isTauriRuntime ? 'pt-4' : '')}
+        className="h-14 shrink-0 gap-0 border-b border-sidebar-border/50 p-0"
         data-tauri-drag-region={isTauriRuntime ? true : undefined}
       >
-        <div className="flex items-center justify-between">
-          <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined} className="flex-1">
+        <div className="flex h-full w-full items-center justify-between gap-2 px-2 md:px-3">
+          <SidebarMenu data-tauri-drag-region={isTauriRuntime ? false : undefined} className="min-w-0 flex-1">
             <SidebarMenuItem>
               <SidebarMenuButton
-                size="lg"
                 asChild
                 tooltip="Braian home"
-                className="group-data-[collapsible=icon]:!size-11 group-data-[collapsible=icon]:!min-h-11 group-data-[collapsible=icon]:!min-w-11 group-data-[collapsible=icon]:!p-1.5"
+                className="h-9 min-h-9 py-0 pr-2 pl-1 group-data-[collapsible=icon]:!size-11 group-data-[collapsible=icon]:!min-h-11 group-data-[collapsible=icon]:!min-w-11 group-data-[collapsible=icon]:!p-1.5"
               >
                 <Link to="/dashboard" search={{ tab: 'overview' }}>
                   <img
                     src="/braian-logo.png"
                     alt=""
-                    width={48}
-                    height={48}
+                    width={32}
+                    height={32}
                     draggable={false}
-                    className="size-12 shrink-0 object-contain group-data-[collapsible=icon]:size-11"
+                    className="size-8 shrink-0 object-contain group-data-[collapsible=icon]:size-11"
                     aria-hidden
                   />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold leading-tight">
@@ -772,7 +771,7 @@ export function AppSidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 -mr-1 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            className="size-7 shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground"
             onClick={() => setOpen(false)}
             title="Close Sidebar"
           >
@@ -780,7 +779,6 @@ export function AppSidebar() {
           </Button>
         </div>
       </SidebarHeader>
-      <SidebarSeparator />
       <SidebarContent>
         <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>Workspaces</SidebarGroupLabel>

@@ -21,19 +21,20 @@ export function MainSidebarExpandRail() {
 
   return (
     <div
-      className="flex w-11 shrink-0 flex-col items-center border-r border-sidebar-border/50 bg-sidebar pt-2 text-sidebar-foreground"
-      style={{ height: '100svh', minWidth: '2.75rem' }}
+      className="box-border flex h-svh w-11 min-w-11 shrink-0 flex-col border-r border-sidebar-border/50 bg-sidebar pt-2 text-sidebar-foreground"
     >
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8 text-sidebar-foreground/80 hover:text-sidebar-foreground"
-        title="Show navigation"
-        onClick={onExpand}
-      >
-        <PanelLeftOpen className="size-4" />
-        <span className="sr-only">Show navigation</span>
-      </Button>
+      <div className="flex h-14 shrink-0 items-center justify-center border-b border-sidebar-border/50">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 text-sidebar-foreground/80 hover:text-sidebar-foreground"
+          title="Show navigation"
+          onClick={onExpand}
+        >
+          <PanelLeftOpen className="size-4" />
+          <span className="sr-only">Show navigation</span>
+        </Button>
+      </div>
     </div>
   )
 }
