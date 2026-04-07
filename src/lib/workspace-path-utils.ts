@@ -56,3 +56,10 @@ export function parentRelativeDir(relativeDir: string): string {
   parts.pop()
   return parts.join('/')
 }
+
+/** Parent directory of a file or folder path relative to workspace root; `''` at root. */
+export function parentDirectoryOfRelativePath(relativePath: string): string {
+  const n = normalizeFsPath(relativePath)
+  const i = n.lastIndexOf('/')
+  return i < 0 ? '' : n.slice(0, i)
+}

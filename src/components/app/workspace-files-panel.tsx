@@ -143,12 +143,13 @@ export function WorkspaceFilesPanel({
                         workspaceFilePointerDragMaybeStartOnPointerDown(pe, {
                           relativePath: e.relativePath,
                           displayName: e.name,
+                          isDir: false,
                         })
                       }
                     }}
                     className={cn(
                       'hover:bg-muted/60 flex flex-wrap items-center gap-1 rounded-md px-1 py-0.5',
-                      !e.isDir && 'cursor-grab select-none active:cursor-grabbing',
+                      !e.isDir && 'cursor-default select-none',
                     )}
                   >
                     <button
@@ -156,8 +157,7 @@ export function WorkspaceFilesPanel({
                       className={cn(
                         'text-text-2 min-w-0 flex-1 truncate text-left text-xs',
                         e.isDir && 'font-medium',
-                        !e.isDir &&
-                          'cursor-grab select-none active:cursor-grabbing',
+                        !e.isDir && 'cursor-default select-none',
                       )}
                       title={
                         e.isDir

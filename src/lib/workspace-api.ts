@@ -612,6 +612,71 @@ export async function workspaceListDir(
   })
 }
 
+export async function workspaceMoveEntry(
+  workspaceId: string,
+  fromRelative: string,
+  toParentRelative: string,
+): Promise<string> {
+  if (!isTauri()) {
+    throw new Error('Moving files requires the desktop app.')
+  }
+  const newPath = await invoke<string>('workspace_move_entry', {
+    workspaceId,
+    fromRelative,
+    toParentRelative,
+  })
+  emitWorkspaceDurableActivity(workspaceId)
+  return newPath
+}
+
+export async function workspaceRenameEntry(
+  workspaceId: string,
+  relativePath: string,
+  newName: string,
+): Promise<string> {
+  if (!isTauri()) {
+    throw new Error('Renaming files requires the desktop app.')
+  }
+  const newPath = await invoke<string>('workspace_rename_entry', {
+    workspaceId,
+    relativePath,
+    newName,
+  })
+  emitWorkspaceDurableActivity(workspaceId)
+  return newPath
+}
+
+export async function workspaceCreateDir(
+  workspaceId: string,
+  relativeParent: string,
+  name: string,
+): Promise<string> {
+  if (!isTauri()) {
+    throw new Error('Creating folders requires the desktop app.')
+  }
+  const newPath = await invoke<string>('workspace_create_dir', {
+    workspaceId,
+    relativeParent,
+    name,
+  })
+  emitWorkspaceDurableActivity(workspaceId)
+  return newPath
+}
+
+export async function workspaceDeleteEntry(
+  workspaceId: string,
+  relativePath: string,
+): Promise<void> {
+  if (!isTauri()) {
+    throw new Error('Deleting files requires the desktop app.')
+  }
+  await invoke<void>('workspace_delete_entry', {
+    workspaceId,
+    relativePath,
+  })
+  emitWorkspaceDurableActivity(workspaceId)
+}
+
 export type WorkspaceFileIndexEntry = {
   relativePath: string
   name: string

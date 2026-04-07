@@ -250,9 +250,6 @@ pub fn workspace_list_dir(
     if name == "." || name == ".." {
       continue;
     }
-    if name == ".braian" {
-      continue;
-    }
     let path = entry.path();
     let is_dir = entry
       .file_type()
@@ -276,6 +273,211 @@ pub fn workspace_list_dir(
     }
   });
   Ok(entries)
+}
+
+fn sanitize_workspace_basename(name: &str) -> Result<String, String> {
+  let t = name.trim();
+  if t.is_empty() {
+    return Err("Name is empty.".to_string());
+  }
+  if t == "." || t == ".." {
+    return Err("Invalid name.".to_string());
+  }
+  if t.contains('/') || t.contains('\\') {
+    return Err("Name must not contain path separators.".to_string());
+  }
+  let safe: String = t
+    .chars()
+    .map(|c| match c {
+      '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '\0' => '-',
+      c if c.is_control() => '-',
+      c => c,
+    })
+    .collect();
+  if safe.is_empty() || safe == "." || safe == ".." {
+    return Err("Invalid name.".to_string());
+  }
+  Ok(safe)
+}
+
+/// Move a file or directory under the workspace to another parent directory (same basename).
+#[tauri::command]
+pub fn workspace_move_entry(
+  app: AppHandle,
+  workspace_id: String,
+  from_relative: String,
+  to_parent_relative: String,
+) -> Result<String, String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &workspace_id)?;
+  let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
+
+  let from_path = safe_join_workspace(&root, from_relative.trim())?;
+  if !from_path.exists() {
+    return Err("Source does not exist.".to_string());
+  }
+  let from_path = from_path.canonicalize().map_err(|e| e.to_string())?;
+  if !from_path.starts_with(&canon_root) {
+    return Err("Path escapes workspace.".to_string());
+  }
+
+  let to_parent_path = if to_parent_relative.trim().is_empty() {
+    canon_root.clone()
+  } else {
+    let full = safe_join_workspace(&root, to_parent_relative.trim())?;
+    let meta = fs::metadata(&full).map_err(|e| e.to_string())?;
+    if !meta.is_dir() {
+      return Err("Destination parent is not a directory.".to_string());
+    }
+    full.canonicalize().map_err(|e| e.to_string())?
+  };
+  if !to_parent_path.starts_with(&canon_root) {
+    return Err("Path escapes workspace.".to_string());
+  }
+
+  let file_name = from_path
+    .file_name()
+    .and_then(|n| n.to_str())
+    .filter(|s| !s.is_empty())
+    .ok_or_else(|| "Invalid source name.".to_string())?;
+
+  let dest_path = to_parent_path.join(file_name);
+  if from_path == dest_path {
+    return relative_path_display(&root, &from_path);
+  }
+  if dest_path.exists() {
+    return Err("A file or folder with that name already exists in the destination.".to_string());
+  }
+
+  let from_is_dir = fs::metadata(&from_path)
+    .map_err(|e| e.to_string())?
+    .is_dir();
+  if from_is_dir {
+    let from_rel = relative_path_display(&root, &from_path)?;
+    let to_parent_display = if to_parent_relative.trim().is_empty() {
+      String::new()
+    } else {
+      relative_path_display(&root, &to_parent_path)?
+    };
+    let prefix = format!("{from_rel}/");
+    if !to_parent_display.is_empty()
+      && (to_parent_display == from_rel || to_parent_display.starts_with(&prefix))
+    {
+      return Err("Cannot move a folder into itself or into its own subfolder.".to_string());
+    }
+  }
+
+  fs::rename(&from_path, &dest_path).map_err(|e| e.to_string())?;
+  let dest_canon = dest_path.canonicalize().map_err(|e| e.to_string())?;
+  relative_path_display(&root, &dest_canon)
+}
+
+/// Rename a file or directory (basename only); path stays in the same parent folder.
+#[tauri::command]
+pub fn workspace_rename_entry(
+  app: AppHandle,
+  workspace_id: String,
+  relative_path: String,
+  new_name: String,
+) -> Result<String, String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &workspace_id)?;
+  let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
+
+  let safe_new = sanitize_workspace_basename(&new_name)?;
+  let from_path = safe_join_workspace(&root, relative_path.trim())?;
+  if !from_path.exists() {
+    return Err("Path does not exist.".to_string());
+  }
+  let from_path = from_path.canonicalize().map_err(|e| e.to_string())?;
+  if !from_path.starts_with(&canon_root) {
+    return Err("Path escapes workspace.".to_string());
+  }
+
+  let parent = from_path
+    .parent()
+    .ok_or_else(|| "Invalid path.".to_string())?;
+  let dest_path = parent.join(&safe_new);
+  if from_path == dest_path {
+    return relative_path_display(&root, &from_path);
+  }
+  if dest_path.exists() {
+    return Err("A file or folder with that name already exists.".to_string());
+  }
+
+  fs::rename(&from_path, &dest_path).map_err(|e| e.to_string())?;
+  let dest_canon = dest_path.canonicalize().map_err(|e| e.to_string())?;
+  relative_path_display(&root, &dest_canon)
+}
+
+/// Create a new directory under `relative_parent` (empty string = workspace root).
+#[tauri::command]
+pub fn workspace_create_dir(
+  app: AppHandle,
+  workspace_id: String,
+  relative_parent: String,
+  name: String,
+) -> Result<String, String> {
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &workspace_id)?;
+  let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
+
+  let safe_name = sanitize_workspace_basename(&name)?;
+  let parent_path = if relative_parent.trim().is_empty() {
+    canon_root.clone()
+  } else {
+    let full = safe_join_workspace(&root, relative_parent.trim())?;
+    let meta = fs::metadata(&full).map_err(|e| e.to_string())?;
+    if !meta.is_dir() {
+      return Err("Parent is not a directory.".to_string());
+    }
+    full.canonicalize().map_err(|e| e.to_string())?
+  };
+  if !parent_path.starts_with(&canon_root) {
+    return Err("Path escapes workspace.".to_string());
+  }
+
+  let dest = unique_path_in_dir(&parent_path, &safe_name)?;
+  fs::create_dir(&dest).map_err(|e| e.to_string())?;
+  let dest_canon = dest.canonicalize().map_err(|e| e.to_string())?;
+  relative_path_display(&root, &dest_canon)
+}
+
+/// Delete a file or directory under the workspace (directories are removed recursively).
+#[tauri::command]
+pub fn workspace_delete_entry(
+  app: AppHandle,
+  workspace_id: String,
+  relative_path: String,
+) -> Result<(), String> {
+  let rel = relative_path.trim();
+  if rel.is_empty() {
+    return Err("Cannot delete the workspace root.".to_string());
+  }
+
+  let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
+  let root = workspace_root_path(&conn, &workspace_id)?;
+  let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
+
+  let path = safe_join_workspace(&root, rel)?;
+  if !path.exists() {
+    return Err("Path does not exist.".to_string());
+  }
+  let path = path.canonicalize().map_err(|e| e.to_string())?;
+  if !path.starts_with(&canon_root) {
+    return Err("Path escapes workspace.".to_string());
+  }
+  if path == canon_root {
+    return Err("Cannot delete the workspace root.".to_string());
+  }
+
+  let meta = fs::metadata(&path).map_err(|e| e.to_string())?;
+  if meta.is_dir() {
+    fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+  } else {
+    fs::remove_file(&path).map_err(|e| e.to_string())?;
+  }
+  Ok(())
 }
 
 const WORKSPACE_FILE_WALK_MAX: usize = 8_000;
