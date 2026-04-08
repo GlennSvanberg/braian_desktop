@@ -68,6 +68,49 @@ Under the hood, Braian runs MCP through a dedicated local broker process (`braia
 
 Workspace file, command, document canvas (`apply_document_canvas_patch` / `open_document_canvas`), skills, and webapp helpers stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
 
+## Fast dev loop (no Tauri)
+
+Use this when changing Rust MCP code (`braian-mcp-core`, `braian-mcpd`) so you do **not** need `npm run tauri:dev` every iteration.
+
+1. **Sample workspace** — Repo root includes `fixtures/mcp-test-workspace/` with `.braian/mcp.json`. Adjust server entries (paths, URLs) for your machine, or set **`MCP_TEST_WORKSPACE`** to another folder that contains `.braian/mcp.json`.
+
+2. **One command** — From the repo root:
+
+   ```bash
+   npm run mcp:dev
+   ```
+
+   This builds `braian-mcpd` into **`src-tauri/target/mcp-dev-broker/`** (separate from `target/debug`, so it still works while `tauri dev` has the main broker exe open), starts it on a local port, and POSTs **`/v1/probe`** once per configured server (same HTTP API the desktop app uses). You should see `HTTP 200` and `ok tools=…` for healthy servers.
+
+3. **Narrow probes** — Only some servers:
+
+   ```bash
+   MCP_DEV_SERVERS=context7,tanstack npm run mcp:dev
+   ```
+
+4. **Broker logs** — Run with broker stdout visible:
+
+   ```bash
+   MCP_DEV_VERBOSE=1 npm run mcp:dev
+   ```
+
+5. **Skip rebuild** — If `cargo` cannot overwrite `braian-mcpd.exe` (it is running), either stop the other process or:
+
+   ```bash
+   MCP_DEV_SKIP_BUILD=1 npm run mcp:dev
+   ```
+
+6. **Core-only tests** — `cargo test -p braian-mcp-core` exercises config/runtime without HTTP.
+
+7. **Manual HTTP** — Start the broker yourself, then POST JSON with headers `Content-Type: application/json` and `X-Braian-Mcpd-Token: <token>`:
+
+   - `POST /v1/probe` — body `{ "workspaceRootPath": "<abs path>", "serverName": "<name>" }` (snake_case keys are also accepted).
+   - `POST /v1/list-tools`, `/v1/call-tool`, `/v1/disconnect` — same style as the app (`workspace_mcp_runtime.rs`).
+
+**Note:** `azure-devops` and other servers that require an **interactive browser login** may still report probe failures in this headless loop until you complete OAuth in a context that provides a session (the full desktop UI or a logged-in shell).
+
+On **Windows**, stdio commands **`npx`**, **`npm`**, **`pnpm`**, **`yarn`**, and **`corepack`** are launched via `cmd.exe /c` so `.cmd` shims resolve the same way as in a terminal (`braian-mcp-core` `stdio.rs`).
+
 ## Security and Git
 
 - **`env`** and **`headers`** often hold API keys or tokens. If the workspace is a Git repository, **do not commit secrets**—use `.gitignore` on `mcp.json` if needed, or keep tokens in environment variables your shell provides and reference them only indirectly.

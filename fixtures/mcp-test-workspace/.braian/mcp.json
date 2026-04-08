@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {}
+    },
+    "tanstack": {
+      "url": "https://tanstack.com/api/mcp"
+    },
+    "p360-rest": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:\\git\\SKF\\p360_rest_mcp_server\\p360_rest_mcp_server",
+        "run",
+        "p360_rest_mcp_server"
+      ],
+      "env": {
+        "P360_URL": "https://pimtest.skf.net:8443/",
+        "P360_USERNAME": "rest",
+        "P360_PASSWORD": "heiler"
+      }
+    },
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "skforg"]
+    }
+  }
+}

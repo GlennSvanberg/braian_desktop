@@ -1,3 +1,7 @@
+// `braian-mcpd` is a path dependency so `cargo build -p app` always builds the broker binary.
+#[allow(unused_imports)]
+use braian_mcpd as _;
+
 mod ai_settings;
 mod braian_store;
 mod db;

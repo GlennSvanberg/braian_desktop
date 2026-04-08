@@ -507,6 +507,10 @@ export function ChatContextManagerDialog({
         const draft = thread.draft.trim()
         const userText = draft.length > 0 ? draft : EMPTY_DRAFT_USER_LINE
 
+        const activeMcpServers = (thread.activeMcpServers ?? [])
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+
         const args = await buildTanStackChatTurnArgs({
           userText,
           context: {
@@ -524,6 +528,7 @@ export function ChatContextManagerDialog({
             contextPriorConversations.length > 0
               ? { contextPriorConversations }
               : {}),
+            ...(activeMcpServers.length > 0 ? { activeMcpServers } : {}),
           },
           priorMessages,
           skipSettingsValidation: true,
@@ -558,6 +563,7 @@ export function ChatContextManagerDialog({
     thread.artifactPayload,
     thread.contextFiles,
     thread.contextConversations,
+    thread.activeMcpServers,
     thread.generating,
     isTauriRuntime,
   ])

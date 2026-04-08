@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -106,7 +106,8 @@ fn apply_mcp_stdio_path(entry: &serde_json::Map<String, Value>, cmd: &mut Comman
   cmd.env("PATH", augmented);
 }
 
-pub const MCP_RPC_DEADLINE: Duration = Duration::from_secs(25);
+/// Stdio MCP (e.g. `uv run`, `npx`) can exceed 25s on cold start (deps, JIT).
+pub const MCP_RPC_DEADLINE: Duration = Duration::from_secs(120);
 pub const MCP_STDERR_CAP: usize = 12_000;
 pub const MCP_MAX_TOOL_RESULT_CHARS: usize = 512 * 1024;
 
@@ -159,9 +160,7 @@ pub fn spawn_stdio_server(
     })
     .unwrap_or_default();
   let cwd_path = resolve_stdio_cwd(workspace_root, canon_root, entry)?;
-  let mut cmd = Command::new(command);
-  println!("mcpd: spawning `{}` with args {:?}", command, args);
-  cmd.args(&args);
+  let mut cmd = command_for_host(command, &args);
   cmd.current_dir(&cwd_path);
   cmd.stdin(Stdio::piped());
   cmd.stdout(Stdio::piped());
@@ -186,6 +185,28 @@ pub fn spawn_stdio_server(
   cmd
     .spawn()
     .map_err(|e| format!("Failed to start `{command}`: {e}"))
+}
+
+/// On Windows, `npx` / `npm` are `.cmd` shims; `Command::new("npx")` does not resolve them.
+fn command_for_host(program: &str, args: &[String]) -> Command {
+  #[cfg(windows)]
+  {
+    let lc = program.to_ascii_lowercase();
+    if matches!(
+      lc.as_str(),
+      "npx" | "npm" | "pnpm" | "yarn" | "corepack" | "uv" | "uvx"
+    ) {
+      let comspec = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string());
+      let mut c = Command::new(comspec);
+      c.arg("/c");
+      c.arg(program);
+      c.args(args);
+      return c;
+    }
+  }
+  let mut c = Command::new(program);
+  c.args(args);
+  c
 }
 
 pub fn read_response_for_id(
@@ -237,19 +258,89 @@ pub fn trim_stderr(s: &str) -> String {
   }
 }
 
+/// Read one MCP stdio message: **Content-Length** framing (spec) or a single NDJSON line.
+pub fn read_next_stdio_mcp_message<R: Read>(
+  reader: &mut BufReader<R>,
+) -> io::Result<Option<String>> {
+  let mut line = String::new();
+  loop {
+    line.clear();
+    let n = reader.read_line(&mut line)?;
+    if n == 0 {
+      return Ok(None);
+    }
+    let trimmed = line.trim_end_matches(['\r', '\n']);
+    if trimmed.is_empty() {
+      continue;
+    }
+    let body = if trimmed
+      .to_ascii_lowercase()
+      .starts_with("content-length:")
+    {
+      let rest = trimmed[trimmed.find(':').map(|i| i + 1).unwrap_or(trimmed.len())..].trim();
+      let byte_len = rest
+        .parse::<usize>()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+      let mut blank = String::new();
+      reader.read_line(&mut blank)?;
+      let mut buf = vec![0u8; byte_len];
+      reader.read_exact(&mut buf)?;
+      String::from_utf8_lossy(&buf).into_owned()
+    } else {
+      trimmed.to_string()
+    };
+    return Ok(Some(body));
+  }
+}
+
 pub fn start_stdout_line_channel(
+  stdout: std::process::ChildStdout,
+) -> (mpsc::Receiver<String>, std::thread::JoinHandle<()>) {
+  start_stdout_mcp_message_channel(stdout)
+}
+
+/// MCP stdio transport uses **Content-Length**-prefixed messages (spec). Some clients/servers
+/// use a single JSON line per message (NDJSON). This reader supports both.
+pub fn start_stdout_mcp_message_channel(
   stdout: std::process::ChildStdout,
 ) -> (mpsc::Receiver<String>, std::thread::JoinHandle<()>) {
   let (tx, rx) = mpsc::channel::<String>();
   let handle = std::thread::spawn(move || {
-    let reader = BufReader::new(stdout);
-    for line in reader.lines().map_while(Result::ok) {
-      if tx.send(line).is_err() {
+    let mut reader = BufReader::new(stdout);
+    loop {
+      let msg = match read_next_stdio_mcp_message(&mut reader) {
+        Ok(Some(s)) => s,
+        Ok(None) => break,
+        Err(_) => break,
+      };
+      if tx.send(msg).is_err() {
         break;
       }
     }
   });
   (rx, handle)
+}
+
+#[cfg(test)]
+mod mcp_stdio_framing_tests {
+  use super::*;
+  use std::io::Cursor;
+
+  #[test]
+  fn content_length_framing() {
+    let raw = b"Content-Length: 11\r\n\r\n{\"ok\":true}";
+    let mut r = BufReader::new(Cursor::new(raw));
+    let m = read_next_stdio_mcp_message(&mut r).unwrap().unwrap();
+    assert_eq!(m, r#"{"ok":true}"#);
+  }
+
+  #[test]
+  fn ndjson_line() {
+    let raw = b"{\"jsonrpc\":\"2.0\",\"id\":1}\n";
+    let mut r = BufReader::new(Cursor::new(raw));
+    let m = read_next_stdio_mcp_message(&mut r).unwrap().unwrap();
+    assert!(m.contains("jsonrpc"));
+  }
 }
 
 pub fn write_json_line(stdin: &mut impl Write, value: &Value) -> Result<(), String> {

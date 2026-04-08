@@ -92,6 +92,7 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "braian-mcp-core",
+ "braian-mcpd",
  "git2",
  "hex",
  "libc",
@@ -417,7 +418,6 @@ name = "braian-mcpd"
 version = "0.1.0"
 dependencies = [
  "braian-mcp-core",
- "serde",
  "serde_json",
  "tiny_http",
 ]

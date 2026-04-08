@@ -15,7 +15,8 @@
     "ai:stream": "tsx src/cli/braian-ai.ts stream",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "mcp:dev": "node scripts/mcp-dev/probe.mjs"
   },
   "dependencies": {
     "@mdxeditor/editor": "^3.53.1",

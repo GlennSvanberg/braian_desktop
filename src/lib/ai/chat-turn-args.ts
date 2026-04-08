@@ -658,6 +658,20 @@ export async function buildTanStackChatTurnArgs(
     })
   }
 
+  if (
+    workspaceScoped &&
+    activeMcpRequested.length > 0 &&
+    mcpTools.length === 0
+  ) {
+    const names = activeMcpRequested.join(', ')
+    systemSections.push({
+      id: 'mcp-tools-unregistered',
+      label: 'Connections (MCP) — no tools on this turn',
+      source: 'src/lib/ai/chat-turn-args.ts',
+      text: `## Connections (MCP)\n\nThis chat has MCP servers selected (**${names}**), but **no \`mcp__...\` tools were registered** for this request (listing failed, servers returned errors, or sessions are not ready). Do **not** claim you can invoke MCP tools until they appear in the tool list. If **Connections (MCP) issues** is above, use that; otherwise check workspace Connections and that \`workspace_mcp_list_tools\` succeeds for those servers.`,
+    })
+  }
+
   const systemPrompts = systemSections.map((s) => s.text)
 
   const toolsDisplay = tools.map((t) => toolToDisplayInfo(t))

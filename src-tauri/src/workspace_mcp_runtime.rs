@@ -7,6 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::AppHandle;
+use ureq::OrAnyStatus;
 
 use crate::braian_store::workspace_root_path;
 use crate::db;
@@ -146,21 +147,45 @@ fn ensure_broker_running() -> Result<BrokerAddr, String> {
   Ok(addr)
 }
 
-fn post_json<T: DeserializeOwned>(path: &str, body: Value) -> Result<T, String> {
-  let addr = ensure_broker_running()?;
+fn post_json_with_addr<T: DeserializeOwned>(
+  addr: &BrokerAddr,
+  path: &str,
+  body: &Value,
+) -> Result<T, String> {
   let url = format!("{}{}", addr.base_url, path);
-  let body_str = serde_json::to_string(&body).map_err(|e| e.to_string())?;
+  let body_str = serde_json::to_string(body).map_err(|e| e.to_string())?;
   let resp = ureq::post(&url)
     .timeout(std::time::Duration::from_secs(30))
     .set("Content-Type", "application/json; charset=utf-8")
     .set("X-Braian-Mcpd-Token", &addr.token)
     .send_string(&body_str)
+    .or_any_status()
     .map_err(|e| e.to_string())?;
-  if !(200..300).contains(&resp.status()) {
-    return Err(format!("mcpd HTTP {}", resp.status()));
-  }
+  let status = resp.status();
   let text = resp.into_string().map_err(|e| e.to_string())?;
+  if !(200..300).contains(&status) {
+    return Err(format!(
+      "mcpd HTTP {status} on {path}: {}",
+      text.chars().take(500).collect::<String>()
+    ));
+  }
   serde_json::from_str::<T>(&text).map_err(|e| e.to_string())
+}
+
+/// Stale `braian-mcpd` from an older build can keep running while the UI talks to a newer app; it may
+/// return serde-shaped 400s. If we see that signature, restart the broker once.
+fn post_json<T: DeserializeOwned>(path: &str, body: Value) -> Result<T, String> {
+  let addr = ensure_broker_running()?;
+  match post_json_with_addr::<T>(&addr, path, &body) {
+    Ok(v) => Ok(v),
+    Err(e) if e.contains("missing field `workspace_root_path`") =>
+    {
+      workspace_mcp_broker_shutdown();
+      let addr2 = ensure_broker_running()?;
+      post_json_with_addr::<T>(&addr2, path, &body)
+    }
+    Err(e) => Err(e),
+  }
 }
 
 fn workspace_root_for_id(app: &AppHandle, workspace_id: &str) -> Result<String, String> {
@@ -194,12 +219,15 @@ pub async fn workspace_mcp_list_tools(
   server_names: Option<Vec<String>>,
 ) -> Result<McpListToolsResultDto, String> {
   let root = workspace_root_for_id(&app, &workspace_id)?;
+  let names = server_names.unwrap_or_default();
   tauri::async_runtime::spawn_blocking(move || {
     post_json::<McpListToolsResultDto>(
       "/v1/list-tools",
       json!({
-        "workspaceRootPath": root,
-        "serverNames": server_names.unwrap_or_default(),
+        "workspaceRootPath": &root,
+        "workspace_root_path": &root,
+        "serverNames": &names,
+        "server_names": &names,
       }),
     )
   })
@@ -225,9 +253,12 @@ pub async fn workspace_mcp_call_tool(
     post_json::<CallToolResponse>(
       "/v1/call-tool",
       json!({
-        "workspaceRootPath": root,
-        "serverName": server_name,
-        "toolName": tool_name,
+        "workspaceRootPath": &root,
+        "workspace_root_path": &root,
+        "serverName": &server_name,
+        "server_name": &server_name,
+        "toolName": &tool_name,
+        "tool_name": &tool_name,
         "arguments": arguments,
       }),
     )
@@ -247,7 +278,8 @@ pub async fn workspace_mcp_sessions_disconnect(
     post_json::<Value>(
       "/v1/disconnect",
       json!({
-        "workspaceRootPath": root,
+        "workspaceRootPath": &root,
+        "workspace_root_path": &root,
       }),
     )
   })
@@ -288,8 +320,10 @@ pub async fn workspace_mcp_probe_connection(
     post_json::<McpConnectionProbeResult>(
       "/v1/probe",
       json!({
-        "workspaceRootPath": root,
-        "serverName": server_name,
+        "workspaceRootPath": &root,
+        "workspace_root_path": &root,
+        "serverName": &server_name,
+        "server_name": &server_name,
       }),
     )
   })

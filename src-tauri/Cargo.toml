@@ -44,6 +44,8 @@ sha2 = "0.10"
 hex = "0.4"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }
 braian-mcp-core = { path = "crates/braian-mcp-core" }
+# Build the MCP broker binary whenever the app is built (see `braian-mcpd` lib crate).
+braian-mcpd = { path = "crates/braian-mcpd" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
