@@ -496,6 +496,17 @@ pub fn call_tool(
 
 pub fn probe_connection(workspace_root: &Path, name: &str) -> Result<McpConnectionProbeResult, String> {
   let cfg = load_workspace_mcp_config(workspace_root)?;
+  if disabled_set(&cfg).contains(name) {
+    return Ok(McpConnectionProbeResult {
+      ok: false,
+      tool_count: None,
+      error_message: Some(
+        "This server is off in Braian; turn it on to check the connection.".to_string(),
+      ),
+      transport: "disabled".to_string(),
+      tools: vec![],
+    });
+  }
   let entry_val = cfg
     .mcp_servers
     .get(name)

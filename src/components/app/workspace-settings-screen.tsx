@@ -51,6 +51,8 @@ type ConnKind = 'stdio' | 'remote'
 type ConnectionProbeUiState =
   | { kind: 'idle' }
   | { kind: 'checking' }
+  /** Server is off in Braian — we do not run MCP handshake / probe. */
+  | { kind: 'disabled' }
   | {
       kind: 'ok'
       transport: string
@@ -255,12 +257,21 @@ export function WorkspaceSettingsScreen({
     }
     setProbeRefreshing(true)
     setProbeByServer(
-      Object.fromEntries(names.map((n) => [n, { kind: 'checking' as const }])),
+      Object.fromEntries(
+        names.map((n) => [
+          n,
+          isServerEnabled(n, doc)
+            ? { kind: 'checking' as const }
+            : { kind: 'disabled' as const },
+        ]),
+      ),
     )
+    const enabledNames = names.filter((n) => isServerEnabled(n, doc))
     try {
       // One probe at a time: parallel checks spawn many child processes (e.g. uv)
       // and can overwhelm the machine; sequential keeps the UI responsive.
-      for (const name of names) {
+      // Disabled servers are never probed (no stdio spawn / remote handshake).
+      for (const name of enabledNames) {
         try {
           const r = await workspaceMcpProbeConnection(wsId, name)
           setProbeByServer((prev) => ({
@@ -659,7 +670,11 @@ export function WorkspaceSettingsScreen({
                 size="sm"
                 variant="outline"
                 onClick={() => void runConnectionProbes()}
-                disabled={serverNames.length === 0 || probeRefreshing}
+                disabled={
+                  serverNames.length === 0 ||
+                  probeRefreshing ||
+                  !serverNames.some((n) => isServerEnabled(n, doc))
+                }
               >
                 {probeRefreshing ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -705,20 +720,27 @@ export function WorkspaceSettingsScreen({
                             <span
                               className={cn(
                                 'border-background absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2',
-                                probe.kind === 'checking' || probe.kind === 'idle'
-                                  ? 'bg-muted-foreground animate-pulse'
-                                  : probe.kind === 'ok'
-                                    ? 'bg-[var(--color-success)]'
-                                    : 'bg-destructive',
+                                probe.kind === 'ok'
+                                  ? 'bg-[var(--color-success)]'
+                                  : probe.kind === 'error'
+                                    ? 'bg-destructive'
+                                    : probe.kind === 'disabled'
+                                      ? 'bg-muted-foreground'
+                                      : probe.kind === 'checking' ||
+                                          probe.kind === 'idle'
+                                        ? 'bg-muted-foreground animate-pulse'
+                                        : 'bg-muted-foreground',
                               )}
                               title={
                                 probe.kind === 'ok'
                                   ? 'Reachable'
                                   : probe.kind === 'error'
                                     ? 'Error'
-                                    : probe.kind === 'checking'
-                                      ? 'Checking…'
-                                      : 'Not checked yet'
+                                    : probe.kind === 'disabled'
+                                      ? 'Off — not checked'
+                                      : probe.kind === 'checking'
+                                        ? 'Checking…'
+                                        : 'Not checked yet'
                               }
                             />
                           </div>
@@ -822,6 +844,11 @@ export function WorkspaceSettingsScreen({
                             ) : probe.kind === 'checking' ? (
                               <p className="text-text-3 text-sm">
                                 Checking connection…
+                              </p>
+                            ) : probe.kind === 'disabled' ? (
+                              <p className="text-text-3 text-sm">
+                                Connection check skipped while this server is off
+                                in Braian.
                               </p>
                             ) : (
                               <p className="text-text-3 text-sm">
