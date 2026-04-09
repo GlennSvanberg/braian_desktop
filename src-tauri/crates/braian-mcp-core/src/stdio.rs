@@ -7,6 +7,31 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+/// Log target filter: set `RUST_LOG=braian_mcp_stdio=debug` (mcpd) or the same in the desktop app.
+pub const MCP_STDIO_LOG_TARGET: &str = "braian_mcp_stdio";
+
+/// Shell used to run `npx` / `npm` `.cmd` shims on Windows.
+///
+/// Tauri/GUI processes often inherit a `PATH` without `System32`, so `Command::new("cmd.exe")`
+/// fails with "program not found". Prefer `COMSPEC` when it points at an existing file;
+/// otherwise use `%SystemRoot%\System32\cmd.exe`.
+#[cfg(windows)]
+pub fn windows_shell_for_shim_commands() -> PathBuf {
+  if let Ok(comspec) = std::env::var("COMSPEC") {
+    let t = comspec.trim();
+    if !t.is_empty() {
+      let p = PathBuf::from(t);
+      if p.exists() {
+        return p;
+      }
+    }
+  }
+  std::env::var("SystemRoot")
+    .or_else(|_| std::env::var("WINDIR"))
+    .map(|root| PathBuf::from(root).join("System32").join("cmd.exe"))
+    .unwrap_or_else(|_| PathBuf::from(r"C:\Windows\System32\cmd.exe"))
+}
+
 /// Extra directories prepended to PATH so node CLIs resolve in GUI launches.
 fn extra_path_prefixes_for_node_cli() -> Vec<PathBuf> {
   let mut v: Vec<PathBuf> = Vec::new();
@@ -21,6 +46,22 @@ fn extra_path_prefixes_for_node_cli() -> Vec<PathBuf> {
     if let Ok(roam) = std::env::var("APPDATA") {
       v.push(Path::new(&roam).join("npm"));
     }
+    if let Ok(nvm_symlink) = std::env::var("NVM_SYMLINK") {
+      if !nvm_symlink.is_empty() {
+        v.push(PathBuf::from(nvm_symlink));
+      }
+    }
+    if let Ok(nvm_home) = std::env::var("NVM_HOME") {
+      if !nvm_home.is_empty() {
+        v.push(Path::new(&nvm_home).join("node"));
+      }
+    }
+    if let Ok(home) = std::env::var("USERPROFILE") {
+      let h = Path::new(&home);
+      v.push(h.join("scoop").join("shims"));
+      v.push(h.join("scoop").join("apps").join("nodejs").join("current"));
+    }
+    v.push(PathBuf::from(r"C:\ProgramData\chocolatey\bin"));
   }
 
   #[cfg(target_os = "macos")]
@@ -44,6 +85,11 @@ fn extra_path_prefixes_for_node_cli() -> Vec<PathBuf> {
   if let Ok(volta) = std::env::var("VOLTA_HOME") {
     if !volta.is_empty() {
       v.push(Path::new(&volta).join("bin"));
+    }
+  }
+  if let Ok(fnm_ms) = std::env::var("FNM_MULTISHELL_PATH") {
+    if !fnm_ms.is_empty() {
+      v.push(PathBuf::from(fnm_ms));
     }
   }
   v
@@ -94,7 +140,9 @@ fn safe_join_workspace(root: &Path, rel: &str) -> Result<PathBuf, String> {
   Ok(canon)
 }
 
-fn apply_mcp_stdio_path(entry: &serde_json::Map<String, Value>, cmd: &mut Command) {
+/// Same `PATH` string later applied to the child process. Used to resolve `npx.cmd` / `npm.cmd`
+/// **before** spawn (GUI apps often lack Node on `PATH` until we prepend these dirs).
+pub fn augmented_path_env_for_stdio_entry(entry: &serde_json::Map<String, Value>) -> String {
   let parent_path = std::env::var("PATH").unwrap_or_default();
   let base_path = entry
     .get("env")
@@ -102,8 +150,148 @@ fn apply_mcp_stdio_path(entry: &serde_json::Map<String, Value>, cmd: &mut Comman
     .and_then(|m| m.get("PATH"))
     .and_then(|v| v.as_str())
     .unwrap_or(&parent_path);
-  let augmented = prepend_existing_dirs_to_path(base_path);
-  cmd.env("PATH", augmented);
+  prepend_existing_dirs_to_path(base_path)
+}
+
+/// Applies the same augmented `PATH` used for shim resolution and spawn (single source of truth).
+pub fn apply_augmented_path_to_command(cmd: &mut Command, augmented_path: &str) {
+  cmd.env("PATH", augmented_path);
+}
+
+fn path_segments_iter(path_env: &str) -> impl Iterator<Item = &str> + '_ {
+  #[cfg(windows)]
+  {
+    path_env.split(';')
+  }
+  #[cfg(not(windows))]
+  {
+    path_env.split(':')
+  }
+}
+
+fn summarize_path_env_for_log(path_env: &str) -> String {
+  let segs: Vec<&str> = path_segments_iter(path_env)
+    .map(str::trim)
+    .filter(|s| !s.is_empty())
+    .collect();
+  let n = segs.len();
+  let preview = segs
+    .iter()
+    .take(4)
+    .map(|s| {
+      if s.len() > 88 {
+        format!("{}…", &s[..88])
+      } else {
+        (*s).to_string()
+      }
+    })
+    .collect::<Vec<_>>()
+    .join(" ; ");
+  format!("segment_count={n} first_segments=[{preview}]")
+}
+
+fn log_mcp_stdio_spawn_diagnostics(
+  command: &str,
+  cwd: &Path,
+  augmented_path: &str,
+  resolved_shim: Option<&Path>,
+) {
+  let parent_len = std::env::var("PATH").map(|p| p.len()).unwrap_or(0);
+  log::debug!(
+    target: MCP_STDIO_LOG_TARGET,
+    "stdio spawn: command={command} cwd={} parent_PATH_bytes={} augmented_PATH_bytes={} path_summary={} resolved_shim={}",
+    cwd.display(),
+    parent_len,
+    augmented_path.len(),
+    summarize_path_env_for_log(augmented_path),
+    resolved_shim
+      .map(|p| p.display().to_string())
+      .unwrap_or_else(|| "(not found — bare name for cmd)".to_string()),
+  );
+  #[cfg(windows)]
+  {
+    log::debug!(
+      target: MCP_STDIO_LOG_TARGET,
+      "stdio spawn Windows: cmd_shell={}",
+      windows_shell_for_shim_commands().display(),
+    );
+  }
+}
+
+/// Locate `npx.cmd` / `npm.cmd` / … on an augmented PATH (`;` on Windows, `:` elsewhere).
+pub fn find_cmd_shim_on_path(program: &str, path_env: &str) -> Option<PathBuf> {
+  let p = Path::new(program);
+  if p.is_absolute() && p.is_file() {
+    return Some(p.to_path_buf());
+  }
+  let stem = Path::new(program)
+    .file_stem()
+    .and_then(|s| s.to_str())
+    .unwrap_or(program);
+  let names = [
+    format!("{stem}.cmd"),
+    format!("{stem}.exe"),
+    stem.to_string(),
+  ];
+  for segment in path_segments_iter(path_env) {
+    let segment = segment.trim();
+    if segment.is_empty() {
+      continue;
+    }
+    let dir = Path::new(segment);
+    if !dir.is_dir() {
+      continue;
+    }
+    for name in &names {
+      let candidate = dir.join(name);
+      if candidate.is_file() {
+        return Some(candidate);
+      }
+    }
+  }
+  None
+}
+
+fn build_stdio_command_for_mcp(
+  entry: &serde_json::Map<String, Value>,
+  program: &str,
+  args: &[String],
+  augmented_path: &str,
+) -> Command {
+  #[cfg(windows)]
+  {
+    let lc = program.to_ascii_lowercase();
+    if matches!(
+      lc.as_str(),
+      "npx" | "npm" | "pnpm" | "yarn" | "corepack" | "uv" | "uvx"
+    ) {
+      let mut c = Command::new(windows_shell_for_shim_commands());
+      c.arg("/c");
+      if let Some(shim) = find_cmd_shim_on_path(program, augmented_path) {
+        c.arg(shim);
+      } else {
+        c.arg(program);
+      }
+      c.args(args);
+      return c;
+    }
+    let _ = entry;
+  }
+  #[cfg(not(windows))]
+  let _ = entry;
+  let mut c = Command::new(program);
+  c.args(args);
+  c
+}
+
+/// Builds `Command` for stdio MCP (computes augmented PATH once internally).
+pub fn command_for_stdio_mcp(
+  entry: &serde_json::Map<String, Value>,
+  program: &str,
+  args: &[String],
+) -> Command {
+  let aug = augmented_path_env_for_stdio_entry(entry);
+  build_stdio_command_for_mcp(entry, program, args, &aug)
 }
 
 /// Stdio MCP (e.g. `uv run`, `npx`) can exceed 25s on cold start (deps, JIT).
@@ -160,12 +348,16 @@ pub fn spawn_stdio_server(
     })
     .unwrap_or_default();
   let cwd_path = resolve_stdio_cwd(workspace_root, canon_root, entry)?;
-  let mut cmd = command_for_host(command, &args);
+  let augmented_path = augmented_path_env_for_stdio_entry(entry);
+  let resolved_shim = find_cmd_shim_on_path(command, &augmented_path);
+  log_mcp_stdio_spawn_diagnostics(command, &cwd_path, &augmented_path, resolved_shim.as_deref());
+
+  let mut cmd = build_stdio_command_for_mcp(entry, command, &args, &augmented_path);
   cmd.current_dir(&cwd_path);
   cmd.stdin(Stdio::piped());
   cmd.stdout(Stdio::piped());
   cmd.stderr(Stdio::piped());
-  apply_mcp_stdio_path(entry, &mut cmd);
+  apply_augmented_path_to_command(&mut cmd, &augmented_path);
   if let Some(env_obj) = entry.get("env").and_then(|e| e.as_object()) {
     for (k, v) in env_obj {
       if k == "PATH" {
@@ -182,31 +374,31 @@ pub fn spawn_stdio_server(
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     cmd.creation_flags(CREATE_NO_WINDOW);
   }
-  cmd
-    .spawn()
-    .map_err(|e| format!("Failed to start `{command}`: {e}"))
-}
-
-/// On Windows, `npx` / `npm` are `.cmd` shims; `Command::new("npx")` does not resolve them.
-fn command_for_host(program: &str, args: &[String]) -> Command {
-  #[cfg(windows)]
-  {
-    let lc = program.to_ascii_lowercase();
-    if matches!(
-      lc.as_str(),
-      "npx" | "npm" | "pnpm" | "yarn" | "corepack" | "uv" | "uvx"
-    ) {
-      let comspec = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string());
-      let mut c = Command::new(comspec);
-      c.arg("/c");
-      c.arg(program);
-      c.args(args);
-      return c;
-    }
-  }
-  let mut c = Command::new(program);
-  c.args(args);
-  c
+  let parent_path_len = std::env::var("PATH").map(|p| p.len()).unwrap_or(0);
+  cmd.spawn().map_err(|e| {
+    #[cfg(windows)]
+    let detail = format!(
+      "windows cmd_shell={} resolved_shim={} augmented_PATH_bytes={} parent_PATH_bytes={} cwd={} os_error={}",
+      windows_shell_for_shim_commands().display(),
+      resolved_shim
+        .as_ref()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "(none — cmd must find bare name)".to_string()),
+      augmented_path.len(),
+      parent_path_len,
+      cwd_path.display(),
+      e
+    );
+    #[cfg(not(windows))]
+    let detail = format!(
+      "cwd={} augmented_PATH_bytes={} parent_PATH_bytes={} os_error={}",
+      cwd_path.display(),
+      augmented_path.len(),
+      parent_path_len,
+      e
+    );
+    format!("MCP stdio spawn failed (configured command `{command}`): {detail}")
+  })
 }
 
 pub fn read_response_for_id(

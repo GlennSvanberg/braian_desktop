@@ -83,7 +83,34 @@ fn cargo_workspace_root() -> Option<PathBuf> {
   None
 }
 
+/// Clears cached broker URL if the sidecar process is gone. Otherwise the app keeps calling a dead
+/// `127.0.0.1:port` and ureq fails with Windows 10060 / connection timeouts.
+fn reconcile_broker_child_with_cache() -> Result<(), String> {
+  let mut guard = broker_child()
+    .lock()
+    .map_err(|_| "MCP broker lock poisoned.".to_string())?;
+  let Some(mut child) = guard.take() else {
+    if let Ok(mut a) = broker_addr().lock() {
+      *a = None;
+    }
+    return Ok(());
+  };
+  match child.try_wait() {
+    Ok(None) => {
+      *guard = Some(child);
+    }
+    Ok(Some(_)) | Err(_) => {
+      if let Ok(mut a) = broker_addr().lock() {
+        *a = None;
+      }
+    }
+  }
+  Ok(())
+}
+
 fn ensure_broker_running() -> Result<BrokerAddr, String> {
+  reconcile_broker_child_with_cache()?;
+
   if let Ok(g) = broker_addr().lock() {
     if let Some(addr) = &*g {
       return Ok(addr.clone());
@@ -172,14 +199,29 @@ fn post_json_with_addr<T: DeserializeOwned>(
   serde_json::from_str::<T>(&text).map_err(|e| e.to_string())
 }
 
-/// Stale `braian-mcpd` from an older build can keep running while the UI talks to a newer app; it may
-/// return serde-shaped 400s. If we see that signature, restart the broker once.
+fn should_restart_mcp_broker(err: &str) -> bool {
+  if err.contains("missing field `workspace_root_path`") {
+    return true;
+  }
+  let m = err.to_lowercase();
+  if m.contains("mcpd http") {
+    return false;
+  }
+  m.contains("os error 10060")
+    || m.contains("os error 10061")
+    || m.contains("connection refused")
+    || m.contains("actively refused")
+    || m.contains("network is unreachable")
+    || m.contains("connection attempt failed")
+}
+
+/// Restarts the broker once when the sidecar is clearly wrong: stale JSON shape, dead process
+/// (cached port nothing listens on → 10060), or other transport failures to localhost mcpd.
 fn post_json<T: DeserializeOwned>(path: &str, body: Value) -> Result<T, String> {
   let addr = ensure_broker_running()?;
   match post_json_with_addr::<T>(&addr, path, &body) {
     Ok(v) => Ok(v),
-    Err(e) if e.contains("missing field `workspace_root_path`") =>
-    {
+    Err(e) if should_restart_mcp_broker(&e) => {
       workspace_mcp_broker_shutdown();
       let addr2 = ensure_broker_running()?;
       post_json_with_addr::<T>(&addr2, path, &body)
