@@ -517,6 +517,18 @@ Important compatibility rule:
 
 ## Phased Desktop Implementation Plan
 
+**Repository status (desktop app, incremental):**
+
+- **Phase 0 — implemented:** As above; user docs `**docs/app/memory.md`** and `**docs/app/model-context.md**` updated to describe behavior.
+- **Phase 1 — implemented:** Summary files are `**schemaVersion: 2`** with `**importantDecisions**` (v1 files migrate on read). Compaction prompt and persistence in `src/lib/conversation/working-memory.ts`; injection in `src/lib/ai/chat-turn-args.ts`. `**get_conversation_summary**` tool in `src/lib/ai/conversation-archive-tools.ts`.
+- **Phase 2 — largely implemented (file-first):** Structured JSON under `**.braian/memory/{facts,decisions,preferences,episodes,patterns}/`**, schema in `src/lib/memory/semantic-record.ts`, store + index in `src/lib/memory/semantic-store.ts`, tools in `src/lib/ai/semantic-memory-tools.ts` (`search_workspace_memory`, `open_memory_entry`, `remember_workspace_fact`, `remember_workspace_preference`, `forget_memory_entry`, `mark_memory_stale`, `validate_memory_entry`). System section order in `chat-turn-args.ts` matches target assembly (summary → important decisions → open loops → structured memory → `MEMORY.md` → transcript hint). `**.braian/MEMORY.md**` still injected as transitional.
+- **Phase 2b — SQLite derived index:** Table `**memory_entries`** in `braian.db` (migration in `src-tauri/src/db.rs`); `memory_index_upsert` + `memory_index_rebuild_workspace` in `src-tauri/src/memory_index.rs`; TS bridge `src/lib/memory/memory-index-bridge.ts` upserts after writes.
+- **Phase 2c — suggestions:** `src/lib/memory/suggestion-queue.ts` (`writeMemorySuggestion`) plus `**src/lib/memory/suggestion-extraction.ts`** — after a successful `**MEMORY.md` review** in `src/lib/memory/review.ts`, a follow-up JSON extraction queues up to **3** pending suggestions (skipped in mock AI mode). Review/accept UI still TBD.
+- **Phase 7 (partial opt-out):** Set `**injectLegacyMemoryMd`: false** in `**.braian/preferences/workspace-preferences.json`** to stop injecting legacy `MEMORY.md` (see `src/lib/memory/workspace-preferences.ts`). Full generated-only `MEMORY.md` workflow remains future work.
+- **Phase 4 (MVP lexical):** `search_codebase_index` and `get_related_files_for_memory` in `src/lib/ai/codebase-memory-tools.ts` (lexical search + memory file refs; embeddings/indexing pipeline not yet shipped).
+- **Phase 5 (partial):** `**.braian/preferences/workspace-preferences.json`** injected when present (`loadWorkspacePreferencesSystemBlock` in `chat-turn-args.ts`).
+- **Phase 6–7 / full codebase hybrid index / MEMORY.md retirement:** not complete; follow `.cursor/plans/memory-full-roadmap.plan.md`.
+
 ### Phase 0: stabilize and instrument current memory
 
 Purpose:

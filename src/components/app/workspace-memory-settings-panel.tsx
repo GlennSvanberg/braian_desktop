@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
 
 import { useWorkspace } from '@/components/app/workspace-context'
@@ -15,9 +16,17 @@ import {
 
 type Props = {
   workspaceId: string
+  /** When embedded in the Memory dashboard, use a smaller heading and no duplicate nav link. */
+  variant?: 'standalone' | 'embedded'
+  /** Show link to the full Memory dashboard tab (standalone only). */
+  showOpenMemoryLink?: boolean
 }
 
-export function WorkspaceMemorySettingsPanel({ workspaceId }: Props) {
+export function WorkspaceMemorySettingsPanel({
+  workspaceId,
+  variant = 'standalone',
+  showOpenMemoryLink = true,
+}: Props) {
   const { conversationsByWorkspace } = useWorkspace()
   const [text, setText] = useState('')
   const [loadedFromDisk, setLoadedFromDisk] = useState('')
@@ -120,15 +129,27 @@ export function WorkspaceMemorySettingsPanel({ workspaceId }: Props) {
     <div className="border-border space-y-3 rounded-xl border p-4 shadow-sm md:p-5">
       <div>
         <h2 className="text-text-1 text-base font-semibold tracking-tight">
-          Workspace memory
+          {variant === 'embedded' ? 'Legacy MEMORY.md' : 'Workspace memory'}
         </h2>
         <p className="text-text-3 mt-1 text-sm leading-relaxed">
           Markdown stored at{' '}
           <code className="text-text-2 text-xs">{MEMORY_RELATIVE_PATH}</code>.
-          The agent sees this in every chat for this workspace. Merge durable
-          facts from a chat below, use automatic idle updates in AI settings,
-          or edit the file here; manual edits are always allowed.
+          {variant === 'embedded'
+            ? ' Transitional compatibility layer alongside structured memory.'
+            : ' The agent sees this in every chat for this workspace. Merge durable facts from a chat below, use automatic idle updates in AI settings, or edit the file here; manual edits are always allowed.'}
         </p>
+        {showOpenMemoryLink && variant === 'standalone' ? (
+          <p className="text-text-3 mt-2 text-xs">
+            <Link
+              to="/dashboard"
+              search={{ tab: 'memory' }}
+              className="text-accent-600 hover:underline dark:text-accent-500"
+            >
+              Open full Memory dashboard
+            </Link>{' '}
+            for structured entries, preferences, and suggestions.
+          </p>
+        ) : null}
         {loadState === 'loading' ? (
           <p className="text-text-3 mt-2 flex items-center gap-2 text-xs">
             <Loader2 className="size-3.5 animate-spin" aria-hidden />

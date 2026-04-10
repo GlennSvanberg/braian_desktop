@@ -50,6 +50,8 @@ export type ChatTurnKind = 'default' | 'profile'
 export type ConversationWorkingMemoryContext = {
   summaryText: string
   openLoops: string[]
+  /** Durable choices from folded transcript (summary file `importantDecisions`). */
+  importantDecisions: string[]
   fullTranscriptRelativePath: string
   compactionWarning?: string
 }

@@ -185,6 +185,7 @@ export function AppHeader() {
       if (tab === 'app-settings') return 'App settings'
       if (tab === 'apps') return 'Apps'
       if (tab === 'workspace-settings') return 'Workspace settings'
+      if (tab === 'memory') return 'Memory'
       return 'Dashboard'
     }
     if (workspaceWebappSettingsMatch) {

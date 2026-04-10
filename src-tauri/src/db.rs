@@ -107,6 +107,24 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 8 {
+    conn.execute_batch(
+      "CREATE TABLE IF NOT EXISTS memory_entries (
+        workspace_id TEXT NOT NULL,
+        entry_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        status TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (workspace_id, entry_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_memory_entries_workspace
+        ON memory_entries(workspace_id, updated_at_ms DESC);
+      UPDATE _schema_version SET version = 8 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 

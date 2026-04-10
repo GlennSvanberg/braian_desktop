@@ -19,6 +19,9 @@ export function conversationTranscriptRelativePath(conversationId: string): stri
   return `.braian/conversations/${conversationId}.json`
 }
 
+/** Max bytes when loading a conversation JSON for archive search / span tools. */
+export const CONVERSATION_TRANSCRIPT_READ_MAX_BYTES = 8 * 1024 * 1024
+
 /** Workspace-relative JSON: last-reviewed message ids per conversation. */
 export const MEMORY_REVIEW_STATE_RELATIVE_PATH = '.braian/memory-review-state.json'
 
@@ -36,3 +39,29 @@ export const MEMORY_REVIEW_MIN_INTERVAL_MS = 20 * 60 * 1000
 
 /** Max chat messages to include in review transcript (from end). */
 export const MEMORY_REVIEW_MAX_MESSAGES = 40
+
+/** Structured semantic memory root (JSON files per record). */
+export const SEMANTIC_MEMORY_ROOT = '.braian/memory'
+
+export const SEMANTIC_MEMORY_KIND_DIRS = [
+  'facts',
+  'decisions',
+  'preferences',
+  'episodes',
+  'patterns',
+] as const
+
+export type SemanticMemoryKindDir = (typeof SEMANTIC_MEMORY_KIND_DIRS)[number]
+
+/** Human overview generated from structured records. */
+export const SEMANTIC_MEMORY_INDEX_RELATIVE_PATH = '.braian/memory/index.md'
+
+/** Max bytes injected as structured semantic memory system text. */
+export const SEMANTIC_MEMORY_INJECT_MAX_BYTES = 24 * 1024
+
+/** Pending promotion suggestions (file-backed queue). */
+export const SEMANTIC_MEMORY_SUGGESTIONS_DIR = '.braian/memory/_suggestions'
+
+/** Workspace-scoped preference JSON (Phase 5). */
+export const WORKSPACE_PREFERENCES_RELATIVE_PATH =
+  '.braian/preferences/workspace-preferences.json'

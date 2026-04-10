@@ -9,7 +9,10 @@ import {
   AGENTS_RELATIVE_PATH,
   MEMORY_INJECT_MAX_BYTES,
   MEMORY_RELATIVE_PATH,
+  WORKSPACE_PREFERENCES_RELATIVE_PATH,
 } from '@/lib/memory/constants'
+import { buildSemanticMemorySystemText } from '@/lib/memory/semantic-store'
+import { getWorkspacePreferencesState } from '@/lib/memory/workspace-preferences'
 import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 import {
   formatUserProfileForPrompt,
@@ -39,6 +42,9 @@ import { buildSkillTools } from './skill-tools'
 import { buildSwitchToAppBuilderTool } from './switch-app-builder-tool'
 import { buildSwitchToCodeAgentTool } from './switch-code-agent-tool'
 import { buildUserProfileTools } from './user-profile-tools'
+import { buildCodebaseMemoryTools } from './codebase-memory-tools'
+import { buildConversationArchiveTools } from './conversation-archive-tools'
+import { buildSemanticMemoryTools } from './semantic-memory-tools'
 import { buildWorkspaceMemoryTools } from './workspace-memory-tools'
 import { buildProviderNativeSearchTools } from './provider-native-search-tools'
 import { buildWorkspaceWebappTools } from './webapp-tools'
@@ -120,11 +126,16 @@ const SOURCE_WM_LOOPS =
   'src/lib/ai/chat-turn-args.ts (conversation working memory — open loops)'
 const SOURCE_WM_ARCHIVE =
   'src/lib/ai/chat-turn-args.ts (conversation working memory — transcript path)'
+const SOURCE_WM_DECISIONS =
+  'src/lib/ai/chat-turn-args.ts (conversation working memory — important decisions)'
+const SOURCE_SEMANTIC_MEMORY =
+  'src/lib/memory/semantic-store.ts (structured JSON under .braian/memory/)'
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_PRIOR_CONVERSATIONS =
   'src/lib/ai/chat-turn-args.ts (priorConversationsSystemPrompt)'
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
 const SOURCE_USER_CONTEXT = 'src/lib/ai/chat-turn-args.ts (user context + client time)'
+const SOURCE_WORKSPACE_PREFERENCES = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${WORKSPACE_PREFERENCES_RELATIVE_PATH})`
 const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM)'
 const SOURCE_PROFILE_STATE =
   'src/lib/user-profile-api.ts (formatUserProfileForPrompt)'
@@ -169,6 +180,16 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   publish_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
   update_user_profile: 'src/lib/ai/user-profile-tools.ts',
   add_workspace_memory: 'src/lib/ai/workspace-memory-tools.ts',
+  search_workspace_memory: 'src/lib/ai/semantic-memory-tools.ts',
+  open_memory_entry: 'src/lib/ai/semantic-memory-tools.ts',
+  remember_workspace_fact: 'src/lib/ai/semantic-memory-tools.ts',
+  remember_workspace_preference: 'src/lib/ai/semantic-memory-tools.ts',
+  forget_memory_entry: 'src/lib/ai/semantic-memory-tools.ts',
+  mark_memory_stale: 'src/lib/ai/semantic-memory-tools.ts',
+  validate_memory_entry: 'src/lib/ai/semantic-memory-tools.ts',
+  get_conversation_summary: 'src/lib/ai/conversation-archive-tools.ts',
+  search_codebase_index: 'src/lib/ai/codebase-memory-tools.ts',
+  get_related_files_for_memory: 'src/lib/ai/codebase-memory-tools.ts',
   list_workspace_skills: 'src/lib/ai/skill-tools.ts',
   read_workspace_skill: 'src/lib/ai/skill-tools.ts',
   write_workspace_skill: 'src/lib/ai/skill-tools.ts',
@@ -242,6 +263,14 @@ export async function loadAgentsMdSystemBlock(
   } catch {
     return ''
   }
+}
+
+/** @deprecated Prefer getWorkspacePreferencesState (single read + flags). */
+export async function loadWorkspacePreferencesSystemBlock(
+  workspaceId: string,
+): Promise<string> {
+  const s = await getWorkspacePreferencesState(workspaceId)
+  return s.preferencesBlock
 }
 
 export function contextFilesSystemPrompt(
@@ -546,9 +575,27 @@ export async function buildTanStackChatTurnArgs(
     !isNonWorkspaceScopedSessionId(ctx.workspaceId)
       ? buildWorkspaceMemoryTools(ctx)
       : []
+  const conversationArchiveTools =
+    ctx?.workspaceId != null &&
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
+      ? buildConversationArchiveTools(ctx)
+      : []
+  const semanticMemoryTools =
+    ctx?.workspaceId != null &&
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
+      ? buildSemanticMemoryTools(ctx)
+      : []
+  const codebaseMemoryTools =
+    ctx?.workspaceId != null &&
+    !isNonWorkspaceScopedSessionId(ctx.workspaceId)
+      ? buildCodebaseMemoryTools(ctx)
+      : []
   const tools: Tool[] = [
     ...canvasTools,
     ...workspaceMemoryTools,
+    ...conversationArchiveTools,
+    ...semanticMemoryTools,
+    ...codebaseMemoryTools,
     ...codingTools,
     ...skillTools,
     ...(switchToCodeTool ? [switchToCodeTool] : []),
@@ -561,12 +608,21 @@ export async function buildTanStackChatTurnArgs(
   const memoryBlockStart = nowMs()
   let memoryBlock = ''
   let agentsBlock = ''
+  let semanticMemoryBlock = ''
+  let workspacePreferencesBlock = ''
   if (ctx?.workspaceId != null) {
-    ;[memoryBlock, agentsBlock] = await Promise.all([
-      loadWorkspaceMemorySystemBlock(ctx.workspaceId),
+    const [agents, semantic, prefsState] = await Promise.all([
       loadAgentsMdSystemBlock(ctx.workspaceId),
+      buildSemanticMemorySystemText(ctx.workspaceId),
+      getWorkspacePreferencesState(ctx.workspaceId),
     ])
-    logChatPerf('loadWorkspaceMemory+AGENTS', memoryBlockStart)
+    agentsBlock = agents
+    semanticMemoryBlock = semantic
+    workspacePreferencesBlock = prefsState.preferencesBlock
+    memoryBlock = prefsState.injectLegacyMemoryMd
+      ? await loadWorkspaceMemorySystemBlock(ctx.workspaceId)
+      : ''
+    logChatPerf('loadWorkspaceMemory+AGENTS+semantic', memoryBlockStart)
   }
   const cf =
     ctx?.contextFiles != null && ctx.contextFiles.length > 0
@@ -642,21 +698,21 @@ export async function buildTanStackChatTurnArgs(
     text: buildUserContextSystemSectionText(),
   })
 
+  if (workspacePreferencesBlock) {
+    systemSections.push({
+      id: 'workspace-preferences',
+      label: 'Workspace preferences',
+      source: SOURCE_WORKSPACE_PREFERENCES,
+      text: workspacePreferencesBlock,
+    })
+  }
+
   if (agentsBlock) {
     systemSections.push({
       id: 'agents-md',
       label: `Workspace instructions (${AGENTS_RELATIVE_PATH})`,
       source: SOURCE_AGENTS,
       text: agentsBlock,
-    })
-  }
-
-  if (memoryBlock) {
-    systemSections.push({
-      id: 'memory',
-      label: `Workspace memory (${MEMORY_RELATIVE_PATH})`,
-      source: SOURCE_MEMORY,
-      text: memoryBlock,
     })
   }
 
@@ -678,6 +734,19 @@ export async function buildTanStackChatTurnArgs(
         text: `The following summarizes older turns not shown in the message list below.\n\n${wm.summaryText.trim()}`,
       })
     }
+    const decisions = wm.importantDecisions ?? []
+    if (decisions.length > 0) {
+      systemSections.push({
+        id: 'important-decisions',
+        label: 'Important decisions (from folded transcript)',
+        source: SOURCE_WM_DECISIONS,
+        text: [
+          'Durable decisions recorded in the rolling summary:',
+          '',
+          ...decisions.map((s) => `- ${s}`),
+        ].join('\n'),
+      })
+    }
     if (wm.openLoops.length > 0) {
       systemSections.push({
         id: 'open-loops',
@@ -690,6 +759,27 @@ export async function buildTanStackChatTurnArgs(
         ].join('\n'),
       })
     }
+  }
+
+  if (semanticMemoryBlock.trim()) {
+    systemSections.push({
+      id: 'semantic-memory',
+      label: 'Structured workspace memory',
+      source: SOURCE_SEMANTIC_MEMORY,
+      text: semanticMemoryBlock.trim(),
+    })
+  }
+
+  if (memoryBlock) {
+    systemSections.push({
+      id: 'memory',
+      label: `Workspace memory (${MEMORY_RELATIVE_PATH})`,
+      source: SOURCE_MEMORY,
+      text: memoryBlock,
+    })
+  }
+
+  if (workspaceScoped && wm) {
     systemSections.push({
       id: 'transcript-archive',
       label: 'Full transcript',
@@ -698,7 +788,7 @@ export async function buildTanStackChatTurnArgs(
         'The complete chat transcript for this conversation is stored in the workspace at:',
         `\`${wm.fullTranscriptRelativePath}\``,
         '',
-        'Only recent messages appear in the chat history below. To recall older details, use **read_workspace_file** (or workspace search) on that path.',
+        'Only recent messages appear in the chat history below. To recall older details, use **`search_conversation_archive`** (then **`open_conversation_span`** for full message text). Use **`get_conversation_summary`** for the rolling summary file. In **Code** mode you can also use **read_workspace_file** on that path.',
       ].join('\n'),
     })
   }

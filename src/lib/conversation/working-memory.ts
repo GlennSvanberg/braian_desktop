@@ -36,7 +36,45 @@ const summaryFileSchemaV1 = z.object({
   coveredMessageIds: z.array(z.string()),
 })
 
+const summaryFileSchemaV2 = z.object({
+  schemaVersion: z.literal(2),
+  conversationId: z.string(),
+  updatedAt: z.string(),
+  summary: z.string(),
+  openLoops: z.array(z.string()),
+  coveredMessageIds: z.array(z.string()),
+  importantDecisions: z.array(z.string()),
+})
+
 export type ConversationSummaryFileV1 = z.infer<typeof summaryFileSchemaV1>
+export type ConversationSummaryFileV2 = z.infer<typeof summaryFileSchemaV2>
+
+/** Canonical on-disk shape; v1 files are migrated on read. */
+export type ConversationSummaryFile = ConversationSummaryFileV2
+
+/** Exported for tests: migrate v1 on-disk summary to v2 shape. */
+export function migrateSummaryToV2(
+  parsed: unknown,
+  conversationFileId: string,
+): ConversationSummaryFileV2 | null {
+  const v2 = summaryFileSchemaV2.safeParse(parsed)
+  if (v2.success && v2.data.conversationId === conversationFileId) {
+    return v2.data
+  }
+  const v1 = summaryFileSchemaV1.safeParse(parsed)
+  if (v1.success && v1.data.conversationId === conversationFileId) {
+    return {
+      schemaVersion: 2,
+      conversationId: v1.data.conversationId,
+      updatedAt: v1.data.updatedAt,
+      summary: v1.data.summary,
+      openLoops: v1.data.openLoops,
+      coveredMessageIds: v1.data.coveredMessageIds,
+      importantDecisions: [],
+    }
+  }
+  return null
+}
 
 const COMPACTION_SYSTEM = `You compress older chat turns into a durable rolling summary for the coding assistant.
 
@@ -44,12 +82,14 @@ Output **only** a single JSON object (no markdown fences, no commentary) with th
 {
   "summary": "string — merged narrative of older work; merge with previous summary when provided",
   "openLoops": ["string", "..."],
-  "coveredMessageIds": ["message-id", "..."]
+  "coveredMessageIds": ["message-id", "..."],
+  "importantDecisions": ["string", "..."]
 }
 
 Rules:
 - "summary" must incorporate the previous summary (if any) and the new transcript slice; no duplication.
 - "openLoops" lists unresolved questions or tasks still relevant (short bullets as strings).
+- "importantDecisions" lists **durable choices or commitments** from the folded slice (architecture, libraries, naming, workflows). Short one-line strings; omit if none.
 - "coveredMessageIds" must list **every** message id from the transcript slice you folded in (all ids shown in the transcript section).
 - Do not invent facts; omit transient tool noise when possible.
 - Keep "summary" compact but actionable.`
@@ -188,14 +228,12 @@ function toPriorMessages(messages: ChatMessage[]): PriorChatMessage[] {
 async function loadSummaryFile(
   workspaceId: string,
   conversationFileId: string,
-): Promise<ConversationSummaryFileV1 | null> {
+): Promise<ConversationSummaryFileV2 | null> {
   const rel = conversationSummaryRelativePath(conversationFileId)
   try {
     const { text } = await workspaceReadTextFile(workspaceId, rel, 512 * 1024)
     const parsed = parseJsonObject(text)
-    const r = summaryFileSchemaV1.safeParse(parsed)
-    if (!r.success || r.data.conversationId !== conversationFileId) return null
-    return r.data
+    return migrateSummaryToV2(parsed, conversationFileId)
   } catch {
     return null
   }
@@ -203,7 +241,7 @@ async function loadSummaryFile(
 
 async function saveSummaryFile(
   workspaceId: string,
-  data: ConversationSummaryFileV1,
+  data: ConversationSummaryFileV2,
 ): Promise<void> {
   const rel = conversationSummaryRelativePath(data.conversationId)
   await workspaceWriteTextFile(workspaceId, rel, `${JSON.stringify(data, null, 2)}\n`)
@@ -214,7 +252,12 @@ async function runCompactionLlm(options: {
   transcriptSlice: string
   expectedMessageIds: string[]
   signal?: AbortSignal
-}): Promise<Pick<ConversationSummaryFileV1, 'summary' | 'openLoops' | 'coveredMessageIds'>> {
+}): Promise<
+  Pick<
+    ConversationSummaryFileV2,
+    'summary' | 'openLoops' | 'coveredMessageIds' | 'importantDecisions'
+  >
+> {
   const userMessage = [
     '## Previous summary (may be empty)',
     options.previousSummary.trim() || '(none)',
@@ -237,12 +280,16 @@ async function runCompactionLlm(options: {
       summary: z.string(),
       openLoops: z.array(z.string()),
       coveredMessageIds: z.array(z.string()),
+      importantDecisions: z.array(z.string()).optional(),
     })
     .safeParse(parsed)
   if (!out.success) {
     throw new Error('Compaction model returned invalid JSON.')
   }
-  return out.data
+  return {
+    ...out.data,
+    importantDecisions: out.data.importantDecisions ?? [],
+  }
 }
 
 export type PrepareHistoryOptions = {
@@ -261,6 +308,14 @@ export type PrepareHistoryOptions = {
 export type PrepareHistoryResult = {
   priorMessages: PriorChatMessage[]
   workingMemory: ConversationWorkingMemoryContext | null
+}
+
+/** Read persisted rolling summary for a conversation (v1 files are migrated to v2 in memory). */
+export async function readConversationSummaryFile(
+  workspaceId: string,
+  conversationFileId: string,
+): Promise<ConversationSummaryFileV2 | null> {
+  return loadSummaryFile(workspaceId, conversationFileId)
 }
 
 /**
@@ -345,6 +400,7 @@ export async function prepareConversationHistoryForModel(
       workingMemory: {
         summaryText: '',
         openLoops: [],
+        importantDecisions: [],
         fullTranscriptRelativePath: archivePath,
         compactionWarning: note,
       },
@@ -358,12 +414,13 @@ export async function prepareConversationHistoryForModel(
       let state = await loadSummaryFile(workspaceId, conversationFileId)
       if (!state) {
         state = {
-          schemaVersion: 1,
+          schemaVersion: 2,
           conversationId: conversationFileId,
           updatedAt: new Date().toISOString(),
           summary: '',
           openLoops: [],
           coveredMessageIds: [],
+          importantDecisions: [],
         }
       }
 
@@ -379,6 +436,7 @@ export async function prepareConversationHistoryForModel(
           workingMemory: {
             summaryText: state.summary.trim(),
             openLoops: state.openLoops,
+            importantDecisions: state.importantDecisions,
             fullTranscriptRelativePath: archivePath,
           },
         }
@@ -393,6 +451,7 @@ export async function prepareConversationHistoryForModel(
           workingMemory: {
             summaryText: state.summary.trim(),
             openLoops: state.openLoops,
+            importantDecisions: state.importantDecisions,
             fullTranscriptRelativePath: archivePath,
             compactionWarning: hadToTruncateMessage
               ? 'At least one message was truncated to satisfy the history token budget.'
@@ -406,6 +465,7 @@ export async function prepareConversationHistoryForModel(
 
       let summaryText = state.summary
       let openLoops = state.openLoops
+      let importantDecisions = state.importantDecisions
       let coveredMessageIds = state.coveredMessageIds
 
       if (!allPrefixCovered) {
@@ -423,14 +483,16 @@ export async function prepareConversationHistoryForModel(
             })
             summaryText = merged.summary
             openLoops = merged.openLoops
+            importantDecisions = merged.importantDecisions
             coveredMessageIds = prefixIds
-            const next: ConversationSummaryFileV1 = {
-              schemaVersion: 1,
+            const next: ConversationSummaryFileV2 = {
+              schemaVersion: 2,
               conversationId: conversationFileId,
               updatedAt: new Date().toISOString(),
               summary: summaryText,
               openLoops,
               coveredMessageIds,
+              importantDecisions,
             }
             await saveSummaryFile(workspaceId, next)
           } catch {
@@ -439,13 +501,14 @@ export async function prepareConversationHistoryForModel(
               (state.summary ? '\n\n' : '') +
               '[Compaction failed; older turns were dropped without a full summary merge.]'
             coveredMessageIds = prefixIds
-            const next: ConversationSummaryFileV1 = {
-              schemaVersion: 1,
+            const next: ConversationSummaryFileV2 = {
+              schemaVersion: 2,
               conversationId: conversationFileId,
               updatedAt: new Date().toISOString(),
               summary: summaryText,
               openLoops: state.openLoops,
               coveredMessageIds,
+              importantDecisions: state.importantDecisions,
             }
             try {
               await saveSummaryFile(workspaceId, next)
@@ -459,13 +522,14 @@ export async function prepareConversationHistoryForModel(
             (state.summary ? '\n\n' : '') +
             '[Compaction skipped (mock or non-desktop); older turns omitted.]'
           coveredMessageIds = prefixIds
-          const next: ConversationSummaryFileV1 = {
-            schemaVersion: 1,
+          const next: ConversationSummaryFileV2 = {
+            schemaVersion: 2,
             conversationId: conversationFileId,
             updatedAt: new Date().toISOString(),
             summary: summaryText,
             openLoops: state.openLoops,
             coveredMessageIds,
+            importantDecisions: state.importantDecisions,
           }
           try {
             await saveSummaryFile(workspaceId, next)
@@ -480,6 +544,7 @@ export async function prepareConversationHistoryForModel(
         workingMemory: {
           summaryText: summaryText.trim(),
           openLoops,
+          importantDecisions,
           fullTranscriptRelativePath: archivePath,
           compactionWarning: hadToTruncateMessage
             ? 'At least one message was truncated to satisfy the history token budget.'

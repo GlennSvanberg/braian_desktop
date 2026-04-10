@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 
+import { MemoryManagementScreen } from '@/components/app/memory-management-screen'
 import { WorkspaceHubOverview } from '@/components/app/workspace-hub-overview'
 import { WorkspaceSettingsScreen } from '@/components/app/workspace-settings-screen'
 import { WorkspaceWebappPanel } from '@/components/app/workspace-webapp-panel'
@@ -15,13 +16,15 @@ export type DashboardTab =
   | 'apps'
   | 'app-settings'
   | 'workspace-settings'
+  | 'memory'
 
 function parseDashboardTabValue(t: unknown): DashboardTab {
   if (
     t === 'apps' ||
     t === 'app-settings' ||
     t === 'overview' ||
-    t === 'workspace-settings'
+    t === 'workspace-settings' ||
+    t === 'memory'
   ) {
     return t
   }
@@ -88,6 +91,13 @@ export function WorkspaceDashboard({
         className="min-h-0 flex-1"
       />
     )
+  } else if (tab === 'memory') {
+    body = (
+      <MemoryManagementScreen
+        workspaceId={workspaceId}
+        isTauriRuntime={isTauriRuntime}
+      />
+    )
   } else {
     body = <WorkspaceSettingsScreen workspaceId={workspaceId} />
   }
@@ -129,6 +139,9 @@ export function WorkspaceDashboard({
               className={dashboardTabTriggerClass}
             >
               Workspace settings
+            </TabsTrigger>
+            <TabsTrigger value="memory" className={dashboardTabTriggerClass}>
+              Memory
             </TabsTrigger>
           </TabsList>
         </Tabs>

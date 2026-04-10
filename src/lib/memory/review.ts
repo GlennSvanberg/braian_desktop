@@ -14,6 +14,7 @@ import {
   setLastReviewedUserMessageId,
   writeMemoryReviewState,
 } from './review-state'
+import { queueStructuredSuggestionsFromReviewExcerpt } from './suggestion-extraction'
 
 const REVIEWER_SYSTEM = `You maintain a workspace memory file (Markdown) for Braian Desktop.
 
@@ -171,6 +172,13 @@ Return the complete updated Markdown for the memory file only.`
         lastUser,
       )
       await writeMemoryReviewState(workspaceId, nextState)
+
+      void queueStructuredSuggestionsFromReviewExcerpt({
+        workspaceId,
+        conversationId,
+        transcriptExcerpt: transcript,
+        signal,
+      })
 
       return { ok: true, skipped: false }
     } catch (e) {

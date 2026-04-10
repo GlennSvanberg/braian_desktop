@@ -14,6 +14,7 @@ mod workspace_git;
 mod workspace_webapp_dev;
 mod workspace_webapp_static;
 mod workspace_hub;
+mod memory_index;
 
 use tauri::Manager;
 
@@ -102,6 +103,8 @@ pub fn run() {
       workspace_webapp_static::webapp_publish_status,
       workspace_hub::workspace_hub_snapshot,
       workspace_hub::workspace_hub_recent_file_touch,
+      memory_index::memory_index_upsert,
+      memory_index::memory_index_rebuild_workspace,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
