@@ -5,6 +5,7 @@ import {
   buildTanStackChatTurnArgs,
   tanStackTurnArgsToSnapshot,
 } from '@/lib/ai/chat-turn-args'
+import { resolveChatHistoryForModelTurn } from '@/lib/conversation/working-memory'
 import { formatCanvasSelectionUserMessage } from '@/lib/ai/canvas-selection-message'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
 import type {
@@ -560,11 +561,6 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
     messages: [...p.messages, userMsg, assistantMsg],
   }))
 
-  const priorMessages = prev.messages.map((m) => ({
-    role: m.role,
-    content: chatMessageContentForLlmHistory(m),
-  }))
-
   void (async () => {
     let streamCompletedOk = false
     const turnStartAt = nowMs()
@@ -676,6 +672,17 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         }
       }
 
+      const {
+        priorMessages,
+        workingMemory: conversationWorkingMemory,
+        settings: settingsForTurn,
+      } = await resolveChatHistoryForModelTurn({
+        workspaceId,
+        conversationId,
+        prevMessages: prev.messages,
+        signal: ac.signal,
+      })
+
       const chatTurnContext = {
         workspaceId,
         conversationId,
@@ -695,6 +702,9 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           ? { contextPriorConversations }
           : {}),
         ...(activeMcpServers.length > 0 ? { activeMcpServers } : {}),
+        ...(conversationWorkingMemory != null
+          ? { conversationWorkingMemory }
+          : {}),
       }
 
       const argsBuildStart = nowMs()
@@ -702,6 +712,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         userText: userContent,
         context: chatTurnContext,
         priorMessages,
+        settings: settingsForTurn,
         skipSettingsValidation: false,
         reasoningMode: threadNow.reasoningMode === 'thinking' ? 'thinking' : 'fast',
       })

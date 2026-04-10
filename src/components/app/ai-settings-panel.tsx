@@ -6,6 +6,9 @@ import { Input } from '@/components/ui/input'
 import {
   aiSettingsGet,
   aiSettingsSet,
+  CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
+  CONTEXT_MAX_HISTORY_TOKENS_MAX,
+  CONTEXT_MAX_HISTORY_TOKENS_MIN,
   type AiSettingsDto,
 } from '@/lib/ai-settings-api'
 import {
@@ -38,6 +41,7 @@ export function AiSettingsPanel({ embedded, className }: Props) {
     apiKey: '',
     modelId: defaultModelForProvider('openai'),
     baseUrl: null,
+    contextMaxHistoryTokens: CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
   })
 
   useEffect(() => {
@@ -224,6 +228,43 @@ export function AiSettingsPanel({ embedded, className }: Props) {
                   ))}
                 </select>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="ai-context-history-tokens"
+                className="text-text-2 text-sm font-medium"
+              >
+                Chat history token budget
+              </label>
+              <Input
+                id="ai-context-history-tokens"
+                type="number"
+                min={CONTEXT_MAX_HISTORY_TOKENS_MIN}
+                max={CONTEXT_MAX_HISTORY_TOKENS_MAX}
+                step={1024}
+                value={form.contextMaxHistoryTokens}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10)
+                  setForm((f) => ({
+                    ...f,
+                    contextMaxHistoryTokens: Number.isFinite(v)
+                      ? Math.min(
+                          CONTEXT_MAX_HISTORY_TOKENS_MAX,
+                          Math.max(CONTEXT_MAX_HISTORY_TOKENS_MIN, v),
+                        )
+                      : f.contextMaxHistoryTokens,
+                  }))
+                }}
+                autoComplete="off"
+              />
+              <p className="text-text-3 text-xs leading-relaxed">
+                Approximate max tokens for <strong>previous messages</strong> in the
+                current chat (not counting system instructions or attachments). Older
+                turns roll into a workspace summary file when over budget. Range{' '}
+                {CONTEXT_MAX_HISTORY_TOKENS_MIN.toLocaleString()}–
+                {CONTEXT_MAX_HISTORY_TOKENS_MAX.toLocaleString()}.
+              </p>
             </div>
 
             <div className="space-y-2">

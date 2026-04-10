@@ -3,7 +3,10 @@ import { z } from 'zod'
 import type { AiSettingsDto } from '@/lib/ai-settings-api'
 import { aiSettingsGet } from '@/lib/ai-settings-api'
 import type { AiProviderId } from '@/lib/ai/model-catalog'
+import { estimateTextTokens } from '@/lib/ai/token-estimate'
 import {
+  AGENTS_INJECT_MAX_BYTES,
+  AGENTS_RELATIVE_PATH,
   MEMORY_INJECT_MAX_BYTES,
   MEMORY_RELATIVE_PATH,
 } from '@/lib/memory/constants'
@@ -40,7 +43,12 @@ import { buildWorkspaceMemoryTools } from './workspace-memory-tools'
 import { buildProviderNativeSearchTools } from './provider-native-search-tools'
 import { buildWorkspaceWebappTools } from './webapp-tools'
 import { buildReasoningModelOptions } from './reasoning-model-options'
-import type { ChatTurnContext, PriorChatMessage, ReasoningMode } from './types'
+
+import type {
+  ChatTurnContext,
+  PriorChatMessage,
+  ReasoningMode,
+} from './types'
 import type { ReasoningModelOptions } from './reasoning-model-options'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
@@ -74,6 +82,13 @@ export type ChatToolDisplayInfo = {
   inputJsonSchema?: object | null
 }
 
+/** Approximate token counts (gpt-tokenizer o200k); tools excluded in v1. */
+export type SnapshotTokenEstimate = {
+  bySectionId: Record<string, number>
+  messagesTokens: number
+  totalApprox: number
+}
+
 export type SerializableModelRequestSnapshot = {
   builtAt: number
   userText: string
@@ -86,6 +101,8 @@ export type SerializableModelRequestSnapshot = {
   systemSections: ChatSystemSectionDisplay[]
   messages: { role: string; content: string }[]
   tools: ChatToolDisplayInfo[]
+  /** Present when token estimation ran for this snapshot. */
+  tokenEstimate?: SnapshotTokenEstimate
 }
 
 const SOURCE_ROUTING_DOC =
@@ -96,6 +113,13 @@ const SOURCE_SKILLS_CATALOG = 'src/lib/skills/load-skill-catalog.ts'
 const SOURCE_APP_BUILDER =
   'src/lib/skills/load-skill-catalog.ts → app-builder/SKILL.md (+ legacy app-builder.md fallback, + APP_BUILDER_INSTRUCTIONS_FALLBACK)'
 const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
+const SOURCE_AGENTS = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${AGENTS_RELATIVE_PATH})`
+const SOURCE_WM_SUMMARY =
+  'src/lib/ai/chat-turn-args.ts (conversation working memory — summary)'
+const SOURCE_WM_LOOPS =
+  'src/lib/ai/chat-turn-args.ts (conversation working memory — open loops)'
+const SOURCE_WM_ARCHIVE =
+  'src/lib/ai/chat-turn-args.ts (conversation working memory — transcript path)'
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_PRIOR_CONVERSATIONS =
   'src/lib/ai/chat-turn-args.ts (priorConversationsSystemPrompt)'
@@ -192,6 +216,29 @@ export async function loadWorkspaceMemorySystemBlock(
       ? '\n[Note: MEMORY.md was truncated for context size — beginning only.]\n'
       : ''
     return `Workspace memory (from \`${MEMORY_RELATIVE_PATH}\`):${note}\n\n${t}`
+  } catch {
+    return ''
+  }
+}
+
+export async function loadAgentsMdSystemBlock(
+  workspaceId: string,
+): Promise<string> {
+  if (isNonWorkspaceScopedSessionId(workspaceId)) {
+    return ''
+  }
+  try {
+    const { text, truncated } = await workspaceReadTextFile(
+      workspaceId,
+      AGENTS_RELATIVE_PATH,
+      AGENTS_INJECT_MAX_BYTES,
+    )
+    const t = text.trim()
+    if (!t) return ''
+    const note = truncated
+      ? '\n[Note: AGENTS.md was truncated for context size — beginning only.]\n'
+      : ''
+    return `Workspace instructions (from \`${AGENTS_RELATIVE_PATH}\`):${note}\n\n${t}`
   } catch {
     return ''
   }
@@ -512,12 +559,14 @@ export async function buildTanStackChatTurnArgs(
   ]
 
   const memoryBlockStart = nowMs()
-  const memoryBlock =
-    ctx?.workspaceId != null
-      ? await loadWorkspaceMemorySystemBlock(ctx.workspaceId)
-      : ''
+  let memoryBlock = ''
+  let agentsBlock = ''
   if (ctx?.workspaceId != null) {
-    logChatPerf('loadWorkspaceMemorySystemBlock', memoryBlockStart)
+    ;[memoryBlock, agentsBlock] = await Promise.all([
+      loadWorkspaceMemorySystemBlock(ctx.workspaceId),
+      loadAgentsMdSystemBlock(ctx.workspaceId),
+    ])
+    logChatPerf('loadWorkspaceMemory+AGENTS', memoryBlockStart)
   }
   const cf =
     ctx?.contextFiles != null && ctx.contextFiles.length > 0
@@ -593,12 +642,64 @@ export async function buildTanStackChatTurnArgs(
     text: buildUserContextSystemSectionText(),
   })
 
+  if (agentsBlock) {
+    systemSections.push({
+      id: 'agents-md',
+      label: `Workspace instructions (${AGENTS_RELATIVE_PATH})`,
+      source: SOURCE_AGENTS,
+      text: agentsBlock,
+    })
+  }
+
   if (memoryBlock) {
     systemSections.push({
       id: 'memory',
       label: `Workspace memory (${MEMORY_RELATIVE_PATH})`,
       source: SOURCE_MEMORY,
       text: memoryBlock,
+    })
+  }
+
+  const wm = ctx?.conversationWorkingMemory
+  if (workspaceScoped && wm) {
+    if (wm.compactionWarning?.trim()) {
+      systemSections.push({
+        id: 'wm-compaction-notice',
+        label: 'Context trimming',
+        source: 'src/lib/conversation/working-memory.ts',
+        text: wm.compactionWarning.trim(),
+      })
+    }
+    if (wm.summaryText.trim()) {
+      systemSections.push({
+        id: 'session-summary',
+        label: 'Earlier conversation (summary)',
+        source: SOURCE_WM_SUMMARY,
+        text: `The following summarizes older turns not shown in the message list below.\n\n${wm.summaryText.trim()}`,
+      })
+    }
+    if (wm.openLoops.length > 0) {
+      systemSections.push({
+        id: 'open-loops',
+        label: 'Open loops',
+        source: SOURCE_WM_LOOPS,
+        text: [
+          'Unresolved items worth remembering:',
+          '',
+          ...wm.openLoops.map((s) => `- ${s}`),
+        ].join('\n'),
+      })
+    }
+    systemSections.push({
+      id: 'transcript-archive',
+      label: 'Full transcript',
+      source: SOURCE_WM_ARCHIVE,
+      text: [
+        'The complete chat transcript for this conversation is stored in the workspace at:',
+        `\`${wm.fullTranscriptRelativePath}\``,
+        '',
+        'Only recent messages appear in the chat history below. To recall older details, use **read_workspace_file** (or workspace search) on that path.',
+      ].join('\n'),
     })
   }
 
@@ -725,6 +826,32 @@ function messageContentForSnapshot(
   }
 }
 
+function buildSnapshotTokenEstimate(
+  args: BuildTanStackChatTurnArgsResult,
+): SnapshotTokenEstimate {
+  const opt = {
+    provider: args.provider,
+    modelId: args.modelId.trim() || 'gpt-4o',
+  }
+  const bySectionId: Record<string, number> = {}
+  let systemSum = 0
+  for (const s of args.systemSections) {
+    const n = estimateTextTokens(s.text, opt)
+    bySectionId[s.id] = n
+    systemSum += n
+  }
+  let messagesTokens = 0
+  for (const m of args.messages) {
+    const c = messageContentForSnapshot(m.content)
+    messagesTokens += estimateTextTokens(`${m.role}\n${c}`, opt)
+  }
+  return {
+    bySectionId,
+    messagesTokens,
+    totalApprox: systemSum + messagesTokens,
+  }
+}
+
 export function tanStackTurnArgsToSnapshot(
   args: BuildTanStackChatTurnArgsResult,
   userText: string,
@@ -744,5 +871,6 @@ export function tanStackTurnArgsToSnapshot(
       content: messageContentForSnapshot(m.content),
     })),
     tools: args.toolsDisplay.map((t) => ({ ...t })),
+    tokenEstimate: buildSnapshotTokenEstimate(args),
   }
 }

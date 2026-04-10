@@ -46,6 +46,14 @@ export type ContextPriorConversationForModel = {
 
 export type ChatTurnKind = 'default' | 'profile'
 
+/** Injected as system sections for workspace short-term memory (Phase 1). */
+export type ConversationWorkingMemoryContext = {
+  summaryText: string
+  openLoops: string[]
+  fullTranscriptRelativePath: string
+  compactionWarning?: string
+}
+
 export type ChatTurnContext = {
   workspaceId: string
   conversationId: string | null
@@ -63,6 +71,8 @@ export type ChatTurnContext = {
   contextPriorConversations?: ContextPriorConversationForModel[]
   /** Per-chat MCP server allowlist selected by the user. */
   activeMcpServers?: string[]
+  /** Rolling summary + archive hint when chat history is token-trimmed. */
+  conversationWorkingMemory?: ConversationWorkingMemoryContext | null
 }
 
 export type PriorChatMessage = {

@@ -8,6 +8,8 @@ export type SectionSummary = {
   charCount: number
   lineCount: number
   preview: string
+  /** Approximate tokens (gpt-tokenizer), when snapshot includes tokenEstimate. */
+  tokenApprox?: number
 }
 
 export type ToolBucket = {
@@ -29,6 +31,10 @@ export type SnapshotSummary = {
   skillCatalogPresent: boolean
   mcpToolsPresent: boolean
   memoryPresent: boolean
+  /** Approximate tokens for chat messages only (excludes system sections). */
+  messagesTokensApprox: number | null
+  /** Approximate tokens: system sections + messages (tools excluded). */
+  totalTokensApprox: number | null
   totalSystemChars: number
   totalMessageCount: number
   totalToolCount: number
@@ -55,6 +61,7 @@ function extractCanvasRevision(sections: { id: string; text: string }[]): number
 export function deriveSnapshotSummary(
   snap: SerializableModelRequestSnapshot,
 ): SnapshotSummary {
+  const te = snap.tokenEstimate
   const sections: SectionSummary[] = snap.systemSections.map((s) => ({
     id: s.id,
     label: s.label,
@@ -62,6 +69,9 @@ export function deriveSnapshotSummary(
     charCount: s.text.length,
     lineCount: s.text.split('\n').length,
     preview: previewText(s.text),
+    ...(te?.bySectionId[s.id] != null
+      ? { tokenApprox: te.bySectionId[s.id] }
+      : {}),
   }))
 
   const groups: Record<ModelContextSectionGroup, SectionSummary[]> = {
@@ -133,6 +143,8 @@ export function deriveSnapshotSummary(
     skillCatalogPresent: snap.systemSections.some((s) => s.id === 'skills-catalog'),
     mcpToolsPresent: mcpTools.length > 0,
     memoryPresent: snap.systemSections.some((s) => s.id === 'memory'),
+    messagesTokensApprox: te?.messagesTokens ?? null,
+    totalTokensApprox: te?.totalApprox ?? null,
     totalSystemChars: snap.systemSections.reduce((sum, s) => sum + s.text.length, 0),
     totalMessageCount: snap.messages.length,
     totalToolCount: snap.tools.length,

@@ -7,7 +7,10 @@ import { stdin } from 'node:process'
 
 import { z } from 'zod'
 
-import type { AiSettingsDto } from '@/lib/ai-settings-api'
+import {
+  CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
+  type AiSettingsDto,
+} from '@/lib/ai-settings-api'
 import type { AiProviderId } from '@/lib/ai/model-catalog'
 import { defaultModelForProvider } from '@/lib/ai/model-catalog'
 import {
@@ -228,6 +231,8 @@ function settingsFromEnv(): AiSettingsDto {
     baseUrl: process.env.BRAIAN_AI_BASE_URL?.trim()
       ? process.env.BRAIAN_AI_BASE_URL.trim()
       : null,
+    /** CLI does not apply on-disk compaction; `buildTanStackChatTurnArgs` only uses this for budgeting if wired. */
+    contextMaxHistoryTokens: CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
   }
 }
 

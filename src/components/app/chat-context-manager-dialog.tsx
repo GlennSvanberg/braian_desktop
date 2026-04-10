@@ -31,12 +31,12 @@ import {
 import type { ModelContextSectionGroup } from '@/lib/ai/model-context-section-meta'
 import { deriveSnapshotSummary, type SnapshotSummary, type SectionSummary, type ToolBucket } from '@/lib/ai/snapshot-summary'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
+import { resolveChatHistoryForModelTurn } from '@/lib/conversation/working-memory'
 import {
   isNonWorkspaceScopedSessionId,
   isUserProfileSessionId,
 } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
-import { chatMessageContentForLlmHistory } from '@/lib/chat-sessions/store'
 import type { ChatThreadState } from '@/lib/chat-sessions/types'
 import { loadContextConversationsForModel } from '@/lib/context-conversations-for-ai'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
@@ -156,6 +156,18 @@ function SummaryCards({ summary }: { summary: SnapshotSummary }) {
         <Stat label="Skills catalog" value={summary.skillCatalogPresent ? 'yes' : 'no'} muted={!summary.skillCatalogPresent} />
         <Stat label="Memory" value={summary.memoryPresent ? 'yes' : 'no'} muted={!summary.memoryPresent} />
         <Stat label="Reasoning" value={summary.reasoningMode} />
+        {summary.totalTokensApprox != null ? (
+          <Stat
+            label="Total tokens (approx.)"
+            value={`~${summary.totalTokensApprox.toLocaleString()}`}
+          />
+        ) : null}
+        {summary.messagesTokensApprox != null ? (
+          <Stat
+            label="Message tokens (approx.)"
+            value={`~${summary.messagesTokensApprox.toLocaleString()}`}
+          />
+        ) : null}
       </div>
     </div>
   )
@@ -172,7 +184,10 @@ function CollapsibleSystemSection({ section, snap }: { section: SectionSummary; 
       <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent-500/10">
         <ChevronDown className="size-3.5 shrink-0 text-accent-600 transition-transform group-data-[state=closed]:-rotate-90 dark:text-accent-500" />
         <span className="min-w-0 flex-1 truncate font-medium text-text-1">{section.label}</span>
-        <span className="shrink-0 text-[10px] tabular-nums text-text-3">{charLabel(section.charCount)}</span>
+        <span className="shrink-0 text-[10px] tabular-nums text-text-3">
+          {charLabel(section.charCount)}
+          {section.tokenApprox != null ? ` · ~${section.tokenApprox.toLocaleString()} tok` : ''}
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="px-2 pt-1 pb-2">
         {raw && <MonoBlock text={raw.text} />}
@@ -499,10 +514,12 @@ export function ChatContextManagerDialog({
           }
         }
 
-        const priorMessages = thread.messages.map((m) => ({
-          role: m.role,
-          content: chatMessageContentForLlmHistory(m),
-        }))
+        const { priorMessages, workingMemory, settings: aiSettings } =
+          await resolveChatHistoryForModelTurn({
+            workspaceId,
+            conversationId,
+            prevMessages: thread.messages,
+          })
 
         const draft = thread.draft.trim()
         const userText = draft.length > 0 ? draft : EMPTY_DRAFT_USER_LINE
@@ -529,8 +546,12 @@ export function ChatContextManagerDialog({
               ? { contextPriorConversations }
               : {}),
             ...(activeMcpServers.length > 0 ? { activeMcpServers } : {}),
+            ...(workingMemory != null
+              ? { conversationWorkingMemory: workingMemory }
+              : {}),
           },
           priorMessages,
+          settings: aiSettings,
           skipSettingsValidation: true,
           reasoningMode: thread.reasoningMode === 'thinking' ? 'thinking' : 'fast',
         })

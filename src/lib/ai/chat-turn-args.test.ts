@@ -32,6 +32,7 @@ const validSettings = {
   apiKey: 'test-key',
   modelId: 'gpt-4o-mini',
   baseUrl: null as string | null,
+  contextMaxHistoryTokens: 65_536,
 }
 
 describe('buildTanStackChatTurnArgs', () => {

@@ -18,7 +18,12 @@ export function modelContextSectionGroup(
       return 'Skills'
     case 'user-context':
       return 'User'
+    case 'agents-md':
     case 'memory':
+    case 'session-summary':
+    case 'open-loops':
+    case 'transcript-archive':
+    case 'wm-compaction-notice':
       return 'Workspace'
     case 'context-files':
     case 'context-prior-conversations':
@@ -41,7 +46,7 @@ export const MODEL_CONTEXT_SECTION_ORDER_HELP: { title: string; items: string[] 
       'Core — Routing: decision tree (document vs code mode) plus mode-specific rules.',
       'Skills — Catalog of `.braian/skills/<slug>/SKILL.md` (metadata only; full bodies loaded on demand).',
       'User — Profile and automatic client time.',
-      'Workspace — Durable MEMORY.md.',
+      'Workspace — AGENTS.md, MEMORY.md, short-term summary, open loops, transcript pointer.',
       'This turn — Attached files, prior conversation transcripts, document canvas snapshot, and (when App mode is on) dashboard builder instructions.',
     ],
   }

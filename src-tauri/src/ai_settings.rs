@@ -10,6 +10,8 @@ pub struct AiSettingsRecord {
   pub api_key: String,
   pub model_id: String,
   pub base_url: Option<String>,
+  /// Max tokens for prior chat messages sent to the model (short-term memory budget).
+  pub context_max_history_tokens: i64,
 }
 
 fn default_settings() -> AiSettingsRecord {
@@ -18,23 +20,25 @@ fn default_settings() -> AiSettingsRecord {
     api_key: String::new(),
     model_id: "gpt-5.4".to_string(),
     base_url: None,
+    context_max_history_tokens: 65_536,
   }
 }
 
 #[tauri::command]
 pub fn ai_settings_get(app: AppHandle) -> Result<AiSettingsRecord, String> {
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
-  let row: Result<(String, String, String, Option<String>), rusqlite::Error> = conn.query_row(
-    "SELECT provider, api_key, model_id, base_url FROM ai_settings WHERE id = 1",
+  let row: Result<(String, String, String, Option<String>, i64), rusqlite::Error> = conn.query_row(
+    "SELECT provider, api_key, model_id, base_url, context_max_history_tokens FROM ai_settings WHERE id = 1",
     [],
-    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
   );
   match row {
-    Ok((provider, api_key, model_id, base_url)) => Ok(AiSettingsRecord {
+    Ok((provider, api_key, model_id, base_url, context_max_history_tokens)) => Ok(AiSettingsRecord {
       provider,
       api_key,
       model_id,
       base_url,
+      context_max_history_tokens,
     }),
     Err(rusqlite::Error::QueryReturnedNoRows) => Ok(default_settings()),
     Err(e) => Err(e.to_string()),
@@ -65,12 +69,20 @@ pub fn ai_settings_set(app: AppHandle, settings: AiSettingsRecord) -> Result<(),
     return Err("Base URL is required for OpenAI-compatible providers.".to_string());
   }
 
+  let mut ctx_tokens = settings.context_max_history_tokens;
+  if ctx_tokens < 4096 {
+    ctx_tokens = 4096;
+  }
+  if ctx_tokens > 524_288 {
+    ctx_tokens = 524_288;
+  }
+
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   conn
     .execute(
-      "INSERT OR REPLACE INTO ai_settings (id, provider, api_key, model_id, base_url)
-       VALUES (1, ?1, ?2, ?3, ?4)",
-      rusqlite::params![provider, api_key, model_id, base_url],
+      "INSERT OR REPLACE INTO ai_settings (id, provider, api_key, model_id, base_url, context_max_history_tokens)
+       VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+      rusqlite::params![provider, api_key, model_id, base_url, ctx_tokens],
     )
     .map_err(|e| e.to_string())?;
   Ok(())

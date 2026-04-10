@@ -100,6 +100,13 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 7 {
+    conn.execute_batch(
+      "ALTER TABLE ai_settings ADD COLUMN context_max_history_tokens INTEGER NOT NULL DEFAULT 65536;
+      UPDATE _schema_version SET version = 7 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 
