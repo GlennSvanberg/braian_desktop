@@ -1,15 +1,14 @@
 import {
-  Brain,
-  Braces,
-  Camera,
   Check,
   ChevronDown,
   Copy,
   CornerDownLeft,
   FileText,
+  Info,
   Loader2,
   MessageSquare,
   Paperclip,
+  Plus,
   Square,
   X,
 } from 'lucide-react'
@@ -44,7 +43,6 @@ import {
 } from '@/components/ui/dialog'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -55,7 +53,9 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { useIsMobile } from '@/hooks/use-mobile'
 import {
@@ -108,7 +108,6 @@ import {
 } from '@/lib/workspace-api'
 import { registerWorkspaceFilePointerDropHandler } from '@/lib/workspace-file-pointer-dnd'
 import { workspaceHubRecentFileTouch } from '@/lib/workspace-hub-api'
-import { workspaceGitTryCommit } from '@/lib/workspace/git-history-api'
 import { formatRelativeTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 
@@ -121,7 +120,6 @@ function normalizeCanvasKind(
 }
 
 type ChatSessionHeaderToolbarProps = {
-  onOpenContext: () => void
   generating: boolean
   sessionKey: string
   stopChatGeneration: (key: string) => void
@@ -130,30 +128,212 @@ type ChatSessionHeaderToolbarProps = {
   projectWorkspacesLength: number
   moveBusy: boolean
   onMoveOpen: () => void
-  conversationId: string | null
-  isProfileSession: boolean
-  snapshotBusy: boolean
-  onSaveSnapshotNow: () => void
-  memoryUpdateBusy: boolean
-  onUpdateMemoryNow: () => void
-  activeAgentSegment: 'document' | 'code' | 'app'
-  onSelectAgentSegment: (next: 'document' | 'code' | 'app') => void
-  configuredMcpServers: string[]
-  activeMcpServers: string[]
-  onToggleMcpServer: (name: string, enabled: boolean) => void
 }
 
 /** Shared header toolbar control surface (height, radius, border). */
 const headerToolbarBtnClass =
   'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border/55 bg-muted/20 px-2.5 text-[13px] font-medium text-text-2 shadow-sm transition-colors hover:border-border hover:bg-muted/40 hover:text-text-1 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50'
 
-const headerToolbarContextBtnClass = cn(
-  headerToolbarBtnClass,
-  'border-accent-500/25 bg-accent-500/[0.07] text-accent-700 hover:border-accent-500/45 hover:bg-accent-500/12 dark:text-accent-400',
-)
+type ComposerSessionToolsMenuProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onOpenContext: () => void
+  onAttachFiles: () => void
+  activeAgentSegment: 'document' | 'code' | 'app'
+  onSelectAgentSegment: (next: 'document' | 'code' | 'app') => void
+  configuredMcpServers: string[]
+  activeMcpServers: string[]
+  onToggleMcpServer: (name: string, enabled: boolean) => void
+  isTauriRuntime: boolean
+  hasWorkspaceRoot: boolean
+  isPersonalSimpleChat: boolean
+  isProfileSession: boolean
+  conversationId: string | null
+}
+
+function ComposerSessionToolsMenu({
+  open,
+  onOpenChange,
+  onOpenContext,
+  onAttachFiles,
+  activeAgentSegment,
+  onSelectAgentSegment,
+  configuredMcpServers,
+  activeMcpServers,
+  onToggleMcpServer,
+  isTauriRuntime,
+  hasWorkspaceRoot,
+  isPersonalSimpleChat,
+  isProfileSession,
+  conversationId,
+}: ComposerSessionToolsMenuProps) {
+  const showAttach =
+    isTauriRuntime && hasWorkspaceRoot && !isPersonalSimpleChat && !isProfileSession
+  const showAgent =
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isPersonalSimpleChat &&
+    !isProfileSession
+  const showMcp =
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isPersonalSimpleChat &&
+    !isProfileSession &&
+    configuredMcpServers.length > 0
+
+  const menuItemClass =
+    'hover:bg-muted/80 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-2 transition-colors'
+
+  const toolsRowBtnClass =
+    'border-border/50 hover:bg-muted/80 focus-visible:ring-ring text-text-2 flex min-h-10 flex-1 min-w-0 items-center justify-center gap-1.5 rounded-lg border bg-transparent px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2'
+
+  const sectionLabelClass =
+    'text-text-3 px-1 pb-1 text-[9px] font-semibold tracking-wide uppercase'
+
+  return (
+    <Popover modal open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-text-3 hover:text-text-2 hover:bg-muted/50 size-8 shrink-0 rounded-full transition-colors"
+          aria-label="Chat tools: attach files, inspect context, agent mode, connections"
+          title="Chat tools"
+        >
+          <Plus className="size-4" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="top"
+        className="border-border bg-popover text-popover-foreground w-[min(100vw-2rem,20rem)] max-h-[min(70vh,28rem)] overflow-y-auto p-1.5 text-xs shadow-md"
+      >
+        <div className={sectionLabelClass}>Tools</div>
+        <div
+          className={cn(
+            'flex gap-1.5',
+            !showAttach && 'flex-col',
+          )}
+        >
+          {showAttach ? (
+            <button
+              type="button"
+              className={toolsRowBtnClass}
+              onClick={() => {
+                onOpenChange(false)
+                void onAttachFiles()
+              }}
+            >
+              <Paperclip className="text-text-3 size-3.5 shrink-0 opacity-90" aria-hidden />
+              <span className="text-text-1">Attach files</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={cn(toolsRowBtnClass, !showAttach && 'w-full flex-none')}
+            title="Open the context inspector: pinned files and chats, outbound payload preview"
+            onClick={() => {
+              onOpenChange(false)
+              onOpenContext()
+            }}
+          >
+            <Info className="text-text-3 size-3.5 shrink-0 opacity-90" aria-hidden />
+            <span className="text-text-1">Inspect context</span>
+          </button>
+        </div>
+        {showAgent ? (
+          <>
+            <Separator className="my-1.5 bg-border/60" />
+            <div className={sectionLabelClass}>Agent mode</div>
+            <div
+              className="border-border/60 bg-muted/15 grid grid-cols-3 divide-x divide-border/55 overflow-hidden rounded-md border"
+              role="group"
+              aria-label="Agent mode"
+            >
+              {(
+                [
+                  { id: 'document' as const, label: 'Document' },
+                  { id: 'code' as const, label: 'Code' },
+                  { id: 'app' as const, label: 'App' },
+                ] as const
+              ).map((seg) => (
+                <button
+                  key={seg.id}
+                  type="button"
+                  className={cn(
+                    'focus-visible:ring-ring min-h-8 px-1 py-1.5 text-center text-xs font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none sm:px-1.5',
+                    activeAgentSegment === seg.id
+                      ? 'bg-background text-text-1 shadow-sm'
+                      : 'text-text-3 hover:bg-muted/30 hover:text-text-2 bg-transparent',
+                  )}
+                  aria-pressed={activeAgentSegment === seg.id}
+                  title={
+                    seg.id === 'document'
+                      ? 'Document assistant: canvas, lazy file tools'
+                      : seg.id === 'code'
+                        ? 'Code assistant: eager read/write/run in workspace (no dashboard harness)'
+                        : 'App agent: full code + dashboard tools; live preview in the side panel'
+                  }
+                  onClick={() => {
+                    onSelectAgentSegment(seg.id)
+                  }}
+                >
+                  {seg.label}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+        {showMcp ? (
+          <>
+            <Separator className="my-1.5 bg-border/60" />
+            <div className={sectionLabelClass}>Connections</div>
+            <ul className="space-y-0.5" role="list">
+              {configuredMcpServers.map((name) => {
+                const checked = activeMcpServers.includes(name)
+                return (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={checked}
+                      className={cn(
+                        menuItemClass,
+                        'gap-2',
+                        checked && 'bg-muted/40',
+                      )}
+                      onClick={() =>
+                        onToggleMcpServer(name, !checked)
+                      }
+                    >
+                      <span
+                        className={cn(
+                          'border-border flex size-3.5 shrink-0 items-center justify-center rounded border',
+                          checked && 'bg-primary border-primary text-primary-foreground',
+                        )}
+                        aria-hidden
+                      >
+                        {checked ? (
+                          <Check className="size-2.5" strokeWidth={3} />
+                        ) : null}
+                      </span>
+                      <span className="text-text-2 min-w-0 flex-1 truncate font-medium">
+                        {name}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 function ChatSessionHeaderToolbar({
-  onOpenContext,
   generating,
   sessionKey,
   stopChatGeneration,
@@ -162,96 +342,14 @@ function ChatSessionHeaderToolbar({
   projectWorkspacesLength,
   moveBusy,
   onMoveOpen,
-  conversationId,
-  isProfileSession,
-  snapshotBusy,
-  onSaveSnapshotNow,
-  memoryUpdateBusy,
-  onUpdateMemoryNow,
-  activeAgentSegment,
-  onSelectAgentSegment,
-  configuredMcpServers,
-  activeMcpServers,
-  onToggleMcpServer,
 }: ChatSessionHeaderToolbarProps) {
   const showWorkspaceMove =
     isPersonalSimpleChat &&
     isTauriRuntime &&
     projectWorkspacesLength > 0
-  const showAgentModes =
-    Boolean(conversationId) &&
-    isTauriRuntime &&
-    !isPersonalSimpleChat &&
-    !isProfileSession
-  const showSnapshot =
-    !generating &&
-    Boolean(conversationId) &&
-    isTauriRuntime &&
-    !isProfileSession &&
-    !isPersonalSimpleChat
-  const showMemory =
-    !generating &&
-    Boolean(conversationId) &&
-    isTauriRuntime &&
-    !isProfileSession &&
-    !isPersonalSimpleChat
-  const showMcpToggle =
-    Boolean(conversationId) &&
-    isTauriRuntime &&
-    !isPersonalSimpleChat &&
-    !isProfileSession &&
-    configuredMcpServers.length > 0
-
-  const modeSegments = (
-    [
-      { id: 'document' as const, label: 'Document' },
-      { id: 'code' as const, label: 'Code' },
-      { id: 'app' as const, label: 'App' },
-    ] as const
-  ).map((seg) => (
-    <button
-      key={seg.id}
-      type="button"
-      className={cn(
-        'focus-visible:ring-ring h-full min-w-0 px-2 text-center text-[13px] font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none sm:px-2.5',
-        activeAgentSegment === seg.id
-          ? 'bg-background text-text-1 shadow-sm'
-          : 'text-text-3 hover:bg-muted/30 hover:text-text-2 bg-transparent',
-      )}
-      aria-pressed={activeAgentSegment === seg.id}
-      title={
-        seg.id === 'document'
-          ? 'Document assistant: canvas, lazy file tools'
-          : seg.id === 'code'
-            ? 'Code assistant: eager read/write/run in workspace (no dashboard harness)'
-            : 'App agent: full code + dashboard tools; live preview in the side panel'
-      }
-      onClick={() => onSelectAgentSegment(seg.id)}
-    >
-      {seg.label}
-    </button>
-  ))
-
-  const agentModeGroup = (
-    <div
-      className="border-border/60 bg-muted/20 inline-grid h-8 w-[14.25rem] shrink-0 grid-cols-3 divide-x divide-border/55 overflow-hidden rounded-md border shadow-sm sm:w-[15.5rem]"
-      role="group"
-      aria-label="Agent mode"
-    >
-      {modeSegments}
-    </div>
-  )
 
   return (
     <div className="inline-flex w-max max-w-none items-center gap-1.5 pr-1">
-      <button
-        type="button"
-        className={headerToolbarContextBtnClass}
-        onClick={onOpenContext}
-      >
-        <Braces className="size-3.5 shrink-0 opacity-80" aria-hidden />
-        Context
-      </button>
       {showWorkspaceMove ? (
         <button
           type="button"
@@ -261,31 +359,6 @@ function ChatSessionHeaderToolbar({
         >
           Move to workspace
         </button>
-      ) : null}
-      {showAgentModes ? agentModeGroup : null}
-      {showMcpToggle ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={headerToolbarBtnClass}>
-              <Brain className="size-3.5 shrink-0 opacity-80" aria-hidden />
-              Connections
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-56">
-            {configuredMcpServers.map((name) => {
-              const checked = activeMcpServers.includes(name)
-              return (
-                <DropdownMenuCheckboxItem
-                  key={name}
-                  checked={checked}
-                  onCheckedChange={(v) => onToggleMcpServer(name, Boolean(v))}
-                >
-                  {name}
-                </DropdownMenuCheckboxItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
       ) : null}
       {generating ? (
         <>
@@ -309,38 +382,6 @@ function ChatSessionHeaderToolbar({
             Stop
           </button>
         </>
-      ) : null}
-      {showSnapshot ? (
-        <button
-          type="button"
-          className={headerToolbarBtnClass}
-          disabled={snapshotBusy}
-          title="Save the workspace folder to Git now (after saving this chat)"
-          onClick={onSaveSnapshotNow}
-        >
-          {snapshotBusy ? (
-            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-          ) : (
-            <Camera className="size-3.5 shrink-0" aria-hidden />
-          )}
-          Save snapshot
-        </button>
-      ) : null}
-      {showMemory ? (
-        <button
-          type="button"
-          className={headerToolbarBtnClass}
-          disabled={memoryUpdateBusy}
-          title="Update workspace memory from this chat"
-          onClick={onUpdateMemoryNow}
-        >
-          {memoryUpdateBusy ? (
-            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-          ) : (
-            <Brain className="size-3.5 shrink-0" aria-hidden />
-          )}
-          Update memory
-        </button>
       ) : null}
     </div>
   )
@@ -425,10 +466,7 @@ export function ChatWorkbench({
   } = useChatThreadActions()
 
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
-  const [memoryUpdateBusy, setMemoryUpdateBusy] = useState(false)
-  const [memoryUpdateHint, setMemoryUpdateHint] = useState<string | null>(null)
-  const [snapshotBusy, setSnapshotBusy] = useState(false)
-  const [snapshotHint, setSnapshotHint] = useState<string | null>(null)
+  const [composerToolsOpen, setComposerToolsOpen] = useState(false)
   const [workspaceFileIndex, setWorkspaceFileIndex] = useState<
     WorkspaceFileIndexEntry[]
   >([])
@@ -579,7 +617,6 @@ export function ChatWorkbench({
   }, [sessionKey])
 
   useLayoutEffect(() => {
-    const viewport = chatScrollViewportRef.current
     const spacer = chatPinSpacerRef.current
     const wasGenerating = prevGeneratingForPinScrollRef.current
 
@@ -1244,82 +1281,6 @@ export function ChatWorkbench({
     void runMoveToWorkspace(moveTargetWs)
   }, [runMoveToWorkspace, moveTargetWs])
 
-  const onUpdateMemoryNow = useCallback(() => {
-    if (!conversationId || !activeWorkspaceId || memoryUpdateBusy) return
-    setMemoryUpdateBusy(true)
-    setMemoryUpdateHint(null)
-    void import('@/lib/memory/scheduler')
-      .then((m) => m.runMemoryReviewNow(activeWorkspaceId, conversationId))
-      .then((r) => {
-        if (r.ok && r.skipped) {
-          setMemoryUpdateHint(r.reason)
-        } else if (!r.ok) {
-          setMemoryUpdateHint(r.error)
-        } else {
-          setMemoryUpdateHint('Memory file updated (.braian/MEMORY.md).')
-        }
-      })
-      .catch((e) => {
-        setMemoryUpdateHint(
-          e instanceof Error ? e.message : 'Memory update failed.',
-        )
-      })
-      .finally(() => {
-        setMemoryUpdateBusy(false)
-        window.setTimeout(() => setMemoryUpdateHint(null), 6000)
-      })
-  }, [activeWorkspaceId, conversationId, memoryUpdateBusy])
-
-  const onSaveSnapshotNow = useCallback(() => {
-    if (
-      !conversationId ||
-      !threadWorkspaceId ||
-      snapshotBusy ||
-      generating ||
-      isPersonalSimpleChat ||
-      isProfileSession
-    ) {
-      return
-    }
-    setSnapshotBusy(true)
-    setSnapshotHint(null)
-    void (async () => {
-      try {
-        if (metaForSave) {
-          await conversationSave(
-            buildConversationSavePayload(thread, metaForSave),
-          )
-          await refreshConversations()
-        }
-        const oid = await workspaceGitTryCommit(threadWorkspaceId, 'manual')
-        if (oid) {
-          setSnapshotHint('Workspace snapshot saved.')
-        } else {
-          setSnapshotHint(
-            'No snapshot created. Turn on workspace snapshots in settings, or nothing changed on disk.',
-          )
-        }
-      } catch (e) {
-        setSnapshotHint(
-          e instanceof Error ? e.message : 'Could not save snapshot.',
-        )
-      } finally {
-        setSnapshotBusy(false)
-        window.setTimeout(() => setSnapshotHint(null), 8000)
-      }
-    })()
-  }, [
-    conversationId,
-    threadWorkspaceId,
-    snapshotBusy,
-    generating,
-    isPersonalSimpleChat,
-    isProfileSession,
-    metaForSave,
-    thread,
-    refreshConversations,
-  ])
-
   const desktopToolsUnavailable =
     (agentMode === 'code' || agentMode === 'app') && !isTauriRuntime
 
@@ -1359,7 +1320,6 @@ export function ChatWorkbench({
   const sessionHeaderToolbarNode = useMemo(
     () => (
       <ChatSessionHeaderToolbar
-        onOpenContext={openContextManager}
         generating={generating}
         sessionKey={sessionKey}
         stopChatGeneration={stopChatGeneration}
@@ -1368,21 +1328,9 @@ export function ChatWorkbench({
         projectWorkspacesLength={projectWorkspaces.length}
         moveBusy={moveBusy}
         onMoveOpen={openMoveDialog}
-        conversationId={conversationId}
-        isProfileSession={isProfileSession}
-        snapshotBusy={snapshotBusy}
-        onSaveSnapshotNow={onSaveSnapshotNow}
-        memoryUpdateBusy={memoryUpdateBusy}
-        onUpdateMemoryNow={onUpdateMemoryNow}
-        activeAgentSegment={activeAgentSegment}
-        onSelectAgentSegment={onSelectAgentSegment}
-        configuredMcpServers={configuredMcpServers}
-        activeMcpServers={thread.activeMcpServers ?? []}
-        onToggleMcpServer={onToggleMcpServer}
       />
     ),
     [
-      openContextManager,
       generating,
       sessionKey,
       stopChatGeneration,
@@ -1391,17 +1339,6 @@ export function ChatWorkbench({
       projectWorkspaces.length,
       moveBusy,
       openMoveDialog,
-      conversationId,
-      isProfileSession,
-      snapshotBusy,
-      onSaveSnapshotNow,
-      memoryUpdateBusy,
-      onUpdateMemoryNow,
-      activeAgentSegment,
-      onSelectAgentSegment,
-      configuredMcpServers,
-      thread.activeMcpServers,
-      onToggleMcpServer,
     ],
   )
 
@@ -1689,22 +1626,22 @@ export function ChatWorkbench({
       />
       <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between">
         <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
-          {isTauriRuntime &&
-          activeWorkspace?.rootPath &&
-          !isPersonalSimpleChat &&
-          !isProfileSession ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-text-3 hover:text-text-2 hover:bg-muted/50 size-8 shrink-0 rounded-full transition-colors"
-              onClick={() => void onAttachFiles()}
-              aria-label="Attach files"
-              title="Attach files to this chat"
-            >
-              <Paperclip className="size-4" aria-hidden />
-            </Button>
-          ) : null}
+          <ComposerSessionToolsMenu
+            open={composerToolsOpen}
+            onOpenChange={setComposerToolsOpen}
+            onOpenContext={openContextManager}
+            onAttachFiles={onAttachFiles}
+            activeAgentSegment={activeAgentSegment}
+            onSelectAgentSegment={onSelectAgentSegment}
+            configuredMcpServers={configuredMcpServers}
+            activeMcpServers={thread.activeMcpServers ?? []}
+            onToggleMcpServer={onToggleMcpServer}
+            isTauriRuntime={isTauriRuntime}
+            hasWorkspaceRoot={Boolean(activeWorkspace?.rootPath)}
+            isPersonalSimpleChat={isPersonalSimpleChat}
+            isProfileSession={isProfileSession}
+            conversationId={conversationId}
+          />
           {reasoningModeGroup}
           {queuedCount > 0 ? (
             <p className="text-accent-600 font-medium text-xs">
@@ -1736,19 +1673,11 @@ export function ChatWorkbench({
 
   const centeredTopHints =
     centeredEmptyComposer &&
-    (memoryUpdateHint ||
-      snapshotHint ||
-      desktopToolsUnavailable ||
+    (desktopToolsUnavailable ||
       contextFiles.length > 0 ||
       contextConversations.length > 0) ? (
       <div className="border-border/60 bg-background/80 shrink-0 border-b px-4 py-2 md:px-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-2">
-          {memoryUpdateHint ? (
-            <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
-          ) : null}
-          {snapshotHint ? (
-            <p className="text-text-3 text-xs">{snapshotHint}</p>
-          ) : null}
           {desktopToolsUnavailable ? (
             <p className="text-text-3 text-xs">
               Workspace scripts and file tools need the desktop app.
@@ -1819,14 +1748,8 @@ export function ChatWorkbench({
             className="min-h-0 flex-1"
             viewportRef={chatScrollViewportRef}
           >
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 md:px-6">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 md:px-6">
           <div className="flex flex-col gap-2">
-            {memoryUpdateHint ? (
-              <p className="text-text-3 text-xs">{memoryUpdateHint}</p>
-            ) : null}
-            {snapshotHint ? (
-              <p className="text-text-3 text-xs">{snapshotHint}</p>
-            ) : null}
             {isProfileSession ? (
               <p className="text-text-3 text-xs leading-relaxed">
                 This chat only updates your global profile (name, location,

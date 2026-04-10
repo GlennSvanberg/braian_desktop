@@ -313,8 +313,8 @@ export function AiSettingsPanel({ embedded, className }: Props) {
               <span className="text-text-3 mt-1 block text-xs leading-relaxed">
                 Uses your configured model and API key after a few minutes of idle
                 time; at most about once every 20 minutes per workspace. You can
-                always edit the file directly or use &quot;Update memory&quot; from
-                an open chat.
+                always edit the file directly or use &quot;Update memory&quot; under
+                Workspace settings for that folder.
               </span>
             </span>
           </label>

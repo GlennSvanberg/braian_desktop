@@ -10,6 +10,7 @@ import {
   workspaceGitRestoreFull,
   workspaceGitSetEnabled,
   workspaceGitStatus,
+  workspaceGitTryCommit,
 } from '@/lib/workspace/git-history-api'
 import { cn } from '@/lib/utils'
 
@@ -42,6 +43,10 @@ export function WorkspaceHistoryPanel({
   const [loading, setLoading] = useState(false)
   const [toggleBusy, setToggleBusy] = useState(false)
   const [restoreBusyOid, setRestoreBusyOid] = useState<string | null>(null)
+  const [manualSnapshotBusy, setManualSnapshotBusy] = useState(false)
+  const [manualSnapshotHint, setManualSnapshotHint] = useState<string | null>(
+    null,
+  )
 
   const refresh = useCallback(async () => {
     if (!workspaceId) {
@@ -85,6 +90,30 @@ export function WorkspaceHistoryPanel({
       setLoadError(e instanceof Error ? e.message : String(e))
     } finally {
       setToggleBusy(false)
+    }
+  }
+
+  const onManualSnapshot = async () => {
+    if (!workspaceId) return
+    setManualSnapshotBusy(true)
+    setManualSnapshotHint(null)
+    try {
+      const oid = await workspaceGitTryCommit(workspaceId, 'manual')
+      if (oid) {
+        setManualSnapshotHint('Workspace snapshot saved.')
+      } else {
+        setManualSnapshotHint(
+          'No snapshot created. Turn on workspace snapshots in settings, or nothing changed on disk.',
+        )
+      }
+      await refresh()
+    } catch (e) {
+      setManualSnapshotHint(
+        e instanceof Error ? e.message : 'Could not save snapshot.',
+      )
+    } finally {
+      setManualSnapshotBusy(false)
+      window.setTimeout(() => setManualSnapshotHint(null), 8000)
     }
   }
 
@@ -143,25 +172,49 @@ export function WorkspaceHistoryPanel({
           </div>
         </div>
         {workspaceId ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
-            {loading ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              'Refresh'
-            )}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={loading || manualSnapshotBusy}
+              onClick={() => void onManualSnapshot()}
+              title="Create a Git checkpoint of this workspace folder now"
+            >
+              {manualSnapshotBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : null}
+              Save snapshot now
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                'Refresh'
+              )}
+            </Button>
+          </div>
         ) : null}
       </div>
 
       {loadError ? (
         <p className="text-destructive text-sm">{loadError}</p>
       ) : null}
+
+      {manualSnapshotHint ? (
+        <p className="text-text-3 text-sm">{manualSnapshotHint}</p>
+      ) : null}
+
+      <p className="text-text-3 text-xs leading-relaxed">
+        Open chats autosave shortly after you edit. If you need the latest
+        messages in this snapshot, wait a moment or focus the chat tab before
+        saving.
+      </p>
 
       <div className="border-border flex flex-col gap-2 rounded-lg border p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
