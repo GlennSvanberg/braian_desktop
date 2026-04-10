@@ -13,10 +13,13 @@ import { isTauri } from '@/lib/tauri-env'
 
 import type { ChatTurnContext } from './types'
 
-import type { JSONSchema, Tool } from '@tanstack/ai'
+import type { Tool } from '@tanstack/ai'
 
 /** Reuse catalog across turns while sessions may still be warm (see idle disconnect in mcp-runtime-api). */
 const MCP_TOOL_CATALOG_TTL_MS = 60_000
+
+/** Max length for tool description text sent to the model (per tool). */
+const MCP_TOOL_DESCRIPTION_MAX_CHARS = 8000
 
 type McpCatalog = Awaited<ReturnType<typeof workspaceMcpListTools>>
 
@@ -135,22 +138,10 @@ async function listMcpToolsCached(
 }
 
 /**
- * OpenAI tool schemas reject `propertyNames` (emitted by `z.record` in Zod → JSON Schema).
- * `passthrough` yields `additionalProperties` only, which providers accept.
- * Used only when the MCP server does not supply a usable `inputSchema`.
+ * Remove `propertyNames` recursively so Ajv / tooling can accept the schema.
+ * MCP may emit draft features OpenAI rejects when forwarding full schemas.
  */
-const mcpToolArgsSchema = z
-  .object({})
-  .passthrough()
-  .describe(
-    'Arguments for this MCP tool as a JSON object; keys match the server tool schema when known.',
-  )
-
-/**
- * Remove `propertyNames` recursively so provider JSON Schema validation accepts the tool.
- * MCP may emit draft features we still want to strip even when forwarding schemas.
- */
-function stripPropertyNamesFromJsonSchema(node: unknown): unknown {
+export function stripPropertyNamesFromJsonSchema(node: unknown): unknown {
   if (node === null || typeof node !== 'object') return node
   if (Array.isArray(node)) {
     return node.map(stripPropertyNamesFromJsonSchema)
@@ -164,163 +155,16 @@ function stripPropertyNamesFromJsonSchema(node: unknown): unknown {
 }
 
 /**
- * OpenAI function parameters reject object schemas that declare `properties` but omit
- * `additionalProperties: false` (including under `items`, `oneOf`, etc.). MCP servers
- * often emit draft/loose JSON Schema; normalize recursively before sending tools.
+ * Single stable shape for every MCP tool sent to the LLM provider (avoids
+ * OpenAI `invalid_function_parameters` on complex nested JSON Schemas).
  */
-function ensureAdditionalPropertiesFalseForOpenAi(node: unknown): unknown {
-  if (node === null || typeof node !== 'object') return node
-  if (Array.isArray(node)) {
-    return node.map(ensureAdditionalPropertiesFalseForOpenAi)
-  }
-
-  const o = node as Record<string, unknown>
-  const out: Record<string, unknown> = {}
-
-  for (const [key, val] of Object.entries(o)) {
-    switch (key) {
-      case 'properties':
-      case 'patternProperties':
-        if (val && typeof val === 'object' && !Array.isArray(val)) {
-          const mapped: Record<string, unknown> = {}
-          for (const [pk, pv] of Object.entries(val)) {
-            mapped[pk] = ensureAdditionalPropertiesFalseForOpenAi(pv)
-          }
-          out[key] = mapped
-        } else {
-          out[key] = val
-        }
-        break
-      case 'items':
-        if (Array.isArray(val)) {
-          out[key] = val.map(ensureAdditionalPropertiesFalseForOpenAi)
-        } else {
-          out[key] = ensureAdditionalPropertiesFalseForOpenAi(val)
-        }
-        break
-      case 'prefixItems':
-        out[key] = Array.isArray(val)
-          ? val.map(ensureAdditionalPropertiesFalseForOpenAi)
-          : val
-        break
-      case 'additionalProperties':
-        if (typeof val === 'boolean') {
-          out[key] = val
-        } else {
-          out[key] = ensureAdditionalPropertiesFalseForOpenAi(val)
-        }
-        break
-      case 'oneOf':
-      case 'anyOf':
-      case 'allOf':
-        out[key] = Array.isArray(val)
-          ? val.map(ensureAdditionalPropertiesFalseForOpenAi)
-          : val
-        break
-      case 'not':
-      case 'if':
-      case 'then':
-      case 'else':
-        out[key] = ensureAdditionalPropertiesFalseForOpenAi(val)
-        break
-      case 'definitions':
-      case '$defs':
-        if (val && typeof val === 'object' && !Array.isArray(val)) {
-          const mapped: Record<string, unknown> = {}
-          for (const [dk, dv] of Object.entries(val)) {
-            mapped[dk] = ensureAdditionalPropertiesFalseForOpenAi(dv)
-          }
-          out[key] = mapped
-        } else {
-          out[key] = val
-        }
-        break
-      default:
-        out[key] = val
-    }
-  }
-
-  const props = out.properties
-  const hasProperties =
-    props != null && typeof props === 'object' && !Array.isArray(props)
-
-  // OpenAI requires `additionalProperties: false` on every object that declares
-  // `properties`. Do not gate on `type === 'object'` only — MCP / JSON Schema
-  // often uses `type: ['object', 'null']` (or omits `type`), which would skip
-  // the flag and reproduce: "context=('properties', 'rows', 'items')".
-  if (hasProperties) {
-    out.additionalProperties = false
-    if (out.type === undefined) {
-      out.type = 'object'
-    }
-  } else {
-    const t = out.type
-    const objectish =
-      t === 'object' ||
-      (Array.isArray(t) && (t as unknown[]).includes('object'))
-    if (objectish && !('additionalProperties' in out)) {
-      out.additionalProperties = false
-    }
-  }
-
-  return out
-}
-
-/**
- * Deep-clone and normalize MCP `inputSchema` JSON when forwarding to providers
- * (e.g. Anthropic). OpenAI / OpenAI-compatible: use `useLooseMcpInputSchemaForOpenAi`
- * in `buildMcpTools` instead of forwarding.
- */
-export function normalizeMcpToolInputJsonSchemaForOpenAi(raw: unknown): unknown {
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return raw
-  }
-  try {
-    const cloned = JSON.parse(JSON.stringify(raw))
-    const stripped = stripPropertyNamesFromJsonSchema(cloned)
-    return ensureAdditionalPropertiesFalseForOpenAi(stripped)
-  } catch {
-    return raw
-  }
-}
-
-/**
- * When present, forward the MCP tool's JSON Schema to the LLM so `required` and property
- * types are visible (avoids empty `{}` tool calls). Falls back to passthrough when unusable.
- */
-function mcpInputSchemaForProvider(raw: unknown): JSONSchema | undefined {
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return undefined
-  }
-  const stripped = normalizeMcpToolInputJsonSchemaForOpenAi(raw)
-  if (
-    stripped === null ||
-    typeof stripped !== 'object' ||
-    Array.isArray(stripped)
-  ) {
-    return undefined
-  }
-  const schema = stripped as Record<string, unknown> & JSONSchema
-
-  // Unresolved refs do not round-trip reliably to the model; keep Zod fallback + description.
-  if (
-    typeof schema.$ref === 'string' &&
-    schema.$ref.length > 0 &&
-    schema.properties == null
-  ) {
-    return undefined
-  }
-
-  if (schema.type === 'object' || schema.properties != null) {
-    if (!schema.type) schema.type = 'object'
-    if (!schema.properties) schema.properties = {}
-    if (!Array.isArray(schema.required)) schema.required = []
-    return schema as JSONSchema
-  }
-
-  if (Object.keys(schema).length === 0) return undefined
-  return schema as JSONSchema
-}
+export const mcpDynamicToolInputSchema = z.object({
+  argumentsJson: z
+    .string()
+    .describe(
+      'Use JSON.stringify on the MCP tool argument object so this field is a JSON string that parses to a plain object (not an array). Include every required key listed in the tool description.',
+    ),
+})
 
 type AjvValidateFn = ReturnType<typeof ajv.compile>
 
@@ -332,50 +176,49 @@ function requiredTopLevelKeysFromSchema(raw: unknown): string[] {
   return req.filter((k): k is string => typeof k === 'string' && k.length > 0)
 }
 
-function topLevelRequiredStringShapeSchema(raw: unknown): z.ZodObject<Record<string, z.ZodString>> | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+function optionalTopLevelKeysFromSchema(raw: unknown): string[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
   const obj = raw as Record<string, unknown>
-  const required = requiredTopLevelKeysFromSchema(raw)
-  if (required.length === 0) return undefined
-  const properties =
-    obj.properties && typeof obj.properties === 'object' && !Array.isArray(obj.properties)
-      ? (obj.properties as Record<string, unknown>)
-      : {}
-
-  const shape: Record<string, z.ZodString> = {}
-  for (const key of required) {
-    const prop = properties[key]
-    if (!prop || typeof prop !== 'object' || Array.isArray(prop)) {
-      return undefined
-    }
-    const p = prop as Record<string, unknown>
-    if (p.type !== 'string') {
-      return undefined
-    }
-    shape[key] = z.string()
-  }
-  return z.object(shape)
+  const props = obj.properties
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return []
+  const keys = Object.keys(props as Record<string, unknown>)
+  const required = new Set(requiredTopLevelKeysFromSchema(raw))
+  return keys.filter((k) => !required.has(k))
 }
 
-function compileMcpArgsValidator(rawSchema: unknown): {
+function compileMcpArgsValidator(
+  rawSchema: unknown,
+  warnings: string[],
+  serverName: string,
+  toolName: string,
+): {
   validate: AjvValidateFn | null
   requiredKeys: string[]
 } {
+  const requiredKeys = requiredTopLevelKeysFromSchema(rawSchema)
   if (!rawSchema || typeof rawSchema !== 'object' || Array.isArray(rawSchema)) {
     return { validate: null, requiredKeys: [] }
   }
-  const schema = normalizeMcpToolInputJsonSchemaForOpenAi(rawSchema)
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
-    return { validate: null, requiredKeys: [] }
+  let stripped: unknown
+  try {
+    stripped = stripPropertyNamesFromJsonSchema(
+      JSON.parse(JSON.stringify(rawSchema)),
+    )
+  } catch {
+    warnings.push(
+      `Connections (MCP): could not clone argument schema for "${serverName}" / "${toolName}" — arguments are sent to the server without client-side JSON Schema validation.`,
+    )
+    return { validate: null, requiredKeys }
   }
   try {
-    const validate = ajv.compile(schema as Record<string, unknown>)
-    return {
-      validate,
-      requiredKeys: requiredTopLevelKeysFromSchema(schema),
-    }
-  } catch {
-    return { validate: null, requiredKeys: requiredTopLevelKeysFromSchema(schema) }
+    const validate = ajv.compile(stripped as Record<string, unknown>)
+    return { validate, requiredKeys }
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    warnings.push(
+      `Connections (MCP): could not compile argument validator for "${serverName}" / "${toolName}" — arguments are sent to the server without client-side JSON Schema validation. (${detail})`,
+    )
+    return { validate: null, requiredKeys }
   }
 }
 
@@ -406,6 +249,46 @@ function buildValidationErrorMessage(
     : `Invalid arguments for MCP tool "${toolName}".`
 }
 
+function buildMcpToolDescription(opts: {
+  serverName: string
+  toolName: string
+  serverNote: string
+  toolDescription: string
+  schemaRaw: unknown
+  requiredKeys: string[]
+  optionalKeys: string[]
+}): string {
+  const howToCall =
+    'How to call: pass tool arguments as a JSON object with a single key "argumentsJson" whose value is a JSON **string** containing the full argument object the MCP server expects (same keys as in inputSchema below). After parsing, that string must be a JSON object (not an array). Example value for argumentsJson: "{\\"entity\\":\\"Product\\"}".'
+
+  const reqPart =
+    opts.requiredKeys.length > 0
+      ? `Top-level keys (required): ${opts.requiredKeys.join(', ')}.`
+      : 'Top-level keys (required): (none listed in schema).'
+  const optPart =
+    opts.optionalKeys.length > 0
+      ? ` Top-level keys (optional): ${opts.optionalKeys.join(', ')}.`
+      : ''
+
+  const header = [
+    `[MCP connection "${opts.serverName}"] ${opts.toolName}.`,
+    opts.serverNote,
+    opts.toolDescription.trim() ? ` ${opts.toolDescription.trim()}` : '',
+    '',
+    howToCall,
+    '',
+    reqPart + optPart,
+    '',
+    'inputSchema reference (truncated JSON): ',
+  ].join('')
+
+  const budget = Math.max(0, MCP_TOOL_DESCRIPTION_MAX_CHARS - header.length)
+  const schemaStr =
+    opts.schemaRaw != null ? JSON.stringify(opts.schemaRaw) : '(no inputSchema from server)'
+  const excerpt = budget > 0 ? schemaStr.slice(0, budget) : ''
+  return (header + excerpt).slice(0, MCP_TOOL_DESCRIPTION_MAX_CHARS)
+}
+
 function slugPart(raw: string, fallback: string): string {
   const s = raw
     .toLowerCase()
@@ -423,22 +306,11 @@ export type BuildMcpToolsResult = {
   serverNames: string[]
 }
 
-export type BuildMcpToolsOptions = {
-  /**
-   * OpenAI tool `strict` mode + TanStack’s schema pass cannot represent many
-   * real-world MCP JSON Schemas (nested `rows.items`, nullable unions, etc.).
-   * When true, register MCP tools with a loose object schema and put a truncated
-   * JSON Schema excerpt in the description so the model still sees arg shape.
-   */
-  useLooseMcpInputSchemaForOpenAi?: boolean
-}
-
 /**
  * Dynamic MCP tools from workspace Connections (stdio + remote), desktop only.
  */
 export async function buildMcpTools(
   context: ChatTurnContext | undefined,
-  options?: BuildMcpToolsOptions,
 ): Promise<BuildMcpToolsResult> {
   const warnings: string[] = []
   if (
@@ -470,7 +342,6 @@ export async function buildMcpTools(
 
   const usedNames = new Set<string>()
   const tools: Tool[] = []
-  const useLooseForOpenAi = options?.useLooseMcpInputSchemaForOpenAi === true
 
   for (const server of catalog.servers) {
     if (server.error?.trim()) {
@@ -492,23 +363,23 @@ export async function buildMcpTools(
           ? (t as { description: string }).description
           : ''
       const schemaRaw = (t as { inputSchema?: unknown }).inputSchema
-      const { validate: validateArgs, requiredKeys } =
-        compileMcpArgsValidator(schemaRaw)
-      const providerSchema = useLooseForOpenAi
-        ? undefined
-        : mcpInputSchemaForProvider(schemaRaw)
-      const openAiRequiredShape =
-        useLooseForOpenAi && providerSchema == null
-          ? topLevelRequiredStringShapeSchema(schemaRaw)
-          : undefined
-      const schemaHint =
-        schemaRaw != null && (providerSchema == null || useLooseForOpenAi)
-          ? ` inputSchema (excerpt — call with a JSON object matching this shape): ${JSON.stringify(schemaRaw).slice(0, 900)}`
-          : ''
-      const requiredKeysHint =
-        requiredKeys.length > 0
-          ? ` Required top-level keys: ${requiredKeys.join(', ')}.`
-          : ''
+      const optionalKeys = optionalTopLevelKeysFromSchema(schemaRaw)
+      const { validate: validateArgs, requiredKeys } = compileMcpArgsValidator(
+        schemaRaw,
+        warnings,
+        server.name,
+        name,
+      )
+
+      const description = buildMcpToolDescription({
+        serverName: server.name,
+        toolName: name,
+        serverNote,
+        toolDescription: desc,
+        schemaRaw,
+        requiredKeys,
+        optionalKeys,
+      })
 
       let toolSlug = slugPart(name, 'tool')
       let tanstackName = `mcp__${serverSlug}__${toolSlug}`
@@ -519,28 +390,38 @@ export async function buildMcpTools(
       }
       usedNames.add(tanstackName)
 
-      const description = [
-        `[MCP connection "${server.name}"] ${name}.`,
-        serverNote,
-        desc.trim() ? ` ${desc.trim()}` : '',
-        requiredKeysHint,
-        schemaHint,
-      ]
-        .join('')
-        .slice(0, 8000)
-
       const serverName = server.name
       const mcpToolName = name
       const def = toolDefinition({
         name: tanstackName,
         description,
-        inputSchema: providerSchema ?? openAiRequiredShape ?? mcpToolArgsSchema,
+        inputSchema: mcpDynamicToolInputSchema,
       })
 
       tools.push(
         def.server(async (args) => {
-          const input = mcpToolArgsSchema.parse(args)
-          if (validateArgs && !validateArgs(input)) {
+          const input = mcpDynamicToolInputSchema.parse(args)
+          let parsedArgs: Record<string, unknown>
+          try {
+            const inner = JSON.parse(input.argumentsJson) as unknown
+            if (
+              inner === null ||
+              typeof inner !== 'object' ||
+              Array.isArray(inner)
+            ) {
+              return {
+                ok: false as const,
+                error: `Invalid arguments for MCP tool "${mcpToolName}": argumentsJson must parse to a JSON object (not an array or primitive).`,
+              }
+            }
+            parsedArgs = inner as Record<string, unknown>
+          } catch {
+            return {
+              ok: false as const,
+              error: `Invalid arguments for MCP tool "${mcpToolName}": argumentsJson is not valid JSON.`,
+            }
+          }
+          if (validateArgs && !validateArgs(parsedArgs)) {
             return {
               ok: false as const,
               error: buildValidationErrorMessage(
@@ -555,7 +436,7 @@ export async function buildMcpTools(
               workspaceId: context.workspaceId!,
               serverName,
               toolName: mcpToolName,
-              arguments: input,
+              arguments: parsedArgs,
             })
             return { ok: true as const, result: text }
           } catch (e) {

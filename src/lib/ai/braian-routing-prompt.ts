@@ -75,7 +75,7 @@ function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null 
     options.inactiveMcpServerNames && options.inactiveMcpServerNames.length > 0
       ? ` Configured but inactive for this chat: ${options.inactiveMcpServerNames.map((n) => `**${n}**`).join(', ')}.`
       : ''
-  return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList}${inactiveList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo. Read each tool’s description for the JSON shape (often an \`inputSchema\` excerpt). **Never call with \`{}\`** when the description lists required properties (e.g. \`entity\`, \`project\`) — include those keys with real values.`
+  return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList}${inactiveList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo. Each MCP tool accepts one field: \`argumentsJson\`, a **JSON string** whose parse result is the argument object the server expects (see each tool’s description for required keys and an \`inputSchema\` excerpt). Example shape: \`{"argumentsJson":"{\\"project\\":\\"MyProj\\",\\"ids\\":[1,2]}"}\`. **Never call with \`{}\` or omit \`argumentsJson\`** when required properties are listed — include those keys with real values inside the string.`
 }
 
 function buildWorkspaceMemoryRoutingLine(
