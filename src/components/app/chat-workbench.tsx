@@ -23,6 +23,7 @@ import {
 } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
+import { ComposerContextShelf } from '@/components/app/composer-context-shelf'
 import { ChatContextManagerDialog } from '@/components/app/chat-context-manager-dialog'
 import {
   assistantPlainTextForCopy,
@@ -32,7 +33,6 @@ import {
 import { ArtifactPanel } from '@/components/app/artifact-panel'
 import { useOptionalShellHeaderToolbar } from '@/components/app/shell-header-toolbar'
 import { useWorkspace } from '@/components/app/workspace-context'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -141,9 +141,6 @@ type ComposerSessionToolsMenuProps = {
   onAttachFiles: () => void
   activeAgentSegment: 'document' | 'code' | 'app'
   onSelectAgentSegment: (next: 'document' | 'code' | 'app') => void
-  configuredMcpServers: string[]
-  activeMcpServers: string[]
-  onToggleMcpServer: (name: string, enabled: boolean) => void
   isTauriRuntime: boolean
   hasWorkspaceRoot: boolean
   isPersonalSimpleChat: boolean
@@ -158,9 +155,6 @@ function ComposerSessionToolsMenu({
   onAttachFiles,
   activeAgentSegment,
   onSelectAgentSegment,
-  configuredMcpServers,
-  activeMcpServers,
-  onToggleMcpServer,
   isTauriRuntime,
   hasWorkspaceRoot,
   isPersonalSimpleChat,
@@ -174,15 +168,6 @@ function ComposerSessionToolsMenu({
     isTauriRuntime &&
     !isPersonalSimpleChat &&
     !isProfileSession
-  const showMcp =
-    Boolean(conversationId) &&
-    isTauriRuntime &&
-    !isPersonalSimpleChat &&
-    !isProfileSession &&
-    configuredMcpServers.length > 0
-
-  const menuItemClass =
-    'hover:bg-muted/80 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-2 transition-colors'
 
   const toolsRowBtnClass =
     'border-border/50 hover:bg-muted/80 focus-visible:ring-ring text-text-2 flex min-h-10 flex-1 min-w-0 items-center justify-center gap-1.5 rounded-lg border bg-transparent px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2'
@@ -198,7 +183,7 @@ function ComposerSessionToolsMenu({
           variant="ghost"
           size="icon"
           className="text-text-3 hover:text-text-2 hover:bg-muted/50 size-8 shrink-0 rounded-full transition-colors"
-          aria-label="Chat tools: attach files, inspect context, agent mode, connections"
+          aria-label="Chat tools: attach files, inspect context, agent mode"
           title="Chat tools"
         >
           <Plus className="size-4" aria-hidden />
@@ -283,49 +268,6 @@ function ComposerSessionToolsMenu({
                 </button>
               ))}
             </div>
-          </>
-        ) : null}
-        {showMcp ? (
-          <>
-            <Separator className="my-1.5 bg-border/60" />
-            <div className={sectionLabelClass}>Connections</div>
-            <ul className="space-y-0.5" role="list">
-              {configuredMcpServers.map((name) => {
-                const checked = activeMcpServers.includes(name)
-                return (
-                  <li key={name}>
-                    <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={checked}
-                      className={cn(
-                        menuItemClass,
-                        'gap-2',
-                        checked && 'bg-muted/40',
-                      )}
-                      onClick={() =>
-                        onToggleMcpServer(name, !checked)
-                      }
-                    >
-                      <span
-                        className={cn(
-                          'border-border flex size-3.5 shrink-0 items-center justify-center rounded border',
-                          checked && 'bg-primary border-primary text-primary-foreground',
-                        )}
-                        aria-hidden
-                      >
-                        {checked ? (
-                          <Check className="size-2.5" strokeWidth={3} />
-                        ) : null}
-                      </span>
-                      <span className="text-text-2 min-w-0 flex-1 truncate font-medium">
-                        {name}
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
           </>
         ) : null}
       </PopoverContent>
@@ -937,9 +879,8 @@ export function ChatWorkbench({
           const defaults = Array.from(defaultActiveSetFromDoc(doc)).filter((n) =>
             names.includes(n),
           )
-          if (defaults.length > 0) {
-            setChatActiveMcpServers(sessionKey, defaults)
-          }
+          const nextActive = defaults.length > 0 ? defaults : names
+          setChatActiveMcpServers(sessionKey, nextActive)
           return
         }
         const next = active.filter((n) => names.includes(n))
@@ -1288,6 +1229,12 @@ export function ChatWorkbench({
 
   const activeAgentSegment: 'document' | 'code' | 'app' =
     agentMode === 'app' ? 'app' : agentMode === 'code' ? 'code' : 'document'
+  const showComposerMcpPills =
+    Boolean(conversationId) &&
+    isTauriRuntime &&
+    !isPersonalSimpleChat &&
+    !isProfileSession &&
+    configuredMcpServers.length > 0
 
   const onSelectAgentSegment = useCallback(
     (next: 'document' | 'code' | 'app') => {
@@ -1350,26 +1297,41 @@ export function ChatWorkbench({
     }
   }, [shellHeaderToolbar, sessionHeaderToolbarNode])
 
-  const isThinking = reasoningMode === 'thinking'
-
   const reasoningModeGroup = (
-    <button
-      type="button"
-      className={cn(
-        'focus-visible:ring-ring flex h-8 items-center justify-center rounded-full border px-3.5 text-[13px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2',
-        isThinking
-          ? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
-          : 'border-border/50 bg-transparent text-text-3 hover:bg-muted/50 hover:text-text-2'
-      )}
-      onClick={() => setChatReasoningMode(sessionKey, isThinking ? 'fast' : 'thinking')}
-      title={
-        isThinking
-          ? 'Thinking mode: More reasoning time; may show thinking when the model supports it'
-          : 'Fast mode: Lower latency; minimal or no visible chain-of-thought'
-      }
+    <div
+      className="border-border/55 bg-muted/25 grid h-8 shrink-0 grid-cols-2 divide-x divide-border/45 overflow-hidden rounded-md border"
+      role="group"
+      aria-label="Reasoning mode"
     >
-      {isThinking ? 'Thinking' : 'Fast'}
-    </button>
+      <button
+        type="button"
+        className={cn(
+          'focus-visible:ring-ring flex h-full min-h-0 items-center justify-center px-2.5 text-center text-[13px] font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none sm:px-3',
+          reasoningMode === 'fast'
+            ? 'bg-bg-2 text-text-1'
+            : 'text-text-3 hover:bg-muted/45 hover:text-text-2 bg-transparent',
+        )}
+        aria-pressed={reasoningMode === 'fast'}
+        title="Fast mode: Lower latency; minimal or no visible chain-of-thought"
+        onClick={() => setChatReasoningMode(sessionKey, 'fast')}
+      >
+        Fast
+      </button>
+      <button
+        type="button"
+        className={cn(
+          'focus-visible:ring-ring flex h-full min-h-0 items-center justify-center px-2.5 text-center text-[13px] font-medium transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:outline-none sm:px-3',
+          reasoningMode === 'thinking'
+            ? 'bg-bg-2 text-text-1'
+            : 'text-text-3 hover:bg-muted/45 hover:text-text-2 bg-transparent',
+        )}
+        aria-pressed={reasoningMode === 'thinking'}
+        title="Thinking mode: More reasoning time; may show thinking when the model supports it"
+        onClick={() => setChatReasoningMode(sessionKey, 'thinking')}
+      >
+        Thinking
+      </button>
+    </div>
   )
 
   const centeredEmptyComposer =
@@ -1443,76 +1405,71 @@ export function ChatWorkbench({
       </div>
     ) : null
 
-  const contextBadgesSection = (
-    <>
-      {contextFiles.length > 0 ? (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {contextFiles.map((f) => (
-            <Badge
-              key={f.relativePath}
-              variant="secondary"
-              className="text-text-2 border-border max-w-full gap-1 pr-0.5 font-normal"
-              title={f.relativePath}
+  const composerContextAttachmentsBlock =
+    contextFiles.length === 0 && contextConversations.length === 0 ? null : (
+      <div
+        className="braian-context-attach-row flex flex-wrap gap-1.5"
+        role="region"
+        aria-label="Attached context"
+      >
+        {contextFiles.map((f) => (
+          <div
+            key={f.relativePath}
+            className="braian-context-chip braian-context-chip--file"
+            title={f.relativePath}
+          >
+            <FileText
+              className="text-accent-600 size-3.5 shrink-0"
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate">
+              {f.displayName?.trim() ||
+                f.relativePath.split('/').pop() ||
+                f.relativePath}
+            </span>
+            <button
+              type="button"
+              className="braian-context-chip-remove text-text-2"
+              aria-label={`Remove file ${f.displayName?.trim() || f.relativePath}`}
+              onClick={() =>
+                removeContextFileEntry(sessionKey, f.relativePath)
+              }
             >
-              <FileText
-                className="text-text-3 size-3.5 shrink-0"
+              <X className="size-3" aria-hidden />
+            </button>
+          </div>
+        ))}
+        {contextConversations.map((c) => {
+          const label = c.title?.trim() || c.conversationId
+          return (
+            <div
+              key={c.conversationId}
+              className="braian-context-chip braian-context-chip--chat"
+              title={c.conversationId}
+            >
+              <MessageSquare
+                className="text-accent-600 size-3.5 shrink-0 dark:text-accent-500"
                 aria-hidden
               />
-              <span className="max-w-[14rem] truncate">
-                {f.displayName?.trim() ||
-                  f.relativePath.split('/').pop() ||
-                  f.relativePath}
-              </span>
+              <span className="min-w-0 flex-1 truncate">Chat: {label}</span>
               <button
                 type="button"
-                className="hover:bg-muted rounded-full p-0.5"
-                aria-label={`Remove file ${f.displayName?.trim() || f.relativePath}`}
+                className="braian-context-chip-remove"
+                aria-label={`Remove chat from context: ${label}`}
                 onClick={() =>
-                  removeContextFileEntry(sessionKey, f.relativePath)
+                  removeContextConversationEntry(
+                    sessionKey,
+                    c.conversationId,
+                  )
                 }
               >
-                <X className="size-3 opacity-70" aria-hidden />
+                <X className="size-3" aria-hidden />
               </button>
-            </Badge>
-          ))}
-        </div>
-      ) : null}
-      {contextConversations.length > 0 ? (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {contextConversations.map((c) => {
-            const label = c.title?.trim() || c.conversationId
-            return (
-              <Badge
-                key={c.conversationId}
-                variant="outline"
-                className="text-accent-700 border-accent-500/35 max-w-full gap-1 pr-0.5 font-normal dark:text-accent-500"
-                title={c.conversationId}
-              >
-                <MessageSquare
-                  className="text-accent-600 size-3.5 shrink-0 dark:text-accent-500"
-                  aria-hidden
-                />
-                <span className="max-w-[14rem] truncate">Chat: {label}</span>
-                <button
-                  type="button"
-                  className="hover:bg-accent-500/10 rounded-full p-0.5"
-                  aria-label={`Remove chat from context: ${label}`}
-                  onClick={() =>
-                    removeContextConversationEntry(
-                      sessionKey,
-                      c.conversationId,
-                    )
-                  }
-                >
-                  <X className="size-3 opacity-70" aria-hidden />
-                </button>
-              </Badge>
-            )
-          })}
-        </div>
-      ) : null}
-    </>
-  )
+            </div>
+          )
+        })}
+      </div>
+    )
 
   const composerCardSection = (
     <div
@@ -1605,6 +1562,35 @@ export function ChatWorkbench({
           </ScrollArea>
         </div>
       ) : null}
+      {composerContextAttachmentsBlock}
+      <div
+        className={cn(
+          'border-border/40 flex min-h-9 min-w-0 items-stretch border-b py-1',
+          showComposerMcpPills
+            ? 'gap-0 pr-2 pl-1'
+            : 'justify-end gap-2 px-3 py-1.5',
+        )}
+      >
+        {showComposerMcpPills ? (
+          <div className="min-h-0 min-w-0 flex-1 self-stretch">
+            <ComposerContextShelf
+              servers={configuredMcpServers}
+              activeServerNames={thread.activeMcpServers ?? []}
+              onToggle={onToggleMcpServer}
+            />
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            'flex shrink-0 items-center py-0.5',
+            showComposerMcpPills
+              ? 'border-border/45 border-l pl-2.5'
+              : 'pr-0.5',
+          )}
+        >
+          {reasoningModeGroup}
+        </div>
+      </div>
       <Textarea
         ref={textareaRef}
         placeholder="Message Braian…"
@@ -1622,7 +1608,7 @@ export function ChatWorkbench({
           e.dataTransfer.dropEffect = 'copy'
         }}
         onDrop={handleComposerHtmlDrop}
-        className="min-h-[120px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-sm shadow-none focus-visible:ring-0"
+        className="min-h-[120px] resize-none border-0 bg-transparent px-4 pt-3 pb-12 text-sm shadow-none focus-visible:ring-0"
       />
       <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between">
         <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
@@ -1633,16 +1619,12 @@ export function ChatWorkbench({
             onAttachFiles={onAttachFiles}
             activeAgentSegment={activeAgentSegment}
             onSelectAgentSegment={onSelectAgentSegment}
-            configuredMcpServers={configuredMcpServers}
-            activeMcpServers={thread.activeMcpServers ?? []}
-            onToggleMcpServer={onToggleMcpServer}
             isTauriRuntime={isTauriRuntime}
             hasWorkspaceRoot={Boolean(activeWorkspace?.rootPath)}
             isPersonalSimpleChat={isPersonalSimpleChat}
             isProfileSession={isProfileSession}
             conversationId={conversationId}
           />
-          {reasoningModeGroup}
           {queuedCount > 0 ? (
             <p className="text-accent-600 font-medium text-xs">
               {queuedCount} message{queuedCount === 1 ? '' : 's'} queued
@@ -1672,35 +1654,12 @@ export function ChatWorkbench({
   )
 
   const centeredTopHints =
-    centeredEmptyComposer &&
-    (desktopToolsUnavailable ||
-      contextFiles.length > 0 ||
-      contextConversations.length > 0) ? (
+    centeredEmptyComposer && desktopToolsUnavailable ? (
       <div className="border-border/60 bg-background/80 shrink-0 border-b px-4 py-2 md:px-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-2">
-          {desktopToolsUnavailable ? (
-            <p className="text-text-3 text-xs">
-              Workspace scripts and file tools need the desktop app.
-            </p>
-          ) : null}
-          {contextFiles.length > 0 ? (
-            <p
-              className="text-text-3 text-xs"
-              title="Attached file contents are sent to your configured AI provider when you send a message."
-            >
-              {contextFiles.length} file
-              {contextFiles.length === 1 ? '' : 's'} in context
-            </p>
-          ) : null}
-          {contextConversations.length > 0 ? (
-            <p
-              className="text-text-3 text-xs"
-              title="Attached chat transcripts are sent to your configured AI provider when you send a message."
-            >
-              {contextConversations.length} other chat
-              {contextConversations.length === 1 ? '' : 's'} in context
-            </p>
-          ) : null}
+          <p className="text-text-3 text-xs">
+            Workspace scripts and file tools need the desktop app.
+          </p>
         </div>
       </div>
     ) : null
@@ -1737,7 +1696,6 @@ export function ChatWorkbench({
           >
             <div className="mx-auto w-full max-w-5xl">
               {workspaceTargetRow}
-              {contextBadgesSection}
               {composerCardSection}
             </div>
           </div>
@@ -1768,24 +1726,6 @@ export function ChatWorkbench({
             {desktopToolsUnavailable ? (
               <p className="text-text-3 text-xs">
                 Workspace scripts and file tools need the desktop app.
-              </p>
-            ) : null}
-            {contextFiles.length > 0 ? (
-              <p
-                className="text-text-3 text-xs"
-                title="Attached file contents are sent to your configured AI provider when you send a message."
-              >
-                {contextFiles.length} file
-                {contextFiles.length === 1 ? '' : 's'} in context
-              </p>
-            ) : null}
-            {contextConversations.length > 0 ? (
-              <p
-                className="text-text-3 text-xs"
-                title="Attached chat transcripts are sent to your configured AI provider when you send a message."
-              >
-                {contextConversations.length} other chat
-                {contextConversations.length === 1 ? '' : 's'} in context
               </p>
             ) : null}
           </div>
@@ -1909,7 +1849,6 @@ export function ChatWorkbench({
             onDrop={handleComposerHtmlDrop}
           >
             <div className="mx-auto w-full max-w-5xl px-4 md:px-6">
-              {contextBadgesSection}
               {composerCardSection}
             </div>
           </div>

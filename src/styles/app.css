@@ -90,6 +90,9 @@ html.light {
   --sidebar-ring: var(--app-accent-500);
   --sidebar-chat-selected: color-mix(in srgb, var(--app-accent-500) 12%, var(--sidebar));
   --sidebar-chat-selected-hover: color-mix(in srgb, var(--app-accent-500) 18%, var(--sidebar));
+  --app-mcp-chip-active-fg: var(--app-accent-700);
+  --app-mcp-chip-ghost-fg: var(--app-accent-700);
+  --app-mcp-chip-ghost-border: color-mix(in srgb, var(--app-accent-500) 20%, transparent);
 }
 
 html.dark {
@@ -121,6 +124,9 @@ html.dark {
   --sidebar-ring: var(--app-accent-500);
   --sidebar-chat-selected: color-mix(in srgb, var(--app-accent-500) 12%, var(--sidebar));
   --sidebar-chat-selected-hover: color-mix(in srgb, var(--app-accent-500) 18%, var(--sidebar));
+  --app-mcp-chip-active-fg: var(--app-accent-200);
+  --app-mcp-chip-ghost-fg: var(--app-accent-700);
+  --app-mcp-chip-ghost-border: color-mix(in srgb, var(--app-accent-500) 20%, transparent);
 }
 
 /* Before theme script runs, prefer dark (prototype default). */
@@ -153,6 +159,10 @@ html:not(.light):not(.dark) {
   --sidebar-ring: var(--app-accent-500);
   --sidebar-chat-selected: color-mix(in srgb, var(--app-accent-500) 12%, var(--sidebar));
   --sidebar-chat-selected-hover: color-mix(in srgb, var(--app-accent-500) 18%, var(--sidebar));
+  /* MCP context shelf chips (composer) */
+  --app-mcp-chip-active-fg: var(--app-accent-200);
+  --app-mcp-chip-ghost-fg: var(--app-accent-700);
+  --app-mcp-chip-ghost-border: color-mix(in srgb, var(--app-accent-500) 20%, transparent);
 }
 
 @theme inline {
@@ -658,4 +668,194 @@ html.light .mdxeditor-popup-container.braian-mdx-canvas {
 .in-app-doc-markdown strong {
   color: var(--app-text-1);
   font-weight: 600;
+}
+
+/* Composer: MCP context shelf + chips (tokens: --app-mcp-chip-*)
+   Bottom border is on the parent composer toolbar, not this block. */
+.braian-mcp-shelf {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.braian-mcp-shelf-edge {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2rem;
+  z-index: 1;
+}
+
+.braian-mcp-shelf-edge--start {
+  left: 0;
+  background: linear-gradient(to right, var(--app-bg-0), transparent);
+}
+
+.braian-mcp-shelf-edge--end {
+  right: 0;
+  background: linear-gradient(to left, var(--app-bg-0), transparent);
+}
+
+.braian-mcp-shelf-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.375rem;
+  overflow-x: auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0.25rem 0.75rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.braian-mcp-shelf-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.braian-mcp-chip > span {
+  position: relative;
+  z-index: 1;
+}
+
+.braian-mcp-chip {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  max-width: 16rem;
+  border-radius: 9999px;
+  border-width: 1px;
+  border-style: solid;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    filter 0.15s ease;
+}
+
+.braian-mcp-chip:focus-visible {
+  outline: 2px solid var(--app-accent-500);
+  outline-offset: 2px;
+}
+
+.braian-mcp-chip--active {
+  color: var(--app-mcp-chip-active-fg);
+  border-color: var(--app-accent-500);
+  background: color-mix(in srgb, var(--app-accent-500) 9%, transparent);
+}
+
+.braian-mcp-chip--inactive {
+  color: var(--app-mcp-chip-ghost-fg);
+  border-color: var(--app-mcp-chip-ghost-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+.braian-mcp-chip--inactive:hover,
+.braian-mcp-chip--inactive:focus-visible {
+  filter: brightness(1.12);
+}
+
+.braian-mcp-chip--active:hover,
+.braian-mcp-chip--active:focus-visible {
+  filter: brightness(1.06);
+}
+
+.braian-mcp-chip::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    color-mix(in srgb, var(--app-accent-500) 22%, transparent) 2px,
+    color-mix(in srgb, var(--app-accent-500) 22%, transparent) 3px
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .braian-mcp-chip:hover::before,
+  .braian-mcp-chip:focus-visible::before {
+    opacity: 0.35;
+    animation: braian-mcp-scanline 1.1s linear infinite;
+  }
+}
+
+@keyframes braian-mcp-scanline {
+  from {
+    transform: translateY(-120%);
+  }
+
+  to {
+    transform: translateY(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .braian-mcp-chip:hover::before,
+  .braian-mcp-chip:focus-visible::before {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Composer: file + chat context attachments (inside card; distinct from MCP chips) */
+.braian-context-attach-row {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 55%, transparent);
+  padding: 0.5rem 0.75rem;
+}
+
+.braian-context-chip {
+  display: inline-flex;
+  max-width: 16rem;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border-width: 1px;
+  border-style: solid;
+  padding: 0.2rem 0.4rem 0.2rem 0.6rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.braian-context-chip--file {
+  color: var(--app-text-2);
+  border-color: var(--app-mcp-chip-ghost-border);
+  background: color-mix(in srgb, var(--app-bg-2) 72%, transparent);
+}
+
+.braian-context-chip--chat {
+  color: var(--app-accent-600);
+  border-color: color-mix(in srgb, var(--app-accent-500) 30%, transparent);
+  background: color-mix(in srgb, var(--app-accent-500) 10%, transparent);
+}
+
+.braian-context-chip-remove {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 0.125rem;
+  line-height: 0;
+  opacity: 0.8;
+}
+
+.braian-context-chip-remove:hover {
+  background: color-mix(in srgb, var(--app-text-1) 10%, transparent);
+  opacity: 1;
+}
+
+.braian-context-chip-remove:focus-visible {
+  outline: 2px solid var(--app-accent-500);
+  outline-offset: 1px;
 }

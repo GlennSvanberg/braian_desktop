@@ -114,91 +114,25 @@ function createWorkspaceFileMarkdownComponents(
   }
 }
 
-const STREAM_MARKDOWN_THROTTLE_MS = 80
-const STREAM_MARKDOWN_THROTTLE_AFTER_CHARS = 280
-
-function useStreamText(text: string, streaming: boolean) {
-  const [out, setOut] = useState(text)
-  const timeoutRef = useRef<number | null>(null)
-  const lastFlushAtRef = useRef(0)
-
-  useEffect(() => {
-    if (timeoutRef.current != null) {
-      window.clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-
-    if (!streaming) {
-      setOut(text)
-      lastFlushAtRef.current = 0
-      return
-    }
-
-    const throttleMs =
-      text.length >= STREAM_MARKDOWN_THROTTLE_AFTER_CHARS
-        ? STREAM_MARKDOWN_THROTTLE_MS
-        : 0
-    if (throttleMs === 0) {
-      setOut(text)
-      lastFlushAtRef.current = performance.now()
-      return
-    }
-
-    const now = performance.now()
-    const elapsed = now - lastFlushAtRef.current
-    if (elapsed >= throttleMs || lastFlushAtRef.current === 0) {
-      setOut(text)
-      lastFlushAtRef.current = now
-      return
-    }
-
-    const waitFor = throttleMs - elapsed
-    timeoutRef.current = window.setTimeout(() => {
-      setOut(text)
-      lastFlushAtRef.current = performance.now()
-      timeoutRef.current = null
-    }, waitFor)
-
-    return () => {
-      if (timeoutRef.current != null) {
-        window.clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-    }
-  }, [text, streaming])
-
-  return streaming ? out : text
-}
-
-function lastTextPartIndex(parts: AssistantPart[]): number {
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i]!.type === 'text') return i
-  }
-  return -1
-}
-
 function ChatMarkdownBlock({
   text,
-  debounce,
   workspaceFileContext = null,
 }: {
   text: string
-  debounce: boolean
   workspaceFileContext?: ChatWorkspaceFileMarkdownContext
 }) {
-  const display = useStreamText(text, debounce)
   const components = useMemo(
     () => createWorkspaceFileMarkdownComponents(workspaceFileContext),
     [workspaceFileContext],
   )
-  if (!display.trim()) return null
+  if (!text.trim()) return null
   return (
     <div className="chat-message-markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         {...(components ? { components } : {})}
       >
-        {display}
+        {text}
       </ReactMarkdown>
     </div>
   )
@@ -478,13 +412,10 @@ export function ChatAssistantMessageBody({
     return (
       <ChatMarkdownBlock
         text={message.content}
-        debounce={streaming}
         workspaceFileContext={workspaceFileContext}
       />
     )
   }
-
-  const lastTextIdx = lastTextPartIndex(parts)
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -495,12 +426,10 @@ export function ChatAssistantMessageBody({
         if (part.type === 'thinking') {
           return <ThinkingPartCard key={`thinking-${i}`} part={part} />
         }
-        const debounce = streaming && i === lastTextIdx
         return (
           <ChatMarkdownBlock
             key={`text-${i}`}
             text={part.text}
-            debounce={debounce}
             workspaceFileContext={workspaceFileContext}
           />
         )

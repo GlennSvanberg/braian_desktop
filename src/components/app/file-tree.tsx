@@ -46,7 +46,10 @@ interface FileTreeItemProps {
 }
 
 const FileIcon = ({ name, isDir }: { name: string; isDir: boolean }) => {
-  if (isDir) return <Folder className="size-4 shrink-0 text-blue-500/80" />
+  if (isDir)
+    return (
+      <Folder className="size-4 shrink-0 text-accent-600/85 dark:text-accent-500/85" />
+    )
 
   const ext = name.split('.').pop()?.toLowerCase()
   switch (ext) {

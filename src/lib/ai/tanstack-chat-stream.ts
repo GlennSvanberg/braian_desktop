@@ -51,6 +51,54 @@ function logChatPerf(stage: string, startAt: number) {
   console.info(`[braian][chat-perf] ${stage} +${elapsed}ms`)
 }
 
+/**
+ * Large provider chunks become many small store updates so React can paint incrementally
+ * instead of one big markdown jump per network chunk.
+ */
+const TEXT_DELTA_UI_SLICE_CHARS = 20
+
+function scheduleNextUiFrame(): Promise<void> {
+  if (typeof requestAnimationFrame === 'function') {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  }
+  const g = globalThis as typeof globalThis & {
+    setImmediate?: (cb: () => void) => unknown
+  }
+  if (typeof g.setImmediate === 'function') {
+    return new Promise((resolve) => g.setImmediate!(resolve))
+  }
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/** Spread large deltas across animation frames in the webview; yield synchronously in Node (CLI). */
+const SLICE_UI_SMOOTHING =
+  typeof window !== 'undefined' && typeof requestAnimationFrame === 'function'
+
+async function* yieldTextDeltaSlices(
+  delta: string,
+  signal: AbortSignal,
+): AsyncGenerator<ChatStreamChunk> {
+  const n = TEXT_DELTA_UI_SLICE_CHARS
+  if (delta.length <= n) {
+    if (delta) yield { type: 'text-delta', text: delta }
+    return
+  }
+  let i = 0
+  while (i < delta.length) {
+    if (signal.aborted) {
+      const rest = delta.slice(i)
+      if (rest) yield { type: 'text-delta', text: rest }
+      return
+    }
+    const end = Math.min(i + n, delta.length)
+    yield { type: 'text-delta', text: delta.slice(i, end) }
+    i = end
+    if (i < delta.length && SLICE_UI_SMOOTHING) {
+      await scheduleNextUiFrame()
+    }
+  }
+}
+
 export type IterateTanStackFromArgsOptions = {
   /** Omit tools and agent loop (Node CLI / evaluation without Tauri tool execution). */
   stripTools?: boolean
@@ -99,7 +147,7 @@ export async function* iterateTanStackFromArgs(
       if (chunk.type === 'TEXT_MESSAGE_CONTENT') {
         const delta = typeof chunk.delta === 'string' ? chunk.delta : ''
         if (delta) {
-          yield { type: 'text-delta', text: delta }
+          yield* yieldTextDeltaSlices(delta, ac.signal)
         }
       } else if (chunk.type === 'CUSTOM' && chunk.name === 'braian-artifact') {
         let payload: ReturnType<typeof braianArtifactFromCustomValue> = null
