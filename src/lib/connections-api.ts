@@ -6,6 +6,7 @@ import {
 } from '@/lib/mcp-config-types'
 import {
   cancelWorkspaceMcpIdleDisconnect,
+  invalidateWorkspaceMcpRuntimeSettings,
   workspaceMcpSessionsDisconnect,
 } from '@/lib/mcp-runtime-api'
 import { isTauri } from '@/lib/tauri-env'
@@ -16,6 +17,8 @@ export type WorkspaceMcpConfigDto = {
   braian?: {
     disabledMcpServers?: string[]
     defaultActiveMcpServers?: string[]
+    mcpListTimeoutMs?: number
+    mcpIdleDisconnectMs?: number
   }
 }
 
@@ -32,11 +35,21 @@ function dtoToDocument(dto: WorkspaceMcpConfigDto): WorkspaceMcpConfigDocument {
   const defaultActive = dto.braian?.defaultActiveMcpServers?.filter(
     (s) => typeof s === 'string',
   )
+  const mcpListTimeoutMs =
+    typeof dto.braian?.mcpListTimeoutMs === 'number'
+      ? dto.braian.mcpListTimeoutMs
+      : undefined
+  const mcpIdleDisconnectMs =
+    typeof dto.braian?.mcpIdleDisconnectMs === 'number'
+      ? dto.braian.mcpIdleDisconnectMs
+      : undefined
   return {
     mcpServers: servers,
     braian:
       (disabled && disabled.length > 0) ||
-      (defaultActive && defaultActive.length > 0)
+      (defaultActive && defaultActive.length > 0) ||
+      mcpListTimeoutMs != null ||
+      mcpIdleDisconnectMs != null
         ? {
             ...(disabled && disabled.length > 0
               ? { disabledMcpServers: disabled }
@@ -44,6 +57,8 @@ function dtoToDocument(dto: WorkspaceMcpConfigDto): WorkspaceMcpConfigDocument {
             ...(defaultActive && defaultActive.length > 0
               ? { defaultActiveMcpServers: defaultActive }
               : {}),
+            ...(mcpListTimeoutMs != null ? { mcpListTimeoutMs } : {}),
+            ...(mcpIdleDisconnectMs != null ? { mcpIdleDisconnectMs } : {}),
           }
         : undefined,
   }
@@ -54,12 +69,16 @@ function documentToDto(doc: WorkspaceMcpConfigDocument): WorkspaceMcpConfigDto {
     mcpServers: { ...doc.mcpServers },
     braian:
       (doc.braian?.disabledMcpServers?.length ?? 0) > 0 ||
-      (doc.braian?.defaultActiveMcpServers?.length ?? 0) > 0
+      (doc.braian?.defaultActiveMcpServers?.length ?? 0) > 0 ||
+      doc.braian?.mcpListTimeoutMs != null ||
+      doc.braian?.mcpIdleDisconnectMs != null
         ? {
             disabledMcpServers: [...(doc.braian?.disabledMcpServers ?? [])],
             defaultActiveMcpServers: [
               ...(doc.braian?.defaultActiveMcpServers ?? []),
             ],
+            mcpListTimeoutMs: doc.braian?.mcpListTimeoutMs,
+            mcpIdleDisconnectMs: doc.braian?.mcpIdleDisconnectMs,
           }
         : undefined,
   }
@@ -88,6 +107,7 @@ export async function workspaceMcpConfigSet(
     workspaceId,
     config: documentToDto(config),
   })
+  invalidateWorkspaceMcpRuntimeSettings(workspaceId)
   cancelWorkspaceMcpIdleDisconnect(workspaceId)
   await workspaceMcpSessionsDisconnect(workspaceId)
 }

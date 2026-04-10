@@ -14,6 +14,10 @@ export type McpStdioServerEntry = {
 export type McpRemoteServerEntry = {
   url: string
   headers?: Record<string, string>
+  oauth?: {
+    accessToken?: string
+    tokenType?: string
+  }
 }
 
 /** Single server: stdio or remote; extra keys preserved when round-tripping. */
@@ -24,6 +28,10 @@ export type BraianMcpOverlay = {
   disabledMcpServers?: string[]
   /** Optional default per-chat active servers for newly created conversations. */
   defaultActiveMcpServers?: string[]
+  /** MCP list-tools timeout used by chat tool registration. */
+  mcpListTimeoutMs?: number
+  /** Idle session disconnect window for MCP sessions in this workspace. */
+  mcpIdleDisconnectMs?: number
 }
 
 export type WorkspaceMcpConfigDocument = {

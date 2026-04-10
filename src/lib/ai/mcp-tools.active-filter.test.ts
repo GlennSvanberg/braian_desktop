@@ -4,6 +4,7 @@ import { buildMcpTools } from '@/lib/ai/mcp-tools'
 
 const listToolsMock = vi.fn()
 const callToolMock = vi.fn()
+const listTimeoutMsMock = vi.fn()
 
 vi.mock('@/lib/tauri-env', () => ({
   isTauri: () => true,
@@ -16,12 +17,15 @@ vi.mock('@/lib/chat-sessions/detached', () => ({
 vi.mock('@/lib/mcp-runtime-api', () => ({
   workspaceMcpListTools: (...args: unknown[]) => listToolsMock(...args),
   workspaceMcpCallTool: (...args: unknown[]) => callToolMock(...args),
+  workspaceMcpListTimeoutMs: (...args: unknown[]) => listTimeoutMsMock(...args),
 }))
 
 describe('buildMcpTools active server filtering', () => {
   beforeEach(() => {
     listToolsMock.mockReset()
     callToolMock.mockReset()
+    listTimeoutMsMock.mockReset()
+    listTimeoutMsMock.mockResolvedValue(30_000)
   })
 
   it('skips MCP listing when no active servers are selected', async () => {

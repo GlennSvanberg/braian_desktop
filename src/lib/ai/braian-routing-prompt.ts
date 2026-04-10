@@ -75,7 +75,7 @@ function buildMcpRoutingLine(options: BuildRoutingPromptOptions): string | null 
     options.inactiveMcpServerNames && options.inactiveMcpServerNames.length > 0
       ? ` Configured but inactive for this chat: ${options.inactiveMcpServerNames.map((n) => `**${n}**`).join(', ')}.`
       : ''
-  return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList}${inactiveList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo.`
+  return `**Connections (MCP):** tools whose names start with \`mcp__\` come from workspace Connections.${serverList}${inactiveList} Prefer them for external systems, APIs, or bundled MCP servers; use workspace file and command tools for files and scripts under the repo. Read each tool’s description for the JSON shape (often an \`inputSchema\` excerpt). **Never call with \`{}\`** when the description lists required properties (e.g. \`entity\`, \`project\`) — include those keys with real values.`
 }
 
 function buildWorkspaceMemoryRoutingLine(
@@ -130,6 +130,7 @@ You are a **coding agent** with full workspace access. All paths are **relative 
 | List a directory (shallow) | \`list_workspace_dir\` |
 | Run a shell command (pipes, redirects, chaining) | \`run_workspace_shell\` |
 | Run a program with exact argv (no shell) | \`run_workspace_command\` |
+| External APIs (Azure DevOps, P360, etc.) enabled in Connections | \`mcp__…\` tools — not \`search_workspace\` |
 
 ### Guidelines
 

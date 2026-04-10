@@ -46,8 +46,8 @@ This does not force a server globally on; it seeds the per-chat selection for ne
 
 The **Connections** list can **check** each configured server:
 
-- **Stdio:** The desktop app starts the server, runs a short **MCP JSON-RPC** handshake over the process’s stdin/stdout (`initialize` → `notifications/initialized` → `tools/list`), then stops the process. A **green** status means that succeeded; the subtitle shows how many **tools** were discovered. Expand **Show tool names** to see the list. A **red** status means spawn, protocol, or timeout failure; use **Error — Show output** to see a trimmed message (including stderr when useful).
-- **Remote:** The app uses the **Streamable HTTP** style: **POST** requests to your **`url`** with JSON-RPC 2.0 (`initialize` → `notifications/initialized` → `tools/list`), sending your **`headers`** and honoring **`Mcp-Session-Id`** when the server sets it. **Green** means the full handshake and tool listing succeeded (same tool count and expandable names as stdio). **Red** means the HTTP transport or MCP protocol failed—open **Error — Show output** for the message.
+- **Stdio:** The desktop app starts the server and negotiates MCP via the official Rust SDK (`rmcp`) over stdin/stdout, then lists tools. A **green** status means handshake + `tools/list` succeeded; the subtitle shows the discovered **tool count**. Expand **Show tool names** to inspect names. A **red** status means spawn, protocol, or timeout failure; use **Error — Show output** for details.
+- **Remote:** The app connects with MCP Streamable HTTP through `rmcp`, sends configured **headers**, and maintains server session IDs as needed. **Green** means initialize + `tools/list` worked. **Red** means transport/protocol failure—open **Error — Show output** for the exact message.
 
 **Check status** refreshes all probes. Probes also run when the workspace connection list changes.
 
@@ -60,11 +60,63 @@ When a server is **on** in Braian (not in `braian.disabledMcpServers`), it is **
 - If no servers are active for a chat, MCP is skipped for that turn.
 - Tool names are namespaced as `mcp__<server>__<tool>` (safe slugged identifiers).
 
-- Each turn, the app calls **`tools/list`** only for active servers (stdio and remote) and builds TanStack tools. MCP sessions stay warm across turns for faster follow-ups; **~90 seconds** after the last chat turn completes, sessions disconnect so local helper processes are not left running indefinitely.
+- Each turn, the app calls **`tools/list`** only for active servers (stdio and remote) and builds TanStack tools. MCP sessions stay warm across turns for faster follow-ups, then disconnect after an idle window (default **90 seconds**).
 - If one server fails listing, other servers still work; you may see a short warning in the turn’s settings warnings.
 - **Remote** servers use the same JSON-RPC POST session as the status check; very custom gateways may need a URL that speaks MCP over HTTP as above.
 
 Under the hood, Braian runs MCP through a dedicated local broker process (`braian-mcpd`) so MCP process/session management is isolated from the main chat UI event loop.
+
+## Runtime architecture
+
+```mermaid
+flowchart LR
+  TS[mcp-tools.ts] --> WR[workspace_mcp_runtime.rs]
+  WR --> BROKER[braian-mcpd]
+  BROKER --> CORE[braian-mcp-core]
+  CORE --> RMCP[rmcp SDK]
+  RMCP --> STDIO[stdio servers]
+  RMCP --> HTTP[streamable HTTP servers]
+```
+
+The app crate should keep only the Tauri bridge (`workspace_mcp_runtime.rs`). MCP protocol/session logic belongs in `braian-mcp-core`; do not duplicate probe/list/call client code in `src-tauri/src`.
+
+## Braian runtime knobs
+
+The optional `braian` overlay supports runtime tuning:
+
+```json
+{
+  "braian": {
+    "mcpListTimeoutMs": 45000,
+    "mcpIdleDisconnectMs": 120000
+  }
+}
+```
+
+- `mcpListTimeoutMs`: timeout for chat-time `tools/list` calls when building MCP tools.
+- `mcpIdleDisconnectMs`: idle disconnect timer for MCP sessions in this workspace.
+
+Values are clamped for safety:
+- `mcpListTimeoutMs`: `1000..300000`
+- `mcpIdleDisconnectMs`: `5000..3600000`
+
+For remote OAuth-style bearer usage, you can also add:
+
+```json
+{
+  "mcpServers": {
+    "my-remote": {
+      "url": "https://example.com/mcp",
+      "oauth": {
+        "accessToken": "<token>",
+        "tokenType": "Bearer"
+      }
+    }
+  }
+}
+```
+
+When present, Braian maps this into the `rmcp` authorization header path.
 
 Workspace file, command, document canvas (`apply_document_canvas_patch` / `open_document_canvas`), skills, and webapp helpers stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
 
@@ -101,8 +153,13 @@ Use this when changing Rust MCP code (`braian-mcp-core`, `braian-mcpd`) so you d
    ```
 
 6. **Core-only tests** — `cargo test -p braian-mcp-core` exercises config/runtime without HTTP.
+7. **Optional server-everything integration smoke** — enable the opt-in test:
 
-7. **Manual HTTP** — Start the broker yourself, then POST JSON with headers `Content-Type: application/json` and `X-Braian-Mcpd-Token: <token>`:
+   ```bash
+   BRAIAN_MCP_INTEGRATION=1 cargo test -p braian-mcp-core --test runtime_smoke
+   ```
+
+8. **Manual HTTP** — Start the broker yourself, then POST JSON with headers `Content-Type: application/json` and `X-Braian-Mcpd-Token: <token>`:
 
    - `POST /v1/probe` — body `{ "workspaceRootPath": "<abs path>", "serverName": "<name>" }` (snake_case keys are also accepted).
    - `POST /v1/list-tools`, `/v1/call-tool`, `/v1/disconnect` — same style as the app (`workspace_mcp_runtime.rs`).

@@ -1,5 +1,7 @@
 # Memory (workspace)
 
+For the **architecture** behind these features (layers, principles, and roadmap), see [How memory works](/docs/how-memory-works).
+
 Braian stores **durable workspace context** on disk so the assistant can reuse facts, preferences, and decisions across chats.
 
 ## Layers

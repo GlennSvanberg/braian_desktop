@@ -37,6 +37,8 @@
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-http": "^2.5.7",
     "@tauri-apps/plugin-opener": "^2.5.3",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "gpt-tokenizer": "^3.4.0",

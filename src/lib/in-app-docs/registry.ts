@@ -1,6 +1,7 @@
 import overviewMd from '../../../docs/app/overview.md?raw'
 import toolsMd from '../../../docs/app/tools.md?raw'
 import memoryMd from '../../../docs/app/memory.md?raw'
+import howMemoryWorksMd from '../../../docs/app/how-memory-works.md?raw'
 import capabilitiesMd from '../../../docs/app/capabilities.md?raw'
 import dashboardMd from '../../../docs/app/dashboard.md?raw'
 import modelContextMd from '../../../docs/app/model-context.md?raw'
@@ -11,6 +12,7 @@ export type InAppDocSlug =
   | 'overview'
   | 'tools'
   | 'memory'
+  | 'how-memory-works'
   | 'capabilities'
   | 'dashboard'
   | 'model-context'
@@ -63,6 +65,13 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     title: 'Memory',
     description: 'Workspace MEMORY.md, injection, and how it updates.',
     body: memoryMd,
+  },
+  {
+    slug: 'how-memory-works',
+    title: 'How memory works',
+    description:
+      'Layered memory architecture: instructions, working set, semantic memory, codebase retrieval, and preferences.',
+    body: howMemoryWorksMd,
   },
   {
     slug: 'workspace-history',

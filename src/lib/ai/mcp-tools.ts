@@ -1,9 +1,12 @@
+import Ajv from 'ajv'
+import addFormats from 'ajv-formats'
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 
 import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 import {
   workspaceMcpCallTool,
+  workspaceMcpListTimeoutMs,
   workspaceMcpListTools,
 } from '@/lib/mcp-runtime-api'
 import { isTauri } from '@/lib/tauri-env'
@@ -14,8 +17,6 @@ import type { JSONSchema, Tool } from '@tanstack/ai'
 
 /** Reuse catalog across turns while sessions may still be warm (see idle disconnect in mcp-runtime-api). */
 const MCP_TOOL_CATALOG_TTL_MS = 60_000
-/** Must cover cold `npx`/stdio startup; Rust uses ~25s per RPC (`MCP_RPC_DEADLINE`). */
-const MCP_TOOL_LIST_TIMEOUT_MS = 30_000
 
 type McpCatalog = Awaited<ReturnType<typeof workspaceMcpListTools>>
 
@@ -27,9 +28,35 @@ const mcpCatalogCache = new Map<
   }
 >()
 const mcpCatalogInFlight = new Map<string, Promise<McpCatalog>>()
+const mcpListTimeoutMsCache = new Map<
+  string,
+  { fetchedAtMs: number; timeoutMs: number }
+>()
+
+const ajv = new Ajv({
+  allErrors: true,
+  strict: false,
+  validateFormats: true,
+})
+addFormats(ajv)
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+
+async function mcpListTimeoutMsForWorkspace(workspaceId: string): Promise<number> {
+  const cached = mcpListTimeoutMsCache.get(workspaceId)
+  const now = nowMs()
+  if (cached && now - cached.fetchedAtMs <= MCP_TOOL_CATALOG_TTL_MS) {
+    return cached.timeoutMs
+  }
+  try {
+    const timeoutMs = await workspaceMcpListTimeoutMs(workspaceId)
+    mcpListTimeoutMsCache.set(workspaceId, { fetchedAtMs: now, timeoutMs })
+    return timeoutMs
+  } catch {
+    return 30_000
+  }
 }
 
 function withTimeout<T>(
@@ -58,6 +85,7 @@ async function listMcpToolsCached(
   workspaceId: string,
   activeServerNames: string[],
 ): Promise<{ catalog: McpCatalog; warning?: string }> {
+  const listTimeoutMs = await mcpListTimeoutMsForWorkspace(workspaceId)
   const scopeKey = `${workspaceId}::${activeServerNames.join('|')}`
   const now = nowMs()
   const cached = mcpCatalogCache.get(scopeKey)
@@ -69,7 +97,7 @@ async function listMcpToolsCached(
   if (inFlight) {
     const catalog = await withTimeout(
       inFlight,
-      MCP_TOOL_LIST_TIMEOUT_MS,
+      listTimeoutMs,
       'Connections (MCP) list-tools',
     )
     return { catalog }
@@ -86,7 +114,7 @@ async function listMcpToolsCached(
   try {
     const catalog = await withTimeout(
       request,
-      MCP_TOOL_LIST_TIMEOUT_MS,
+      listTimeoutMs,
       'Connections (MCP) list-tools',
     )
     return { catalog }
@@ -294,6 +322,90 @@ function mcpInputSchemaForProvider(raw: unknown): JSONSchema | undefined {
   return schema as JSONSchema
 }
 
+type AjvValidateFn = ReturnType<typeof ajv.compile>
+
+function requiredTopLevelKeysFromSchema(raw: unknown): string[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+  const obj = raw as Record<string, unknown>
+  const req = obj.required
+  if (!Array.isArray(req)) return []
+  return req.filter((k): k is string => typeof k === 'string' && k.length > 0)
+}
+
+function topLevelRequiredStringShapeSchema(raw: unknown): z.ZodObject<Record<string, z.ZodString>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const obj = raw as Record<string, unknown>
+  const required = requiredTopLevelKeysFromSchema(raw)
+  if (required.length === 0) return undefined
+  const properties =
+    obj.properties && typeof obj.properties === 'object' && !Array.isArray(obj.properties)
+      ? (obj.properties as Record<string, unknown>)
+      : {}
+
+  const shape: Record<string, z.ZodString> = {}
+  for (const key of required) {
+    const prop = properties[key]
+    if (!prop || typeof prop !== 'object' || Array.isArray(prop)) {
+      return undefined
+    }
+    const p = prop as Record<string, unknown>
+    if (p.type !== 'string') {
+      return undefined
+    }
+    shape[key] = z.string()
+  }
+  return z.object(shape)
+}
+
+function compileMcpArgsValidator(rawSchema: unknown): {
+  validate: AjvValidateFn | null
+  requiredKeys: string[]
+} {
+  if (!rawSchema || typeof rawSchema !== 'object' || Array.isArray(rawSchema)) {
+    return { validate: null, requiredKeys: [] }
+  }
+  const schema = normalizeMcpToolInputJsonSchemaForOpenAi(rawSchema)
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return { validate: null, requiredKeys: [] }
+  }
+  try {
+    const validate = ajv.compile(schema as Record<string, unknown>)
+    return {
+      validate,
+      requiredKeys: requiredTopLevelKeysFromSchema(schema),
+    }
+  } catch {
+    return { validate: null, requiredKeys: requiredTopLevelKeysFromSchema(schema) }
+  }
+}
+
+function buildValidationErrorMessage(
+  toolName: string,
+  requiredKeys: string[],
+  errors: AjvValidateFn['errors'],
+): string {
+  const missing = new Set<string>()
+  for (const err of errors ?? []) {
+    if (err.keyword === 'required' && typeof err.params === 'object' && err.params != null) {
+      const missingProperty = (err.params as { missingProperty?: unknown }).missingProperty
+      if (typeof missingProperty === 'string' && missingProperty.length > 0) {
+        missing.add(missingProperty)
+      }
+    }
+  }
+  const orderedMissing = [...missing]
+  if (orderedMissing.length > 0) {
+    return `Invalid arguments for MCP tool "${toolName}". Missing required keys: ${orderedMissing.join(', ')}.`
+  }
+  if (requiredKeys.length > 0) {
+    return `Invalid arguments for MCP tool "${toolName}". Required top-level keys: ${requiredKeys.join(', ')}.`
+  }
+  const first = errors?.[0]?.message?.trim()
+  return first
+    ? `Invalid arguments for MCP tool "${toolName}": ${first}.`
+    : `Invalid arguments for MCP tool "${toolName}".`
+}
+
 function slugPart(raw: string, fallback: string): string {
   const s = raw
     .toLowerCase()
@@ -380,12 +492,22 @@ export async function buildMcpTools(
           ? (t as { description: string }).description
           : ''
       const schemaRaw = (t as { inputSchema?: unknown }).inputSchema
+      const { validate: validateArgs, requiredKeys } =
+        compileMcpArgsValidator(schemaRaw)
       const providerSchema = useLooseForOpenAi
         ? undefined
         : mcpInputSchemaForProvider(schemaRaw)
+      const openAiRequiredShape =
+        useLooseForOpenAi && providerSchema == null
+          ? topLevelRequiredStringShapeSchema(schemaRaw)
+          : undefined
       const schemaHint =
         schemaRaw != null && (providerSchema == null || useLooseForOpenAi)
           ? ` inputSchema (excerpt — call with a JSON object matching this shape): ${JSON.stringify(schemaRaw).slice(0, 900)}`
+          : ''
+      const requiredKeysHint =
+        requiredKeys.length > 0
+          ? ` Required top-level keys: ${requiredKeys.join(', ')}.`
           : ''
 
       let toolSlug = slugPart(name, 'tool')
@@ -401,6 +523,7 @@ export async function buildMcpTools(
         `[MCP connection "${server.name}"] ${name}.`,
         serverNote,
         desc.trim() ? ` ${desc.trim()}` : '',
+        requiredKeysHint,
         schemaHint,
       ]
         .join('')
@@ -411,12 +534,22 @@ export async function buildMcpTools(
       const def = toolDefinition({
         name: tanstackName,
         description,
-        inputSchema: providerSchema ?? mcpToolArgsSchema,
+        inputSchema: providerSchema ?? openAiRequiredShape ?? mcpToolArgsSchema,
       })
 
       tools.push(
         def.server(async (args) => {
           const input = mcpToolArgsSchema.parse(args)
+          if (validateArgs && !validateArgs(input)) {
+            return {
+              ok: false as const,
+              error: buildValidationErrorMessage(
+                mcpToolName,
+                requiredKeys,
+                validateArgs.errors,
+              ),
+            }
+          }
           try {
             const text = await workspaceMcpCallTool({
               workspaceId: context.workspaceId!,
