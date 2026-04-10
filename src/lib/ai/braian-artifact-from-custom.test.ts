@@ -40,6 +40,35 @@ describe('braianArtifactFromCustomValue', () => {
     expect(braianArtifactFromCustomValue({ kind: 'document', body: 1 })).toBe(null)
   })
 
+  it('parses workspace-file', () => {
+    expect(
+      braianArtifactFromCustomValue({
+        kind: 'workspace-file',
+        relativePath: 'src/foo.ts',
+        body: 'export {}\n',
+        title: 'foo.ts',
+        truncated: true,
+        canvasRevision: 3.2,
+      }),
+    ).toEqual({
+      kind: 'workspace-file',
+      relativePath: 'src/foo.ts',
+      body: 'export {}\n',
+      title: 'foo.ts',
+      truncated: true,
+      canvasRevision: 3,
+    })
+  })
+
+  it('rejects workspace-file without relativePath or body', () => {
+    expect(
+      braianArtifactFromCustomValue({ kind: 'workspace-file', body: 'x' }),
+    ).toBe(null)
+    expect(
+      braianArtifactFromCustomValue({ kind: 'workspace-file', relativePath: 'a' }),
+    ).toBe(null)
+  })
+
   it('parses tabular with optional fields', () => {
     expect(
       braianArtifactFromCustomValue({

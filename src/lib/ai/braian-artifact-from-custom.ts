@@ -112,6 +112,26 @@ function braianArtifactFromCustomValueInner(
     }
   }
 
+  if (kind === 'workspace-file') {
+    if (typeof v.relativePath !== 'string' || typeof v.body !== 'string') {
+      return null
+    }
+    const revRaw = v.canvasRevision
+    const canvasRevision =
+      typeof revRaw === 'number' && Number.isFinite(revRaw)
+        ? Math.trunc(revRaw)
+        : undefined
+    const out: WorkspaceArtifactPayload = {
+      kind: 'workspace-file',
+      relativePath: v.relativePath,
+      body: v.body,
+      ...(typeof v.title === 'string' && v.title !== '' ? { title: v.title } : {}),
+      ...(v.truncated === true ? { truncated: true } : {}),
+      ...(canvasRevision !== undefined ? { canvasRevision } : {}),
+    }
+    return out
+  }
+
   if (kind === 'tabular') {
     const columns = parseTabularColumns(v.columns)
     const rows = parseTabularRows(v.rows)

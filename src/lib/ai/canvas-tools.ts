@@ -8,7 +8,9 @@ import { getThreadSnapshot } from '@/lib/chat-sessions/store'
 import { coerceTabularCellValue } from './braian-artifact-from-custom'
 import { applyDocumentCanvasPatches } from './document-canvas-patch'
 import { getDocumentCanvasLivePayload } from './document-canvas-live'
+import { getWorkspaceFileCanvasLivePayload } from './workspace-file-canvas-live'
 import { emitWorkspaceDurableActivity } from '@/lib/workspace/workspace-activity'
+import { workspaceWriteTextFile } from '@/lib/workspace-api'
 
 import type { ChatTurnContext } from './types'
 
@@ -54,6 +56,42 @@ const openDocumentCanvasInputSchema = z.object({
     .string()
     .optional()
     .describe('Optional short title for the canvas document.'),
+})
+
+const applyWorkspaceFileCanvasPatchInputSchema = z.object({
+  baseRevision: z
+    .number()
+    .int()
+    .describe(
+      'Workspace file canvas revision from the snapshot for this turn. Must match the current revision or the patch will be rejected.',
+    ),
+  replacements: z
+    .array(replacementSchema)
+    .min(1)
+    .describe(
+      'Ordered list of find/replace steps applied to the current file text.',
+    ),
+  title: z
+    .string()
+    .optional()
+    .describe(
+      'Optional label shown in the side panel; only set when the user asked to rename the tab.',
+    ),
+})
+
+const openWorkspaceFileCanvasInputSchema = z.object({
+  relativePath: z
+    .string()
+    .describe('File path relative to the workspace root (forward slashes).'),
+  text: z
+    .string()
+    .describe(
+      'Complete UTF-8 file contents. Use when replacing the whole file or when apply_workspace_file_patch is impractical.',
+    ),
+  title: z
+    .string()
+    .optional()
+    .describe('Optional short label in the side panel (e.g. basename).'),
 })
 
 const tabularColumnSchema = z.object({
@@ -110,6 +148,20 @@ const openDocumentCanvasTool = toolDefinition({
     inputSchema: openDocumentCanvasInputSchema,
   })
 
+const applyWorkspaceFileCanvasPatchTool = toolDefinition({
+  name: 'apply_workspace_file_patch',
+  description:
+    'Update the open workspace text file in the side panel with targeted find/replace steps. Writes to disk under the workspace. Each replacement runs in order on the result of the previous step.',
+  inputSchema: applyWorkspaceFileCanvasPatchInputSchema,
+})
+
+const openWorkspaceFileCanvasTool = toolDefinition({
+  name: 'open_workspace_file_canvas',
+  description:
+    'Replace an entire workspace file’s contents in one shot (side panel + disk). Use for new files or full rewrites.',
+  inputSchema: openWorkspaceFileCanvasInputSchema,
+})
+
 const applyTabularCanvasTool = toolDefinition({
   name: 'apply_tabular_canvas',
   description:
@@ -149,6 +201,37 @@ function resolveDocumentCanvasForTool(sessionKey: string):
   const revision = p.canvasRevision ?? 0
   const title = p.title
   return { ok: true, body, revision, title }
+}
+
+function resolveWorkspaceFileCanvasForTool(sessionKey: string):
+  | {
+      ok: true
+      body: string
+      revision: number
+      relativePath: string
+      title: string | undefined
+      truncated: boolean | undefined
+    }
+  | { ok: false; error: string } {
+  const thread = getThreadSnapshot(sessionKey)
+  const p = thread.artifactPayload
+  if (!p || p.kind !== 'workspace-file') {
+    return {
+      ok: false,
+      error: 'No workspace file is open in the side panel for this conversation.',
+    }
+  }
+  const live = getWorkspaceFileCanvasLivePayload(sessionKey)
+  const body = live?.body ?? p.body
+  const revision = p.canvasRevision ?? 0
+  return {
+    ok: true,
+    body,
+    revision,
+    relativePath: p.relativePath,
+    title: p.title,
+    truncated: p.truncated,
+  }
 }
 
 export function buildCanvasTools(context: ChatTurnContext | undefined) {
@@ -318,6 +401,89 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
         ok: true as const,
         message:
           'Visual canvas updated. Reply briefly in chat; the image is in the side panel.',
+      }
+    }),
+
+    applyWorkspaceFileCanvasPatchTool.server(async (args, toolCtx) => {
+      const input = applyWorkspaceFileCanvasPatchInputSchema.parse(args)
+      const resolved = resolveWorkspaceFileCanvasForTool(sessionKey)
+      if (!resolved.ok) {
+        return { ok: false as const, error: resolved.error }
+      }
+      if (input.baseRevision !== resolved.revision) {
+        return {
+          ok: false as const,
+          error: `Workspace file revision mismatch: current ${resolved.revision}, tool had ${input.baseRevision}. Read the latest snapshot and retry with updated find strings and baseRevision.`,
+        }
+      }
+
+      const applied = applyDocumentCanvasPatches(resolved.body, input.replacements)
+      if (!applied.ok) {
+        return { ok: false as const, error: applied.error }
+      }
+
+      const nextRevision = resolved.revision + 1
+      const nextTitle = input.title ?? resolved.title
+
+      try {
+        await workspaceWriteTextFile(
+          workspaceId,
+          resolved.relativePath,
+          applied.markdown,
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        return { ok: false as const, error: msg }
+      }
+
+      toolCtx?.emitCustomEvent('braian-artifact', {
+        kind: 'workspace-file',
+        relativePath: resolved.relativePath,
+        body: applied.markdown,
+        ...(resolved.truncated === true ? { truncated: true } : {}),
+        ...(nextTitle !== undefined && nextTitle !== ''
+          ? { title: nextTitle }
+          : {}),
+        canvasRevision: nextRevision,
+      })
+
+      return {
+        ok: true as const,
+        message:
+          'File updated on disk and in the side panel. Reply briefly in chat.',
+      }
+    }),
+
+    openWorkspaceFileCanvasTool.server(async (args, toolCtx) => {
+      const input = openWorkspaceFileCanvasInputSchema.parse(args)
+      const thread = getThreadSnapshot(sessionKey)
+      const p = thread.artifactPayload
+      const sameOpen =
+        p?.kind === 'workspace-file' && p.relativePath === input.relativePath
+      const nextRevision = sameOpen ? (p.canvasRevision ?? 0) + 1 : 1
+      try {
+        await workspaceWriteTextFile(
+          workspaceId,
+          input.relativePath,
+          input.text,
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        return { ok: false as const, error: msg }
+      }
+
+      toolCtx?.emitCustomEvent('braian-artifact', {
+        kind: 'workspace-file',
+        relativePath: input.relativePath,
+        body: input.text,
+        ...(input.title ? { title: input.title } : {}),
+        canvasRevision: nextRevision,
+      })
+
+      return {
+        ok: true as const,
+        message:
+          'File written to disk and shown in the side panel. Reply briefly in chat.',
       }
     }),
   ]

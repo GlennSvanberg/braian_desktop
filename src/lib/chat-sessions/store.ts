@@ -8,6 +8,7 @@ import {
 import { resolveChatHistoryForModelTurn } from '@/lib/conversation/working-memory'
 import { formatCanvasSelectionUserMessage } from '@/lib/ai/canvas-selection-message'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
+import { getWorkspaceFileCanvasLivePayload } from '@/lib/ai/workspace-file-canvas-live'
 import type {
   ChatStreamChunk,
   DocumentCanvasSelectionContext,
@@ -23,6 +24,7 @@ import {
 import { isTauri } from '@/lib/tauri-env'
 import {
   deriveAgentModeFromPersisted,
+  workspaceReadTextFile,
   type AgentMode,
 } from '@/lib/workspace-api'
 
@@ -430,6 +432,56 @@ export function patchDocumentArtifactBody(sessionKey: string, body: string) {
   })
 }
 
+export function patchWorkspaceFileArtifactBody(sessionKey: string, body: string) {
+  patchThread(sessionKey, (prev) => {
+    const p = prev.artifactPayload
+    if (!p || p.kind !== 'workspace-file') return prev
+    if (p.body === body) return prev
+    const prevRev = p.canvasRevision ?? 0
+    return {
+      ...prev,
+      artifactPayload: {
+        ...p,
+        body,
+        canvasRevision: prevRev + 1,
+      },
+    }
+  })
+}
+
+/**
+ * Load a workspace file into the side panel as a `workspace-file` artifact and open the panel.
+ */
+export async function openWorkspaceTextFileArtifact(
+  sessionKey: string,
+  workspaceId: string,
+  relativePath: string,
+  displayName: string,
+) {
+  const { text, truncated } = await workspaceReadTextFile(
+    workspaceId,
+    relativePath,
+  )
+  patchThread(sessionKey, (prev) => {
+    const p = prev.artifactPayload
+    const sameFile =
+      p?.kind === 'workspace-file' && p.relativePath === relativePath
+    const nextRev = sameFile ? (p.canvasRevision ?? 0) + 1 : 1
+    return {
+      ...prev,
+      artifactOpen: true,
+      artifactPayload: {
+        kind: 'workspace-file',
+        relativePath,
+        body: text,
+        truncated,
+        title: displayName,
+        canvasRevision: nextRev,
+      },
+    }
+  })
+}
+
 /** Abort the current assistant stream for this session (explicit Stop). */
 export function stopChatGeneration(sessionKey: string) {
   abortBySession.get(sessionKey)?.abort()
@@ -600,6 +652,22 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
               }
             : null
 
+      const wfLive = getWorkspaceFileCanvasLivePayload(sessionKey)
+      const workspaceFileCanvasSnapshot =
+        isUserProfileSessionId(workspaceId)
+          ? null
+          : ap?.kind === 'workspace-file'
+            ? {
+                relativePath: ap.relativePath,
+                body: wfLive?.body ?? ap.body,
+                revision: ap.canvasRevision ?? 0,
+                ...(ap.truncated === true ? { truncated: true as const } : {}),
+                ...(ap.title !== undefined && ap.title !== ''
+                  ? { title: ap.title }
+                  : {}),
+              }
+            : null
+
       let contextFiles:
         | Awaited<ReturnType<typeof loadContextFilesForModel>>
         | undefined
@@ -691,6 +759,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           : {}),
         agentMode,
         documentCanvasSnapshot,
+        workspaceFileCanvasSnapshot,
         onAgentModeChange: (mode: AgentMode) => {
           setChatAgentMode(sessionKey, mode)
         },
@@ -776,6 +845,17 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
                 p.artifactPayload?.kind === 'document'
                   ? (p.artifactPayload.canvasRevision ?? 0)
                   : 0
+              payload = { ...payload, canvasRevision: prevRev + 1 }
+            } else if (
+              payload.kind === 'workspace-file' &&
+              payload.canvasRevision == null
+            ) {
+              const samePath =
+                p.artifactPayload?.kind === 'workspace-file' &&
+                p.artifactPayload.relativePath === payload.relativePath
+              const prevRev = samePath
+                ? (p.artifactPayload.canvasRevision ?? 0)
+                : 0
               payload = { ...payload, canvasRevision: prevRev + 1 }
             }
             return {
@@ -1075,6 +1155,9 @@ export function useChatThreadActions() {
   const patchDocBody = useCallback((sessionKey: string, body: string) => {
     patchDocumentArtifactBody(sessionKey, body)
   }, [])
+  const patchWorkspaceFileBody = useCallback((sessionKey: string, body: string) => {
+    patchWorkspaceFileArtifactBody(sessionKey, body)
+  }, [])
   const stop = useCallback((sessionKey: string) => {
     stopChatGeneration(sessionKey)
   }, [])
@@ -1091,6 +1174,7 @@ export function useChatThreadActions() {
     sendChatTurn: send,
     setChatDraft: setDraft,
     patchDocumentArtifactBody: patchDocBody,
+    patchWorkspaceFileArtifactBody: patchWorkspaceFileBody,
     stopChatGeneration: stop,
     setChatAgentMode,
     setChatReasoningMode: setReasoning,

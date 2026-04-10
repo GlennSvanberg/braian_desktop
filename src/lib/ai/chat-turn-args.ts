@@ -134,6 +134,8 @@ const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPr
 const SOURCE_PRIOR_CONVERSATIONS =
   'src/lib/ai/chat-turn-args.ts (priorConversationsSystemPrompt)'
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
+const SOURCE_WORKSPACE_FILE_SNAPSHOT =
+  'src/lib/ai/chat-turn-args.ts (workspaceFileCanvasSnapshotPrompt)'
 const SOURCE_USER_CONTEXT = 'src/lib/ai/chat-turn-args.ts (user context + client time)'
 const SOURCE_WORKSPACE_PREFERENCES = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${WORKSPACE_PREFERENCES_RELATIVE_PATH})`
 const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM)'
@@ -162,6 +164,8 @@ function logChatPerf(stage: string, startAt: number) {
 const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   apply_document_canvas_patch: 'src/lib/ai/canvas-tools.ts',
   open_document_canvas: 'src/lib/ai/canvas-tools.ts',
+  apply_workspace_file_patch: 'src/lib/ai/canvas-tools.ts',
+  open_workspace_file_canvas: 'src/lib/ai/canvas-tools.ts',
   apply_tabular_canvas: 'src/lib/ai/canvas-tools.ts',
   apply_visual_canvas: 'src/lib/ai/canvas-tools.ts',
   read_workspace_file: 'src/lib/ai/coding-tools.ts',
@@ -377,6 +381,40 @@ export function documentCanvasSnapshotPrompt(
     body
     + (selectionNote ? `\n\n${selectionNote}` : '')
     + selectionBinding
+  )
+}
+
+export function workspaceFileCanvasSnapshotPrompt(
+  snapshot: NonNullable<ChatTurnContext['workspaceFileCanvasSnapshot']>,
+): string {
+  const titleNote =
+    snapshot.title != null && snapshot.title !== ''
+      ? `File label: ${snapshot.title}\n\n`
+      : ''
+  const pathNote = `Workspace path (relative): \`${snapshot.relativePath}\`\n\n`
+  const revisionNote = `File canvas revision: **${snapshot.revision}** — pass this exact integer as \`baseRevision\` to **apply_workspace_file_patch**.\n\n`
+  const loadTrunc =
+    snapshot.truncated === true
+      ? 'The on-disk file was **truncated** when loaded into the editor (size limit).\n\n'
+      : ''
+
+  const patchRules = [
+    '**Editing rules:** Prefer **apply_workspace_file_patch** with ordered `{ find, replace }` steps on the current file text.',
+    'Use **open_workspace_file_canvas** only for a full rewrite or when creating/replacing a file by path.',
+    '',
+  ].join('\n')
+
+  let body = snapshot.body
+  let truncNote = ''
+  if (body.length > DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS) {
+    const fullLen = body.length
+    body = body.slice(0, DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS)
+    truncNote = `\n[Note: snapshot truncated here for context (${DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS.toLocaleString()} of ${fullLen.toLocaleString()} characters).]\n`
+  }
+
+  return (
+    `${titleNote}${pathNote}${revisionNote}${loadTrunc}${patchRules}Workspace file snapshot (latest text from the side panel — includes edits not yet flushed to disk):\n${truncNote}\n` +
+    body
   )
 }
 
@@ -628,9 +666,13 @@ export async function buildTanStackChatTurnArgs(
     ctx.contextPriorConversations.length > 0
       ? priorConversationsSystemPrompt(ctx.contextPriorConversations)
       : ''
-  const snapshotText =
+  const documentSnapshotText =
     ctx?.documentCanvasSnapshot != null
       ? documentCanvasSnapshotPrompt(ctx.documentCanvasSnapshot)
+      : ''
+  const workspaceFileSnapshotText =
+    ctx?.workspaceFileCanvasSnapshot != null
+      ? workspaceFileCanvasSnapshotPrompt(ctx.workspaceFileCanvasSnapshot)
       : ''
 
   const systemSections: ChatSystemSectionDisplay[] = []
@@ -646,7 +688,8 @@ export async function buildTanStackChatTurnArgs(
       hasWebappTools: webappTools.length > 0,
       hasCodeTools: codingTools.length > 0,
       hasCanvasTools: canvasTools.length > 0,
-      hasCanvasSnapshot: snapshotText.length > 0,
+      hasCanvasSnapshot:
+        documentSnapshotText.length > 0 || workspaceFileSnapshotText.length > 0,
       hasSkillTools: skillTools.length > 0,
       hasMcpTools: mcpTools.length > 0,
       hasProviderWebSearch: nativeSearchTools.length > 0,
@@ -806,12 +849,20 @@ export async function buildTanStackChatTurnArgs(
     })
   }
 
-  if (snapshotText) {
+  if (documentSnapshotText) {
     systemSections.push({
       id: 'canvas-snapshot',
       label: 'Document canvas snapshot',
       source: SOURCE_CANVAS_SNAPSHOT,
-      text: snapshotText,
+      text: documentSnapshotText,
+    })
+  }
+  if (workspaceFileSnapshotText) {
+    systemSections.push({
+      id: 'workspace-file-snapshot',
+      label: 'Workspace file snapshot',
+      source: SOURCE_WORKSPACE_FILE_SNAPSHOT,
+      text: workspaceFileSnapshotText,
     })
   }
 

@@ -9,6 +9,7 @@ export type {
   TabularSection,
   VisualArtifactPayload,
   WorkspaceArtifactPayload,
+  WorkspaceTextFileArtifactPayload,
 } from './types'
 export {
   isAppPreviewArtifact,
@@ -16,5 +17,6 @@ export {
   isTabularArtifact,
   isTabularMultiArtifact,
   isVisualArtifact,
+  isWorkspaceTextFileArtifact,
 } from './types'
 export { getMockArtifactPayloadForChat } from './mock-payloads'

@@ -8,7 +8,11 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { addContextFileEntry } from '@/lib/chat-sessions/store'
+import {
+  addContextFileEntry,
+  openWorkspaceTextFileArtifact,
+} from '@/lib/chat-sessions/store'
+import { isTauri } from '@/lib/tauri-env'
 import { workspaceFilePointerDragMaybeStartOnPointerDown } from '@/lib/workspace-file-pointer-dnd'
 import {
   joinRootRelative,
@@ -72,6 +76,32 @@ export function WorkspaceFilesPanel({
       label: e.name,
     })
   }
+
+  const openInSidePanel = useCallback(
+    async (e: WorkspaceDirEntryDto) => {
+      if (e.isDir) return
+      if (!isTauri()) {
+        window.alert('Opening files in the side panel requires the desktop app.')
+        return
+      }
+      try {
+        await openWorkspaceTextFileArtifact(
+          sessionKey,
+          workspaceId,
+          e.relativePath,
+          e.name,
+        )
+        void workspaceHubRecentFileTouch({
+          workspaceId,
+          relativePath: e.relativePath,
+          label: e.name,
+        })
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : String(err))
+      }
+    },
+    [sessionKey, workspaceId],
+  )
 
   const onReveal = (e: WorkspaceDirEntryDto) => {
     const abs = joinRootRelative(workspaceRootPath, e.relativePath)
@@ -162,11 +192,11 @@ export function WorkspaceFilesPanel({
                       title={
                         e.isDir
                           ? undefined
-                          : 'Drag into the message field to @ mention, or click to add to context'
+                          : 'Click to open in the side panel; drag to @ mention; paperclip adds to context'
                       }
                       onClick={() => {
                         if (e.isDir) setRelativeDir(e.relativePath)
-                        else attachFile(e)
+                        else void openInSidePanel(e)
                       }}
                     >
                       <span className="inline-flex items-center gap-1">

@@ -4,6 +4,7 @@
  */
 export type ArtifactKind =
   | 'document'
+  | 'workspace-file'
   | 'tabular'
   | 'tabular-multi'
   | 'visual'
@@ -29,6 +30,21 @@ export type DocumentArtifactPayload = {
    * Monotonic optimistic-revision for canvas edits (user + AI).
    * Omitted in older saves — treat as 0.
    */
+  canvasRevision?: number
+}
+
+/** Plain-text workspace file open in the side panel (path-relative; persisted via Tauri). */
+export type WorkspaceTextFileArtifactPayload = {
+  kind: 'workspace-file'
+  /** Path relative to workspace root (forward slashes). */
+  relativePath: string
+  /** File contents (UTF-8). */
+  body: string
+  /** True when read was capped by byte limit. */
+  truncated?: boolean
+  /** Display name (e.g. basename). */
+  title?: string
+  /** Monotonic revision for optimistic patch locking (user + AI). */
   canvasRevision?: number
 }
 
@@ -73,6 +89,7 @@ export type AppPreviewArtifactPayload = {
 
 export type WorkspaceArtifactPayload =
   | DocumentArtifactPayload
+  | WorkspaceTextFileArtifactPayload
   | TabularArtifactPayload
   | TabularMultiArtifactPayload
   | VisualArtifactPayload
@@ -82,6 +99,12 @@ export function isDocumentArtifact(
   p: WorkspaceArtifactPayload,
 ): p is DocumentArtifactPayload {
   return p.kind === 'document'
+}
+
+export function isWorkspaceTextFileArtifact(
+  p: WorkspaceArtifactPayload,
+): p is WorkspaceTextFileArtifactPayload {
+  return p.kind === 'workspace-file'
 }
 
 export function isTabularArtifact(

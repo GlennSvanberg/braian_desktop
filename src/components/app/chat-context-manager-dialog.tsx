@@ -31,6 +31,7 @@ import {
 import type { ModelContextSectionGroup } from '@/lib/ai/model-context-section-meta'
 import { deriveSnapshotSummary, type SnapshotSummary, type SectionSummary, type ToolBucket } from '@/lib/ai/snapshot-summary'
 import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
+import { getWorkspaceFileCanvasLivePayload } from '@/lib/ai/workspace-file-canvas-live'
 import { resolveChatHistoryForModelTurn } from '@/lib/conversation/working-memory'
 import {
   isNonWorkspaceScopedSessionId,
@@ -444,6 +445,7 @@ export function ChatContextManagerDialog({
         const ap = thread.artifactPayload
         const sessionKey = chatSessionKey(workspaceId, conversationId)
         const live = getDocumentCanvasLivePayload(sessionKey)
+        const wfLive = getWorkspaceFileCanvasLivePayload(sessionKey)
         const documentCanvasSnapshot =
           isUserProfileSessionId(workspaceId)
             ? null
@@ -454,6 +456,21 @@ export function ChatContextManagerDialog({
                     ? { title: ap.title }
                     : {}),
                   revision: ap.canvasRevision ?? 0,
+                }
+              : null
+
+        const workspaceFileCanvasSnapshot =
+          isUserProfileSessionId(workspaceId)
+            ? null
+            : ap?.kind === 'workspace-file'
+              ? {
+                  relativePath: ap.relativePath,
+                  body: wfLive?.body ?? ap.body,
+                  revision: ap.canvasRevision ?? 0,
+                  ...(ap.truncated === true ? { truncated: true as const } : {}),
+                  ...(ap.title !== undefined && ap.title !== ''
+                    ? { title: ap.title }
+                    : {}),
                 }
               : null
 
@@ -538,6 +555,7 @@ export function ChatContextManagerDialog({
               : {}),
             agentMode: thread.agentMode ?? 'document',
             documentCanvasSnapshot,
+            workspaceFileCanvasSnapshot,
             ...(contextFiles != null && contextFiles.length > 0
               ? { contextFiles }
               : {}),

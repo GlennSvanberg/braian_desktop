@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react'
 import {
   File,
   Folder,
@@ -12,9 +18,14 @@ import {
   PanelLeftClose,
   FolderPlus,
 } from 'lucide-react'
+import { useRouterState } from '@tanstack/react-router'
 import { openPath } from '@tauri-apps/plugin-opener'
 
 import { useWorkspace } from './workspace-context'
+import { chatSessionKey } from '@/lib/chat-sessions/keys'
+import { openWorkspaceTextFileArtifact } from '@/lib/chat-sessions/store'
+import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
+import { isTauri } from '@/lib/tauri-env'
 import {
   workspaceListDir,
   workspaceMoveEntry,
@@ -43,6 +54,7 @@ interface FileTreeItemProps {
   rootPath: string
   treeRefreshKey: number
   onStructureChanged: () => void
+  onFileOpenInArtifact?: (item: WorkspaceDirEntryDto) => void
 }
 
 const FileIcon = ({ name, isDir }: { name: string; isDir: boolean }) => {
@@ -94,6 +106,7 @@ const FileTreeItem = ({
   rootPath,
   treeRefreshKey,
   onStructureChanged,
+  onFileOpenInArtifact,
 }: FileTreeItemProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const [children, setChildren] = useState<WorkspaceDirEntryDto[]>([])
@@ -413,9 +426,12 @@ const FileTreeItem = ({
           className={rowClassName}
           {...moveTargetAttrs}
           onPointerDownCapture={onRowPointerDownCapture}
+          onClick={() => {
+            onFileOpenInArtifact?.(item)
+          }}
           onDoubleClick={() => openInOs()}
           onContextMenu={onRowContextMenu}
-          title={`${item.relativePath} — drag into the message field to @ mention in chat`}
+          title={`${item.relativePath} — click to open in side panel; drag to @ mention; double-click to open in OS`}
         >
           {rowInner}
         </div>
@@ -437,6 +453,7 @@ const FileTreeItem = ({
                 rootPath={rootPath}
                 treeRefreshKey={treeRefreshKey}
                 onStructureChanged={onStructureChanged}
+                onFileOpenInArtifact={onFileOpenInArtifact}
               />
             ))
           )}
@@ -448,6 +465,12 @@ const FileTreeItem = ({
 
 export function WorkspaceFileTree() {
   const { activeWorkspace, activeWorkspaceId } = useWorkspace()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const conversationIdFromRoute = useMemo(() => {
+    const m = pathname.match(/^\/chat\/([^/]+)\/?$/)
+    if (!m?.[1] || m[1] === 'new') return null
+    return m[1]
+  }, [pathname])
   const [rootItems, setRootItems] = useState<WorkspaceDirEntryDto[]>([])
   const [loading, setLoading] = useState(false)
   const [treeRefreshKey, setTreeRefreshKey] = useState(0)
@@ -455,6 +478,40 @@ export function WorkspaceFileTree() {
   const bumpTree = useCallback(() => {
     setTreeRefreshKey((k) => k + 1)
   }, [])
+
+  const onFileOpenInArtifact = useCallback(
+    async (item: WorkspaceDirEntryDto) => {
+      if (item.isDir) return
+      if (!isTauri()) {
+        window.alert('Opening workspace files in the side panel requires the desktop app.')
+        return
+      }
+      if (isNonWorkspaceScopedSessionId(activeWorkspaceId)) {
+        window.alert(
+          'Open a project workspace chat to preview files in the side panel.',
+        )
+        return
+      }
+      if (!conversationIdFromRoute) {
+        window.alert(
+          'Open a chat first, then click a file to show it beside the conversation.',
+        )
+        return
+      }
+      const sessionKey = chatSessionKey(activeWorkspaceId, conversationIdFromRoute)
+      try {
+        await openWorkspaceTextFileArtifact(
+          sessionKey,
+          activeWorkspaceId,
+          item.relativePath,
+          item.name,
+        )
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [activeWorkspaceId, conversationIdFromRoute],
+  )
 
   useEffect(() => {
     if (!activeWorkspaceId || !activeWorkspace?.rootPath) {
@@ -547,6 +604,7 @@ export function WorkspaceFileTree() {
                   rootPath={activeWorkspace.rootPath}
                   treeRefreshKey={treeRefreshKey}
                   onStructureChanged={bumpTree}
+                  onFileOpenInArtifact={onFileOpenInArtifact}
                 />
               ))
             )}

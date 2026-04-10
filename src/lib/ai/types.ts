@@ -27,6 +27,16 @@ export type DocumentCanvasSnapshot = {
   selectionUserInstruction?: string
 }
 
+/** Open workspace text file in the side panel at send time (live buffer + revision). */
+export type WorkspaceFileCanvasSnapshot = {
+  relativePath: string
+  body: string
+  /** Matches `WorkspaceTextFileArtifactPayload.canvasRevision`. */
+  revision: number
+  truncated?: boolean
+  title?: string
+}
+
 /** Resolved UTF-8 text for one workspace file passed to the model this turn. */
 export type ContextFileForModel = {
   relativePath: string
@@ -67,6 +77,8 @@ export type ChatTurnContext = {
   onAgentModeChange?: (mode: AgentMode) => void
   /** When set, the model must treat this as the latest canvas markdown for this turn. */
   documentCanvasSnapshot?: DocumentCanvasSnapshot | null
+  /** When set, the model must treat this as the latest workspace file buffer for this turn. */
+  workspaceFileCanvasSnapshot?: WorkspaceFileCanvasSnapshot | null
   /** Workspace files loaded for this user turn (paths relative to workspace root). */
   contextFiles?: ContextFileForModel[]
   /** Other saved conversations (full thread text) loaded for this user turn. */

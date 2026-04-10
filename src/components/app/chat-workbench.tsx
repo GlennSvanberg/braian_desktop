@@ -1983,6 +1983,19 @@ export function ChatWorkbench({
                 onDocumentBodyChange={(body) =>
                   patchDocumentArtifactBody(sessionKey, body)
                 }
+                workspaceFileWorkspaceId={
+                  isProfileSession || isPersonalSimpleChat
+                    ? null
+                    : threadWorkspaceId
+                }
+                workspaceFileSessionKey={
+                  isProfileSession || isPersonalSimpleChat ? null : sessionKey
+                }
+                workspaceFileLiveSessionKey={
+                  isProfileSession || isPersonalSimpleChat
+                    ? undefined
+                    : sessionKey
+                }
               />
             </div>
           </ResizablePanel>

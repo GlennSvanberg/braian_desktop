@@ -21,7 +21,7 @@ function numbered(lines: string[]): string {
 
 function buildBaseRoutingLines(): string[] {
   return [
-    '**Clarify the goal** from the latest user message, prior turns, and any **Attached workspace files** or **Document canvas snapshot** sections below. When those sections are present, treat them as authoritative for this turn.',
+    '**Clarify the goal** from the latest user message, prior turns, and any **Attached workspace files**, **Document canvas snapshot**, or **Workspace file snapshot** sections below. When those sections are present, treat them as authoritative for this turn.',
     '**Honesty:** use only the tools that appear in this turn. Do not claim access you do not have.',
   ]
 }
@@ -55,7 +55,7 @@ function buildCodeRoutingLine(options: BuildRoutingPromptOptions): string | null
 
 function buildCanvasRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasCanvasTools || options.hasCanvasSnapshot) {
-    return "**Workspace canvas** (side panel): For **documents**, prefer `apply_document_canvas_patch` with the snapshot's `baseRevision` and exact `find` / `replace` steps; use `open_document_canvas` only for a full-document rewrite. If a canvas snapshot is present, preserve unrelated writing unless the user asked to change it. For **tabular data** (tables, CSV summaries, structured results), use `apply_tabular_canvas`. For **images or visuals**, use `apply_visual_canvas`."
+    return "**Workspace canvas** (side panel): For **markdown documents**, prefer `apply_document_canvas_patch` with the snapshot's `baseRevision` and exact `find` / `replace` steps; use `open_document_canvas` only for a full-document rewrite. For **open workspace text files** (file editor in the side panel), prefer `apply_workspace_file_patch` with the snapshot's `baseRevision`; use `open_workspace_file_canvas` for a full-file rewrite or a new path. If a canvas snapshot is present, preserve unrelated content unless the user asked to change it. For **tabular data** (tables, CSV summaries, structured results), use `apply_tabular_canvas`. For **images or visuals**, use `apply_visual_canvas`."
   }
   return null
 }

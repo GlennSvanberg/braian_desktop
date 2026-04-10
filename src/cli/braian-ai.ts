@@ -58,6 +58,19 @@ const documentCanvasSnapshotSchema = z
     revision: s.revision ?? 0,
   }))
 
+const workspaceFileCanvasSnapshotSchema = z
+  .object({
+    relativePath: z.string(),
+    body: z.string(),
+    revision: z.number().int().optional(),
+    truncated: z.boolean().optional(),
+    title: z.string().optional(),
+  })
+  .transform((s) => ({
+    ...s,
+    revision: s.revision ?? 0,
+  }))
+
 const chatTurnContextSchema = z
   .object({
     workspaceId: z.string(),
@@ -68,6 +81,9 @@ const chatTurnContextSchema = z
     appHarnessEnabled: z.boolean().optional(),
     documentCanvasSnapshot: z
       .union([documentCanvasSnapshotSchema, z.null()])
+      .optional(),
+    workspaceFileCanvasSnapshot: z
+      .union([workspaceFileCanvasSnapshotSchema, z.null()])
       .optional(),
     contextFiles: z.array(contextFileEntrySchema).optional(),
   })

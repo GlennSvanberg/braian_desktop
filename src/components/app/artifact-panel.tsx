@@ -5,6 +5,7 @@ import {
   MarkdownDocumentCanvas,
   type CanvasSelectionSubmitPayload,
 } from '@/components/workspace/markdown-document-canvas'
+import { WorkspaceTextFileCanvas } from '@/components/workspace/workspace-text-file-canvas'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import type { TabularSection } from '@/lib/artifacts/types'
@@ -14,6 +15,7 @@ import {
   isTabularArtifact,
   isTabularMultiArtifact,
   isVisualArtifact,
+  isWorkspaceTextFileArtifact,
 } from '@/lib/artifacts/types'
 import type { AgentMode } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
@@ -30,6 +32,11 @@ type ArtifactPanelProps = {
   /** Registers fresh markdown for AI context (session key from chat workbench). */
   documentLiveSessionKey?: string
   onCanvasSelectionAsk?: (payload: CanvasSelectionSubmitPayload) => void
+  /** Workspace id for `workspace-file` artifact read/write (desktop project chats). */
+  workspaceFileWorkspaceId?: string | null
+  /** Session key for patching `workspace-file` artifact state. */
+  workspaceFileSessionKey?: string | null
+  workspaceFileLiveSessionKey?: string
 }
 
 function formatCell(value: string | number | boolean | null): string {
@@ -190,6 +197,9 @@ export function ArtifactPanel({
   onDocumentBodyChange,
   documentLiveSessionKey,
   onCanvasSelectionAsk,
+  workspaceFileWorkspaceId = null,
+  workspaceFileSessionKey = null,
+  workspaceFileLiveSessionKey,
 }: ArtifactPanelProps) {
   const showAppPreviewFromMode =
     agentMode === 'app' &&
@@ -244,6 +254,23 @@ export function ArtifactPanel({
             liveSessionKey={documentLiveSessionKey}
             onCanvasSelectionAsk={onCanvasSelectionAsk}
           />
+        ) : null}
+        {isWorkspaceTextFileArtifact(payload) &&
+        workspaceFileWorkspaceId != null &&
+        workspaceFileSessionKey != null ? (
+          <WorkspaceTextFileCanvas
+            workspaceId={workspaceFileWorkspaceId}
+            relativePath={payload.relativePath}
+            body={payload.body}
+            truncated={payload.truncated}
+            title={payload.title}
+            sessionKey={workspaceFileSessionKey}
+            liveSessionKey={workspaceFileLiveSessionKey}
+          />
+        ) : isWorkspaceTextFileArtifact(payload) ? (
+          <p className="text-text-3 px-0.5 text-sm">
+            Open this chat in a workspace folder to edit files from the side panel.
+          </p>
         ) : null}
         {isTabularArtifact(payload) ? (
           <TabularCanvas columns={payload.columns} rows={payload.rows} />
