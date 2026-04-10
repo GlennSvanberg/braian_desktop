@@ -108,6 +108,20 @@ fn reconcile_broker_child_with_cache() -> Result<(), String> {
   Ok(())
 }
 
+/// Copy logging / MCP stdio trace vars from the desktop process into `braian-mcpd` (child does not
+/// always inherit what users expect on Windows; PowerShell needs `$env:RUST_LOG = '...'` not `set`).
+fn forward_mcp_broker_env(cmd: &mut Command) {
+  for key in [
+    "RUST_LOG",
+    "BRAIAN_MCP_STDIO_TRACE",
+    "BRAIAN_MCP_STDIO_CREATE_NO_WINDOW",
+  ] {
+    if let Ok(v) = std::env::var(key) {
+      cmd.env(key, v);
+    }
+  }
+}
+
 fn ensure_broker_running() -> Result<BrokerAddr, String> {
   reconcile_broker_child_with_cache()?;
 
@@ -125,6 +139,7 @@ fn ensure_broker_running() -> Result<BrokerAddr, String> {
       .arg(port.to_string())
       .arg("--token")
       .arg(&token);
+    forward_mcp_broker_env(&mut c);
     c
   } else if cfg!(debug_assertions) {
     let mut c = Command::new("cargo");
@@ -139,6 +154,7 @@ fn ensure_broker_running() -> Result<BrokerAddr, String> {
     if let Some(root) = cargo_workspace_root() {
       c.current_dir(root);
     }
+    forward_mcp_broker_env(&mut c);
     c
   } else {
     return Err("Could not locate braian-mcpd binary.".to_string());

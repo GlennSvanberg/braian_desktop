@@ -60,8 +60,8 @@ fn respond_json(req: tiny_http::Request, status: u16, value: Value) {
 }
 
 fn main() {
-  // Stdio MCP spawn diagnostics (PATH, resolved npx.cmd, etc.): set
-  // `RUST_LOG=braian_mcp_stdio=debug` (or `RUST_LOG=debug`) before starting Braian / mcpd.
+  // Stdio MCP: `log::warn!` lines use target `braian_mcp_stdio` (visible at default RUST_LOG=warn).
+  // PowerShell: `$env:RUST_LOG = 'braian_mcp_stdio=debug'` — `set RUST_LOG=...` does not set env vars.
   let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
     .format_timestamp_millis()
     .try_init();

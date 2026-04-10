@@ -197,23 +197,32 @@ fn log_mcp_stdio_spawn_diagnostics(
   resolved_shim: Option<&Path>,
 ) {
   let parent_len = std::env::var("PATH").map(|p| p.len()).unwrap_or(0);
-  log::debug!(
+  let shim_s = resolved_shim
+    .map(|p| p.display().to_string())
+    .unwrap_or_else(|| "(not found — bare name for cmd)".to_string());
+  // Use `warn!` so default `RUST_LOG=warn` in braian-mcpd shows this without extra setup.
+  log::warn!(
     target: MCP_STDIO_LOG_TARGET,
     "stdio spawn: command={command} cwd={} parent_PATH_bytes={} augmented_PATH_bytes={} path_summary={} resolved_shim={}",
     cwd.display(),
     parent_len,
     augmented_path.len(),
     summarize_path_env_for_log(augmented_path),
-    resolved_shim
-      .map(|p| p.display().to_string())
-      .unwrap_or_else(|| "(not found — bare name for cmd)".to_string()),
+    shim_s,
   );
   #[cfg(windows)]
   {
-    log::debug!(
+    log::warn!(
       target: MCP_STDIO_LOG_TARGET,
       "stdio spawn Windows: cmd_shell={}",
       windows_shell_for_shim_commands().display(),
+    );
+  }
+  if std::env::var("BRAIAN_MCP_STDIO_TRACE").map(|v| !v.is_empty()).unwrap_or(false) {
+    eprintln!(
+      "[braian_mcp_stdio] trace command={command} cwd={} resolved_shim={shim_s} path_summary={}",
+      cwd.display(),
+      summarize_path_env_for_log(augmented_path),
     );
   }
 }
@@ -368,11 +377,16 @@ pub fn spawn_stdio_server(
       }
     }
   }
+  // Do not use `CREATE_NO_WINDOW` here: on some Windows setups `cmd /c` + `.cmd` shims fail to
+  // start with "program not found" when the console creation flags hide the window.
+  // Opt-in: `BRAIAN_MCP_STDIO_CREATE_NO_WINDOW=1`.
   #[cfg(windows)]
   {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    if std::env::var("BRAIAN_MCP_STDIO_CREATE_NO_WINDOW").as_deref() == Ok("1") {
+      use std::os::windows::process::CommandExt;
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      cmd.creation_flags(CREATE_NO_WINDOW);
+    }
   }
   let parent_path_len = std::env::var("PATH").map(|p| p.len()).unwrap_or(0);
   cmd.spawn().map_err(|e| {
@@ -397,7 +411,10 @@ pub fn spawn_stdio_server(
       parent_path_len,
       e
     );
-    format!("MCP stdio spawn failed (configured command `{command}`): {detail}")
+    let msg = format!("MCP stdio spawn failed (configured command `{command}`): {detail}");
+    // Always visible on braian-mcpd stderr (inherits terminal when running `tauri dev`).
+    eprintln!("[braian_mcp_stdio] {msg}");
+    msg
   })
 }
 
