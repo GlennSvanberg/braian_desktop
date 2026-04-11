@@ -168,6 +168,9 @@ function logChatPerf(sessionKey: string, stage: string, startAt: number) {
   console.info(`[braian][chat-perf] ${sessionKey} ${stage} +${elapsed}ms`)
 }
 
+/** Batch token patches so ReactMarkdown does not run on every tiny slice (see tanstack-chat-stream). */
+const TEXT_DELTA_PATCH_INTERVAL_MS = 80
+
 let threads: Record<string, ChatThreadState> = {}
 const threadListeners = new Set<() => void>()
 
@@ -675,6 +678,36 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
     let streamCompletedOk = false
     const turnStartAt = nowMs()
     let firstChunkSeen = false
+
+    let pendingTextDelta = ''
+    let textDeltaFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+    function flushPendingTextDelta() {
+      if (textDeltaFlushTimer !== null) {
+        clearTimeout(textDeltaFlushTimer)
+        textDeltaFlushTimer = null
+      }
+      if (!pendingTextDelta) return
+      const delta = pendingTextDelta
+      pendingTextDelta = ''
+      patchThread(sessionKey, (p) => ({
+        ...p,
+        messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
+          ...m,
+          content: m.content + delta,
+          parts: appendAssistantTextDelta(m.parts, delta),
+        })),
+      }))
+    }
+
+    function scheduleTextDeltaFlush() {
+      if (textDeltaFlushTimer !== null) return
+      textDeltaFlushTimer = setTimeout(() => {
+        textDeltaFlushTimer = null
+        flushPendingTextDelta()
+      }, TEXT_DELTA_PATCH_INTERVAL_MS)
+    }
+
     try {
       const { workspaceId, conversationId } = parseChatSessionKey(sessionKey)
       if (
@@ -833,19 +866,16 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           prebuiltTanStackArgs: streamArgs,
         },
       )) {
+        if (chunk.type !== 'text-delta') {
+          flushPendingTextDelta()
+        }
         if (!firstChunkSeen) {
           firstChunkSeen = true
           logChatPerf(sessionKey, `first chunk (${chunk.type})`, turnStartAt)
         }
         if (chunk.type === 'text-delta') {
-          patchThread(sessionKey, (p) => ({
-            ...p,
-            messages: updateAssistantMessage(p.messages, assistantId, (m) => ({
-              ...m,
-              content: m.content + chunk.text,
-              parts: appendAssistantTextDelta(m.parts, chunk.text),
-            })),
-          }))
+          pendingTextDelta += chunk.text
+          scheduleTextDeltaFlush()
         } else if (chunk.type === 'thinking-start') {
           patchThread(sessionKey, (p) => ({
             ...p,
@@ -917,9 +947,11 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           }))
         }
       }
+      flushPendingTextDelta()
       logChatPerf(sessionKey, 'stream completed', turnStartAt)
       streamCompletedOk = true
     } catch (err) {
+      flushPendingTextDelta()
       const aborted =
         err instanceof DOMException && err.name === 'AbortError'
       const abortedError =
@@ -946,6 +978,7 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         }))
       }
     } finally {
+      flushPendingTextDelta()
       try {
         const { workspaceId: mcpWsId } = parseChatSessionKey(sessionKey)
         if (

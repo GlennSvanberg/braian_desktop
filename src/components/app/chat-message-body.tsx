@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import {
   Children,
   isValidElement,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -114,25 +115,44 @@ function createWorkspaceFileMarkdownComponents(
   }
 }
 
+function findLastTextPartIndex(parts: AssistantPart[]): number {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].type === 'text') return i
+  }
+  return -1
+}
+
 function ChatMarkdownBlock({
   text,
   workspaceFileContext = null,
+  deferHeavyRender = false,
 }: {
   text: string
   workspaceFileContext?: ChatWorkspaceFileMarkdownContext
+  /** When true, deprioritize ReactMarkdown so typing/composer stay responsive while streaming. */
+  deferHeavyRender?: boolean
 }) {
+  const deferredText = useDeferredValue(text)
+  const renderText = deferHeavyRender ? deferredText : text
+  const markdownStale = deferHeavyRender && renderText !== text
+
   const components = useMemo(
     () => createWorkspaceFileMarkdownComponents(workspaceFileContext),
     [workspaceFileContext],
   )
-  if (!text.trim()) return null
+  if (!renderText.trim()) return null
   return (
-    <div className="chat-message-markdown">
+    <div
+      className={cn(
+        'chat-message-markdown transition-opacity duration-200 ease-out',
+        markdownStale ? 'opacity-90' : 'opacity-100',
+      )}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         {...(components ? { components } : {})}
       >
-        {text}
+        {renderText}
       </ReactMarkdown>
     </div>
   )
@@ -412,10 +432,13 @@ export function ChatAssistantMessageBody({
     return (
       <ChatMarkdownBlock
         text={message.content}
+        deferHeavyRender={streaming}
         workspaceFileContext={workspaceFileContext}
       />
     )
   }
+
+  const lastTextPartIndex = findLastTextPartIndex(parts)
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -430,6 +453,7 @@ export function ChatAssistantMessageBody({
           <ChatMarkdownBlock
             key={`text-${i}`}
             text={part.text}
+            deferHeavyRender={streaming && i === lastTextPartIndex}
             workspaceFileContext={workspaceFileContext}
           />
         )
