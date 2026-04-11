@@ -18,6 +18,7 @@ vi.mock('@/lib/ai/mcp-tools', () => ({
 }))
 
 import {
+  buildArtifactChromeContextNote,
   buildTanStackChatTurnArgs,
   documentCanvasSnapshotPrompt,
   PROFILE_COACH_SYSTEM,
@@ -98,6 +99,22 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.text).toContain('add_workspace_memory')
     expect(r.systemSections[0]?.text).toContain('apply_document_canvas_patch')
     expect(r.systemSections[0]?.text).not.toContain('Unsaved chat')
+  })
+
+  it('buildArtifactChromeContextNote lists tabs and collapsed state', () => {
+    const text = buildArtifactChromeContextNote({
+      workspaceId: 'w',
+      conversationId: 'c',
+      artifactTabsSummary: [
+        { id: 't1', kind: 'document', label: 'Doc' },
+        { id: 't2', kind: 'workspace-file', label: 'f.txt' },
+      ],
+      activeArtifactTabId: 't1',
+      artifactPanelCollapsed: true,
+    })
+    expect(text).toContain('Side panel')
+    expect(text).toContain('t1')
+    expect(text).toContain('**collapsed**')
   })
 
   it('documentCanvasSnapshotPrompt includes revision and patch guidance', () => {

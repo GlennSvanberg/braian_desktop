@@ -87,6 +87,12 @@ export type ChatTurnContext = {
   activeMcpServers?: string[]
   /** Rolling summary + archive hint when chat history is token-trimmed. */
   conversationWorkingMemory?: ConversationWorkingMemoryContext | null
+  /** User collapsed the right artifact column; canvas snapshots may still be included (soft hide). */
+  artifactPanelCollapsed?: boolean
+  /** Focused side-panel tab id for this turn (if any). */
+  activeArtifactTabId?: string | null
+  /** Open side-panel tabs (id, kind, label) for model awareness. */
+  artifactTabsSummary?: { id: string; kind: string; label?: string }[]
 }
 
 export type PriorChatMessage = {

@@ -29,6 +29,10 @@ fn default_active_mcp_servers() -> Vec<String> {
   vec![]
 }
 
+fn default_artifact_panel_collapsed() -> bool {
+  false
+}
+
 fn conversation_schema_supported(v: u32) -> bool {
   v == 1 || v == 2 || v == 3 || v == 4 || v == CONVERSATION_SCHEMA_VERSION
 }
@@ -77,6 +81,8 @@ struct ConversationFileV1 {
   updated_at_ms: i64,
   canvas_kind: String,
   artifact_open: bool,
+  #[serde(default = "default_artifact_panel_collapsed")]
+  artifact_panel_collapsed: bool,
   draft: String,
   messages: Vec<ChatMessageFile>,
   #[serde(default)]
@@ -126,6 +132,8 @@ pub struct ChatMessageDto {
 pub struct ChatThreadDto {
   pub messages: Vec<ChatMessageDto>,
   pub artifact_open: bool,
+  #[serde(default = "default_artifact_panel_collapsed")]
+  pub artifact_panel_collapsed: bool,
   pub artifact_payload: Option<Value>,
   pub draft: String,
   pub generating: bool,
@@ -158,6 +166,8 @@ pub struct ConversationSaveInput {
   pub title: String,
   pub canvas_kind: String,
   pub artifact_open: bool,
+  #[serde(default = "default_artifact_panel_collapsed")]
+  pub artifact_panel_collapsed: bool,
   pub draft: String,
   pub messages: Vec<ChatMessageDto>,
   pub artifact_payload: Option<Value>,
@@ -328,6 +338,31 @@ fn kind_from_value(v: &Value) -> Option<String> {
   v.get("kind").and_then(|k| k.as_str()).map(str::to_string)
 }
 
+/// List badge / conversation kind from artifact JSON (handles `artifact-tabs` wrapper).
+fn canvas_kind_from_artifact_value(v: &Value) -> Option<String> {
+  let k = kind_from_value(v)?;
+  if k == "artifact-tabs" {
+    let active_id = v.get("activeTabId").and_then(|x| x.as_str());
+    if let Some(tabs) = v.get("tabs").and_then(|x| x.as_array()) {
+      for tab in tabs {
+        let tid = tab.get("id").and_then(|x| x.as_str());
+        if active_id.is_some() && tid == active_id {
+          if let Some(payload) = tab.get("payload") {
+            return kind_from_value(payload);
+          }
+        }
+      }
+      if let Some(first) = tabs.first() {
+        if let Some(payload) = first.get("payload") {
+          return kind_from_value(payload);
+        }
+      }
+    }
+    return Some("document".to_string());
+  }
+  Some(k)
+}
+
 fn file_to_record(f: &ConversationFileV1, canvas_kind_override: Option<String>) -> ConversationRecord {
   let canvas_kind = canvas_kind_override.unwrap_or_else(|| f.canvas_kind.clone());
   ConversationRecord {
@@ -398,6 +433,9 @@ fn resolve_artifact_for_open(
   artifact: Option<Value>,
 ) -> Option<Value> {
   let kind = artifact.as_ref().and_then(kind_from_value);
+  if kind.as_deref() == Some("artifact-tabs") {
+    return artifact;
+  }
   if kind.as_deref() == Some("document") {
     let body = load_document_body(root, conversation_id, artifact.as_ref());
     let title = artifact
@@ -457,6 +495,7 @@ fn thread_from_files(f: ConversationFileV1, artifact: Option<Value>) -> ChatThre
   ChatThreadDto {
     messages,
     artifact_open: f.artifact_open,
+    artifact_panel_collapsed: f.artifact_panel_collapsed,
     artifact_payload: artifact,
     draft: f.draft,
     generating: false,
@@ -506,7 +545,7 @@ pub fn conversation_list(
       continue;
     }
     let artifact = load_artifact(&root, &f.id);
-    let ck = kind_from_value(artifact.as_ref().unwrap_or(&Value::Null))
+    let ck = canvas_kind_from_artifact_value(artifact.as_ref().unwrap_or(&Value::Null))
       .unwrap_or(f.canvas_kind.clone());
     records.push(file_to_record(&f, Some(ck)));
   }
@@ -551,6 +590,7 @@ pub fn conversation_create(
     updated_at_ms: now,
     canvas_kind: "document".to_string(),
     artifact_open: false,
+    artifact_panel_collapsed: false,
     draft: String::new(),
     messages: vec![],
     context_files: vec![],
@@ -609,7 +649,7 @@ pub fn conversation_open(app: AppHandle, id: String) -> Result<Option<Conversati
   }
   let artifact = load_artifact(&root, &f.id);
   let artifact = resolve_artifact_for_open(&root, &f.id, artifact);
-  let ck = kind_from_value(artifact.as_ref().unwrap_or(&Value::Null))
+  let ck = canvas_kind_from_artifact_value(artifact.as_ref().unwrap_or(&Value::Null))
     .unwrap_or_else(|| f.canvas_kind.clone());
   let conversation = file_to_record(&f, Some(ck));
   let thread = thread_from_files(f, artifact);
@@ -638,6 +678,7 @@ pub fn conversation_save(app: AppHandle, input: ConversationSaveInput) -> Result
     updated_at_ms: now,
     canvas_kind: input.canvas_kind.clone(),
     artifact_open: input.artifact_open,
+    artifact_panel_collapsed: input.artifact_panel_collapsed,
     draft: input.draft.clone(),
     messages: input
       .messages

@@ -10,7 +10,16 @@ import {
   mockConversationSetTitle,
   mockConversationSetUnread,
 } from '@/lib/mock-workspace-data'
-import type { ChatThreadState, ReasoningMode } from '@/lib/chat-sessions/types'
+import {
+  getActiveArtifactPayload,
+  normalizeChatThreadState,
+  serializeArtifactForPersistence,
+} from '@/lib/chat-sessions/artifact-tabs'
+import {
+  DEFAULT_CHAT_THREAD,
+  type ChatThreadState,
+  type ReasoningMode,
+} from '@/lib/chat-sessions/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import { isTauri } from '@/lib/tauri-env'
 import { emitWorkspaceDurableActivity } from '@/lib/workspace/workspace-activity'
@@ -259,6 +268,7 @@ export type ConversationSavePayload = {
   title: string
   canvasKind: string
   artifactOpen: boolean
+  artifactPanelCollapsed: boolean
   draft: string
   messages: Array<{
     id: string
@@ -266,6 +276,7 @@ export type ConversationSavePayload = {
     content: string
     status?: string
   }>
+  /** Single payload or `artifact-tabs` wrapper JSON. */
   artifactPayload: WorkspaceArtifactPayload | null
   contextFiles: ContextFileEntryDto[]
   contextConversations: ContextConversationEntryDto[]
@@ -292,6 +303,7 @@ type ConversationOpenInvoke = {
       status?: string
     }>
     artifactOpen: boolean
+    artifactPanelCollapsed?: boolean
     artifactPayload: unknown
     draft: string
     generating: boolean
@@ -318,7 +330,8 @@ function normalizeReasoningMode(raw: string | undefined): ReasoningMode {
 function mapInvokeThreadToState(
   thread: ConversationOpenInvoke['thread'],
 ): ChatThreadState {
-  return {
+  return normalizeChatThreadState({
+    ...DEFAULT_CHAT_THREAD,
     messages: thread.messages.map((m) => {
       const status =
         m.status === 'streaming' || m.status === 'complete'
@@ -341,8 +354,9 @@ function mapInvokeThreadToState(
         ...(status ? { status } : {}),
       }
     }),
-    artifactOpen: thread.artifactOpen,
     artifactPayload: (thread.artifactPayload ?? null) as WorkspaceArtifactPayload | null,
+    artifactOpen: thread.artifactOpen,
+    artifactPanelCollapsed: thread.artifactPanelCollapsed ?? false,
     draft: thread.draft,
     generating: thread.generating,
     pendingUserMessages: [],
@@ -354,7 +368,10 @@ function mapInvokeThreadToState(
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
     lastModelRequestSnapshot: null,
-  }
+  } as ChatThreadState & {
+    artifactOpen?: boolean
+    artifactPayload?: unknown
+  })
 }
 
 /** Load conversation meta + thread from `.braian` (desktop) or mock data (browser). */
@@ -375,6 +392,11 @@ export async function conversationOpen(
     }
     if (c.demoMessages?.length) {
       const { getMockArtifactPayloadForChat } = await import('@/lib/artifacts')
+      const mockPayload = getMockArtifactPayloadForChat(c.id, {
+        title: c.title,
+        canvasKind: c.canvasKind,
+      })
+      const tabId = `mock-${c.id}`
       const thread: ChatThreadState = {
         messages: c.demoMessages.map((m, i) => {
           if (m.role === 'user') {
@@ -391,11 +413,9 @@ export async function conversationOpen(
             status: 'complete' as const,
           }
         }),
-        artifactOpen: false,
-        artifactPayload: getMockArtifactPayloadForChat(c.id, {
-          title: c.title,
-          canvasKind: c.canvasKind,
-        }),
+        artifactPanelCollapsed: true,
+        artifactTabs: [{ id: tabId, payload: mockPayload }],
+        activeArtifactTabId: tabId,
         draft: '',
         generating: false,
         pendingUserMessages: [],
@@ -409,18 +429,8 @@ export async function conversationOpen(
       return { conversation, thread }
     }
     const thread: ChatThreadState = {
+      ...DEFAULT_CHAT_THREAD,
       messages: [],
-      artifactOpen: false,
-      artifactPayload: null,
-      draft: '',
-      generating: false,
-      pendingUserMessages: [],
-      contextFiles: [],
-      contextConversations: [],
-      agentMode: 'document',
-      reasoningMode: 'fast',
-      activeMcpServers: [],
-      lastModelRequestSnapshot: null,
     }
     return { conversation, thread }
   }
@@ -448,7 +458,9 @@ export function buildConversationSavePayload(
     'id' | 'workspaceId' | 'title' | 'canvasKind' | 'pinned' | 'unread'
   >,
 ): ConversationSavePayload {
-  const canvasKind = thread.artifactPayload?.kind ?? conversation.canvasKind
+  const active = getActiveArtifactPayload(thread)
+  const canvasKind = active?.kind ?? conversation.canvasKind
+  const serialized = serializeArtifactForPersistence(thread)
   return {
     id: conversation.id,
     workspaceId: conversation.workspaceId,
@@ -456,7 +468,9 @@ export function buildConversationSavePayload(
     canvasKind,
     pinned: conversation.pinned ?? false,
     unread: conversation.unread ?? false,
-    artifactOpen: thread.artifactOpen,
+    artifactOpen:
+      thread.artifactTabs.length > 0 && !thread.artifactPanelCollapsed,
+    artifactPanelCollapsed: thread.artifactPanelCollapsed,
     draft: thread.draft,
     messages: thread.messages.map((m) => ({
       id: m.id,
@@ -470,7 +484,7 @@ export function buildConversationSavePayload(
             : m.status
           : undefined,
     })),
-    artifactPayload: thread.artifactPayload,
+    artifactPayload: serialized as WorkspaceArtifactPayload | null,
     contextFiles: thread.contextFiles.map((f) => ({
       relativePath: f.relativePath,
       ...(f.displayName != null && f.displayName !== ''

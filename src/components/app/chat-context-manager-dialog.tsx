@@ -30,8 +30,10 @@ import {
 } from '@/lib/ai/chat-turn-args'
 import type { ModelContextSectionGroup } from '@/lib/ai/model-context-section-meta'
 import { deriveSnapshotSummary, type SnapshotSummary, type SectionSummary, type ToolBucket } from '@/lib/ai/snapshot-summary'
-import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
-import { getWorkspaceFileCanvasLivePayload } from '@/lib/ai/workspace-file-canvas-live'
+import {
+  buildArtifactTabsSummary,
+  buildCanvasSnapshotsForTurn,
+} from '@/lib/ai/build-canvas-snapshots'
 import { resolveChatHistoryForModelTurn } from '@/lib/conversation/working-memory'
 import {
   isNonWorkspaceScopedSessionId,
@@ -442,37 +444,13 @@ export function ChatContextManagerDialog({
 
     void (async () => {
       try {
-        const ap = thread.artifactPayload
         const sessionKey = chatSessionKey(workspaceId, conversationId)
-        const live = getDocumentCanvasLivePayload(sessionKey)
-        const wfLive = getWorkspaceFileCanvasLivePayload(sessionKey)
-        const documentCanvasSnapshot =
-          isUserProfileSessionId(workspaceId)
-            ? null
-            : ap?.kind === 'document'
-              ? {
-                  body: live?.body ?? ap.body,
-                  ...(ap.title !== undefined && ap.title !== ''
-                    ? { title: ap.title }
-                    : {}),
-                  revision: ap.canvasRevision ?? 0,
-                }
-              : null
-
-        const workspaceFileCanvasSnapshot =
-          isUserProfileSessionId(workspaceId)
-            ? null
-            : ap?.kind === 'workspace-file'
-              ? {
-                  relativePath: ap.relativePath,
-                  body: wfLive?.body ?? ap.body,
-                  revision: ap.canvasRevision ?? 0,
-                  ...(ap.truncated === true ? { truncated: true as const } : {}),
-                  ...(ap.title !== undefined && ap.title !== ''
-                    ? { title: ap.title }
-                    : {}),
-                }
-              : null
+        const { documentCanvasSnapshot, workspaceFileCanvasSnapshot } =
+          buildCanvasSnapshotsForTurn({
+            sessionKey,
+            workspaceId,
+            thread,
+          })
 
         let contextFiles:
           | Awaited<ReturnType<typeof loadContextFilesForModel>>
@@ -556,6 +534,9 @@ export function ChatContextManagerDialog({
             agentMode: thread.agentMode ?? 'document',
             documentCanvasSnapshot,
             workspaceFileCanvasSnapshot,
+            artifactPanelCollapsed: thread.artifactPanelCollapsed,
+            activeArtifactTabId: thread.activeArtifactTabId,
+            artifactTabsSummary: buildArtifactTabsSummary(thread),
             ...(contextFiles != null && contextFiles.length > 0
               ? { contextFiles }
               : {}),
@@ -599,7 +580,9 @@ export function ChatContextManagerDialog({
     thread.draft,
     thread.agentMode,
     thread.reasoningMode,
-    thread.artifactPayload,
+    thread.artifactTabs,
+    thread.activeArtifactTabId,
+    thread.artifactPanelCollapsed,
     thread.contextFiles,
     thread.contextConversations,
     thread.activeMcpServers,

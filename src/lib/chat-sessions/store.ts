@@ -2,13 +2,15 @@ import { useCallback, useSyncExternalStore } from 'react'
 
 import { streamChatTurn } from '@/lib/ai'
 import {
+  buildArtifactTabsSummary,
+  buildCanvasSnapshotsForTurn,
+} from '@/lib/ai/build-canvas-snapshots'
+import {
   buildTanStackChatTurnArgs,
   tanStackTurnArgsToSnapshot,
 } from '@/lib/ai/chat-turn-args'
 import { resolveChatHistoryForModelTurn } from '@/lib/conversation/working-memory'
 import { formatCanvasSelectionUserMessage } from '@/lib/ai/canvas-selection-message'
-import { getDocumentCanvasLivePayload } from '@/lib/ai/document-canvas-live'
-import { getWorkspaceFileCanvasLivePayload } from '@/lib/ai/workspace-file-canvas-live'
 import type {
   ChatStreamChunk,
   DocumentCanvasSelectionContext,
@@ -35,6 +37,12 @@ import {
 } from '@/lib/chat-sessions/detached'
 
 import { chatSessionKey, parseChatSessionKey } from './keys'
+import {
+  mergeStreamArtifactIntoTabs,
+  normalizeChatThreadState,
+  patchActiveTabPayload,
+  removeArtifactTab as removeArtifactTabFromState,
+} from '@/lib/chat-sessions/artifact-tabs'
 import {
   DEFAULT_CHAT_THREAD,
   type AssistantPart,
@@ -72,7 +80,7 @@ function hydrateUserProfileThreadOnce() {
     const messages = Array.isArray(parsed.messages)
       ? (parsed.messages as ChatMessage[])
       : []
-    const merged: ChatThreadState = {
+    const merged = normalizeChatThreadState({
       ...DEFAULT_CHAT_THREAD,
       messages,
       draft: typeof parsed.draft === 'string' ? parsed.draft : '',
@@ -96,12 +104,14 @@ function hydrateUserProfileThreadOnce() {
         : [],
       contextFiles: [],
       contextConversations: [],
-      artifactOpen: false,
-      artifactPayload: null,
       generating: false,
       pendingUserMessages: [],
       lastModelRequestSnapshot: null,
-    }
+      ...(parsed as Partial<ChatThreadState>),
+    } as ChatThreadState & {
+      artifactOpen?: boolean
+      artifactPayload?: unknown
+    })
     threads = { ...threads, [PROFILE_CHAT_SESSION_KEY]: merged }
   } catch (e) {
     console.error('[braian] profile chat hydrate', e)
@@ -384,19 +394,27 @@ function normalizePendingUserMessages(raw: PendingUserTurn[] | undefined) {
 
 /** Replace the entire thread for a session (e.g. hydrate from disk). */
 export function replaceThread(sessionKey: string, state: ChatThreadState) {
+  const normalized = normalizeChatThreadState(
+    state as ChatThreadState & {
+      artifactOpen?: boolean
+      artifactPayload?: unknown
+    },
+  )
   threads = {
     ...threads,
     [sessionKey]: {
-      ...state,
+      ...normalized,
       generating: false,
-      pendingUserMessages: normalizePendingUserMessages(state.pendingUserMessages),
-      contextFiles: state.contextFiles ?? [],
-      contextConversations: state.contextConversations ?? [],
-      agentMode: deriveAgentModeFromPersisted(
-        state.agentMode as string | undefined,
-        (state as { appHarnessEnabled?: boolean }).appHarnessEnabled,
+      pendingUserMessages: normalizePendingUserMessages(
+        normalized.pendingUserMessages,
       ),
-      reasoningMode: state.reasoningMode === 'thinking' ? 'thinking' : 'fast',
+      contextFiles: normalized.contextFiles ?? [],
+      contextConversations: normalized.contextConversations ?? [],
+      agentMode: deriveAgentModeFromPersisted(
+        normalized.agentMode as string | undefined,
+        (normalized as { appHarnessEnabled?: boolean }).appHarnessEnabled,
+      ),
+      reasoningMode: normalized.reasoningMode === 'thinking' ? 'thinking' : 'fast',
     },
   }
   emitThreads()
@@ -416,37 +434,33 @@ export function setChatDraft(sessionKey: string, draft: string) {
 }
 
 export function patchDocumentArtifactBody(sessionKey: string, body: string) {
-  patchThread(sessionKey, (prev) => {
-    const p = prev.artifactPayload
-    if (!p || p.kind !== 'document') return prev
-    if (p.body === body) return prev
-    const prevRev = p.canvasRevision ?? 0
-    return {
-      ...prev,
-      artifactPayload: {
+  patchThread(sessionKey, (prev) =>
+    patchActiveTabPayload(prev, (p) => {
+      if (p.kind !== 'document') return null
+      if (p.body === body) return null
+      const prevRev = p.canvasRevision ?? 0
+      return {
         ...p,
         body,
         canvasRevision: prevRev + 1,
-      },
-    }
-  })
+      }
+    }),
+  )
 }
 
 export function patchWorkspaceFileArtifactBody(sessionKey: string, body: string) {
-  patchThread(sessionKey, (prev) => {
-    const p = prev.artifactPayload
-    if (!p || p.kind !== 'workspace-file') return prev
-    if (p.body === body) return prev
-    const prevRev = p.canvasRevision ?? 0
-    return {
-      ...prev,
-      artifactPayload: {
+  patchThread(sessionKey, (prev) =>
+    patchActiveTabPayload(prev, (p) => {
+      if (p.kind !== 'workspace-file') return null
+      if (p.body === body) return null
+      const prevRev = p.canvasRevision ?? 0
+      return {
         ...p,
         body,
         canvasRevision: prevRev + 1,
-      },
-    }
-  })
+      }
+    }),
+  )
 }
 
 /**
@@ -463,21 +477,26 @@ export async function openWorkspaceTextFileArtifact(
     relativePath,
   )
   patchThread(sessionKey, (prev) => {
-    const p = prev.artifactPayload
+    const active = prev.activeArtifactTabId
+      ? prev.artifactTabs.find((t) => t.id === prev.activeArtifactTabId)
+          ?.payload
+      : null
     const sameFile =
-      p?.kind === 'workspace-file' && p.relativePath === relativePath
-    const nextRev = sameFile ? (p.canvasRevision ?? 0) + 1 : 1
+      active?.kind === 'workspace-file' &&
+      active.relativePath === relativePath
+    const nextRev = sameFile ? (active.canvasRevision ?? 0) + 1 : 1
+    const merged = mergeStreamArtifactIntoTabs(prev, {
+      kind: 'workspace-file',
+      relativePath,
+      body: text,
+      truncated,
+      title: displayName,
+      canvasRevision: nextRev,
+    })
     return {
       ...prev,
-      artifactOpen: true,
-      artifactPayload: {
-        kind: 'workspace-file',
-        relativePath,
-        body: text,
-        truncated,
-        title: displayName,
-        canvasRevision: nextRev,
-      },
+      ...merged,
+      artifactPanelCollapsed: false,
     }
   })
 }
@@ -488,9 +507,45 @@ export function stopChatGeneration(sessionKey: string) {
 }
 
 export function setChatAgentMode(sessionKey: string, agentMode: AgentMode) {
+  patchThread(sessionKey, (prev) => {
+    if (prev.agentMode === agentMode) return prev
+    if (agentMode === 'app') {
+      return { ...prev, agentMode, artifactPanelCollapsed: false }
+    }
+    return { ...prev, agentMode }
+  })
+}
+
+export function setArtifactPanelCollapsed(
+  sessionKey: string,
+  collapsed: boolean,
+) {
   patchThread(sessionKey, (prev) =>
-    prev.agentMode === agentMode ? prev : { ...prev, agentMode },
+    prev.artifactPanelCollapsed === collapsed
+      ? prev
+      : { ...prev, artifactPanelCollapsed: collapsed },
   )
+}
+
+export function setActiveArtifactTab(
+  sessionKey: string,
+  tabId: string | null,
+) {
+  patchThread(sessionKey, (prev) => {
+    if (tabId === null) {
+      return prev.activeArtifactTabId === null
+        ? prev
+        : { ...prev, activeArtifactTabId: null }
+    }
+    if (!prev.artifactTabs.some((t) => t.id === tabId)) return prev
+    return prev.activeArtifactTabId === tabId
+      ? prev
+      : { ...prev, activeArtifactTabId: tabId }
+  })
+}
+
+export function removeArtifactTab(sessionKey: string, tabId: string) {
+  patchThread(sessionKey, (prev) => removeArtifactTabFromState(prev, tabId))
 }
 
 export function setChatReasoningMode(
@@ -548,6 +603,11 @@ export function seedCanvasPreviewIfEmpty(
     title: opts?.title,
     canvasKind: opts?.canvasKind,
   }
+  const mockPayload = getMockArtifactPayloadForChat(
+    conversationId,
+    payloadOpts,
+  )
+  const tabId = `seed-tab-${conversationId}`
   patchThread(sessionKey, {
     messages: demoMessages.map((m, i) => {
       if (m.role === 'user') {
@@ -566,11 +626,9 @@ export function seedCanvasPreviewIfEmpty(
         createdAtMs: Date.now() - (demoMessages.length - i) * 60000,
       }
     }),
-    artifactOpen: false,
-    artifactPayload: getMockArtifactPayloadForChat(
-      conversationId,
-      payloadOpts,
-    ),
+    artifactPanelCollapsed: true,
+    artifactTabs: [{ id: tabId, payload: mockPayload }],
+    activeArtifactTabId: tabId,
   })
 }
 
@@ -631,42 +689,14 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
       const activeMcpServers = (threadNow.activeMcpServers ?? [])
         .map((s) => s.trim())
         .filter((s) => s.length > 0)
-      const ap = threadNow.artifactPayload
-      const live = getDocumentCanvasLivePayload(sessionKey)
-      const documentCanvasSnapshot =
-        isUserProfileSessionId(workspaceId)
-          ? null
-          : ap?.kind === 'document'
-            ? {
-                body: live?.body ?? ap.body,
-                ...(ap.title !== undefined && ap.title !== ''
-                  ? { title: ap.title }
-                  : {}),
-                revision: ap.canvasRevision ?? 0,
-                ...(selectionForTurn
-                  ? {
-                      selection: selectionForTurn,
-                      selectionUserInstruction: trimmed,
-                    }
-                  : {}),
-              }
-            : null
-
-      const wfLive = getWorkspaceFileCanvasLivePayload(sessionKey)
-      const workspaceFileCanvasSnapshot =
-        isUserProfileSessionId(workspaceId)
-          ? null
-          : ap?.kind === 'workspace-file'
-            ? {
-                relativePath: ap.relativePath,
-                body: wfLive?.body ?? ap.body,
-                revision: ap.canvasRevision ?? 0,
-                ...(ap.truncated === true ? { truncated: true as const } : {}),
-                ...(ap.title !== undefined && ap.title !== ''
-                  ? { title: ap.title }
-                  : {}),
-              }
-            : null
+      const { documentCanvasSnapshot, workspaceFileCanvasSnapshot } =
+        buildCanvasSnapshotsForTurn({
+          sessionKey,
+          workspaceId,
+          thread: threadNow,
+          selectionForTurn,
+          selectionUserInstruction: trimmed,
+        })
 
       let contextFiles:
         | Awaited<ReturnType<typeof loadContextFilesForModel>>
@@ -760,6 +790,9 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
         agentMode,
         documentCanvasSnapshot,
         workspaceFileCanvasSnapshot,
+        artifactPanelCollapsed: threadNow.artifactPanelCollapsed,
+        activeArtifactTabId: threadNow.activeArtifactTabId,
+        artifactTabsSummary: buildArtifactTabsSummary(threadNow),
         onAgentModeChange: (mode: AgentMode) => {
           setChatAgentMode(sessionKey, mode)
         },
@@ -839,29 +872,11 @@ function startChatTurnInternal(sessionKey: string, trimmed: string) {
           }))
         } else if (chunk.type === 'artifact') {
           patchThread(sessionKey, (p) => {
-            let payload = chunk.payload
-            if (payload.kind === 'document' && payload.canvasRevision == null) {
-              const prevRev =
-                p.artifactPayload?.kind === 'document'
-                  ? (p.artifactPayload.canvasRevision ?? 0)
-                  : 0
-              payload = { ...payload, canvasRevision: prevRev + 1 }
-            } else if (
-              payload.kind === 'workspace-file' &&
-              payload.canvasRevision == null
-            ) {
-              const samePath =
-                p.artifactPayload?.kind === 'workspace-file' &&
-                p.artifactPayload.relativePath === payload.relativePath
-              const prevRev = samePath
-                ? (p.artifactPayload.canvasRevision ?? 0)
-                : 0
-              payload = { ...payload, canvasRevision: prevRev + 1 }
-            }
+            const merged = mergeStreamArtifactIntoTabs(p, chunk.payload)
             return {
               ...p,
-              artifactOpen: true,
-              artifactPayload: payload,
+              ...merged,
+              artifactPanelCollapsed: false,
             }
           })
         } else if (chunk.type === 'tool-start') {
@@ -1179,6 +1194,9 @@ export function useChatThreadActions() {
     setChatAgentMode,
     setChatReasoningMode: setReasoning,
     setChatActiveMcpServers: setActiveMcp,
+    setArtifactPanelCollapsed,
+    setActiveArtifactTab,
+    removeArtifactTab,
     addContextFileEntry,
     removeContextFileEntry,
     addContextConversationEntry,

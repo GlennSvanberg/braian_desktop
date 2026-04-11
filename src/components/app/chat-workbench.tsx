@@ -8,6 +8,8 @@ import {
   Loader2,
   MessageSquare,
   Paperclip,
+  PanelRightClose,
+  PanelRightOpen,
   Plus,
   Square,
   X,
@@ -70,15 +72,24 @@ import {
   USER_PROFILE_WORKSPACE_SESSION_ID,
 } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
-import { PROFILE_CHAT_SESSION_KEY } from '@/lib/chat-sessions/store'
-import { type ChatThreadState } from '@/lib/chat-sessions/types'
 import {
+  artifactTabLabel,
+  canvasLiveScopeKey,
+  getActiveArtifactPayload,
+  hasArtifactTabs,
+} from '@/lib/chat-sessions/artifact-tabs'
+import {
+  PROFILE_CHAT_SESSION_KEY,
   getThreadSnapshot,
+  removeArtifactTab,
   replaceThread,
   seedCanvasPreviewIfEmpty,
+  setActiveArtifactTab,
+  setArtifactPanelCollapsed,
   useChatThread,
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
+import { type ChatThreadState } from '@/lib/chat-sessions/types'
 import { generateConversationTitleFromUserMessage } from '@/lib/ai/conversation-title-generate'
 import {
   DEFAULT_CHAT_TITLE,
@@ -401,6 +412,9 @@ export function ChatWorkbench({
     setChatAgentMode,
     setChatReasoningMode,
     setChatActiveMcpServers,
+    setArtifactPanelCollapsed: collapseArtifactPanel,
+    setActiveArtifactTab,
+    removeArtifactTab: closeArtifactTab,
     addContextFileEntry,
     removeContextFileEntry,
     addContextConversationEntry,
@@ -522,8 +536,9 @@ export function ChatWorkbench({
   const isMobile = useIsMobile()
   const {
     messages,
-    artifactOpen,
-    artifactPayload,
+    artifactTabs,
+    activeArtifactTabId,
+    artifactPanelCollapsed,
     draft,
     generating,
     pendingUserMessages,
@@ -533,8 +548,21 @@ export function ChatWorkbench({
     reasoningMode,
   } = thread
 
+  const artifactPayload = getActiveArtifactPayload(thread)
+  const canvasLiveKey =
+    isProfileSession || isPersonalSimpleChat || !activeArtifactTabId
+      ? undefined
+      : canvasLiveScopeKey(sessionKey, activeArtifactTabId)
+
+  const canShowArtifactColumn =
+    !isProfileSession &&
+    (hasArtifactTabs(thread) || agentMode === 'app')
+
   const showArtifactPanel =
-    (artifactOpen || agentMode === 'app') && !isProfileSession
+    canShowArtifactColumn && !artifactPanelCollapsed
+
+  const showCollapsedPanelRestore =
+    canShowArtifactColumn && artifactPanelCollapsed
 
   const chatScrollViewportRef = useRef<HTMLDivElement | null>(null)
   const chatPinSpacerRef = useRef<HTMLDivElement | null>(null)
@@ -1674,6 +1702,20 @@ export function ChatWorkbench({
         !showArtifactPanel && 'md:rounded-xl md:border md:border-border',
       )}
     >
+      {showCollapsedPanelRestore ? (
+        <div className="border-border/60 bg-muted/15 flex shrink-0 items-center justify-end border-b px-3 py-1.5 md:px-5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => collapseArtifactPanel(sessionKey, false)}
+          >
+            <PanelRightOpen className="size-3.5" aria-hidden />
+            Side panel
+          </Button>
+        </div>
+      ) : null}
       {!shellHeaderToolbar ? (
         <div className="border-border/60 bg-background shrink-0 border-b px-4 py-2 md:px-6">
           <div className="mx-auto flex max-w-5xl justify-start overflow-x-auto">
@@ -1947,56 +1989,106 @@ export function ChatWorkbench({
           >
             <div
               className={cn(
-                'h-full min-h-0 p-2 md:p-3',
+                'flex h-full min-h-0 flex-col gap-2 p-2 md:p-3',
                 isMobile ? 'bg-muted/20 min-h-[280px]' : 'bg-muted/30 md:bg-transparent',
                 !isMobile && 'md:rounded-r-xl',
               )}
             >
-              <ArtifactPanel
-                payload={artifactPayload}
-                agentMode={agentMode}
-                appPreviewWorkspaceId={
-                  isProfileSession || isPersonalSimpleChat
-                    ? null
-                    : threadWorkspaceId
-                }
-                appPreviewSessionKey={
-                  isProfileSession || isPersonalSimpleChat ? null : sessionKey
-                }
-                appPreviewGenerating={generating}
-                isTauriRuntime={isTauriRuntime}
-                documentLiveSessionKey={
-                  isProfileSession || isPersonalSimpleChat ? undefined : sessionKey
-                }
-                onCanvasSelectionAsk={
-                  isProfileSession || isPersonalSimpleChat
-                    ? undefined
-                    : ({ instruction, selectedMarkdown }) => {
-                        sendChatTurn(sessionKey, instruction, {
-                          canvasSelection: {
-                            selectedMarkdown,
-                            sectionOnly: true,
-                          },
-                        })
-                      }
-                }
-                onDocumentBodyChange={(body) =>
-                  patchDocumentArtifactBody(sessionKey, body)
-                }
-                workspaceFileWorkspaceId={
-                  isProfileSession || isPersonalSimpleChat
-                    ? null
-                    : threadWorkspaceId
-                }
-                workspaceFileSessionKey={
-                  isProfileSession || isPersonalSimpleChat ? null : sessionKey
-                }
-                workspaceFileLiveSessionKey={
-                  isProfileSession || isPersonalSimpleChat
-                    ? undefined
-                    : sessionKey
-                }
-              />
+              <div className="border-border/55 flex min-h-9 shrink-0 items-center gap-1 border-b pb-2">
+                <div
+                  className="flex min-w-0 flex-1 gap-1 overflow-x-auto"
+                  role="tablist"
+                  aria-label="Open canvases"
+                >
+                  {artifactTabs.map((tab) => (
+                    <div
+                      key={tab.id}
+                      className={cn(
+                        'border-border/50 flex max-w-[11rem] shrink-0 items-center gap-0 overflow-hidden rounded-md border',
+                        tab.id === activeArtifactTabId
+                          ? 'border-border bg-muted/60'
+                          : 'bg-transparent',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={tab.id === activeArtifactTabId}
+                        className={cn(
+                          'text-text-2 hover:bg-muted/50 min-w-0 flex-1 truncate px-2 py-1 text-left text-xs transition-colors',
+                          tab.id === activeArtifactTabId ? 'text-text-1' : '',
+                        )}
+                        onClick={() => setActiveArtifactTab(sessionKey, tab.id)}
+                      >
+                        {artifactTabLabel(tab)}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-text-3 hover:text-text-2 hover:bg-muted/40 shrink-0 px-1 py-1"
+                        aria-label={`Close ${artifactTabLabel(tab)}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeArtifactTab(sessionKey, tab.id)
+                        }}
+                      >
+                        <X className="size-3" aria-hidden />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-text-3 size-8 shrink-0"
+                  title="Collapse side panel"
+                  aria-label="Collapse side panel"
+                  onClick={() => collapseArtifactPanel(sessionKey, true)}
+                >
+                  <PanelRightClose className="size-4" aria-hidden />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ArtifactPanel
+                  payload={artifactPayload}
+                  agentMode={agentMode}
+                  appPreviewWorkspaceId={
+                    isProfileSession || isPersonalSimpleChat
+                      ? null
+                      : threadWorkspaceId
+                  }
+                  appPreviewSessionKey={
+                    isProfileSession || isPersonalSimpleChat ? null : sessionKey
+                  }
+                  appPreviewGenerating={generating}
+                  isTauriRuntime={isTauriRuntime}
+                  documentLiveSessionKey={canvasLiveKey}
+                  onCanvasSelectionAsk={
+                    isProfileSession || isPersonalSimpleChat
+                      ? undefined
+                      : ({ instruction, selectedMarkdown }) => {
+                          sendChatTurn(sessionKey, instruction, {
+                            canvasSelection: {
+                              selectedMarkdown,
+                              sectionOnly: true,
+                            },
+                          })
+                        }
+                  }
+                  onDocumentBodyChange={(body) =>
+                    patchDocumentArtifactBody(sessionKey, body)
+                  }
+                  workspaceFileWorkspaceId={
+                    isProfileSession || isPersonalSimpleChat
+                      ? null
+                      : threadWorkspaceId
+                  }
+                  workspaceFileSessionKey={
+                    isProfileSession || isPersonalSimpleChat ? null : sessionKey
+                  }
+                  workspaceFileLiveSessionKey={canvasLiveKey}
+                />
+              </div>
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

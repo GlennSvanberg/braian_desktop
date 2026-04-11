@@ -59,6 +59,12 @@ export type PendingUserTurn = {
 
 export type ArtifactPayload = WorkspaceArtifactPayload
 
+/** One open side-panel artifact (document, workspace file, table, etc.). */
+export type ArtifactTab = {
+  id: string
+  payload: WorkspaceArtifactPayload
+}
+
 /** Workspace-relative path and optional label for chat / model context. */
 export type ContextFileEntry = {
   relativePath: string
@@ -75,8 +81,12 @@ export type ContextConversationEntry = {
 
 export type ChatThreadState = {
   messages: ChatMessage[]
-  artifactOpen: boolean
-  artifactPayload: ArtifactPayload | null
+  /** User collapsed the right artifact column (tabs and payloads are kept). */
+  artifactPanelCollapsed: boolean
+  /** Open side-panel artifacts (tabs). */
+  artifactTabs: ArtifactTab[]
+  /** Focused tab for tools, live editor buffers, and snapshots. */
+  activeArtifactTabId: string | null
   draft: string
   /** Assistant turn in progress for this thread. */
   generating: boolean
@@ -98,8 +108,9 @@ export type ChatThreadState = {
 
 export const DEFAULT_CHAT_THREAD: ChatThreadState = {
   messages: [],
-  artifactOpen: false,
-  artifactPayload: null,
+  artifactPanelCollapsed: false,
+  artifactTabs: [],
+  activeArtifactTabId: null,
   draft: '',
   generating: false,
   pendingUserMessages: [],

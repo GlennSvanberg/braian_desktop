@@ -321,6 +321,34 @@ export function priorConversationsSystemPrompt(
 /** Soft cap for snapshot size in the system prompt (full body may be larger on disk). */
 export const DOCUMENT_CANVAS_SNAPSHOT_MAX_CHARS = 200_000
 
+/** Tab strip + collapse state prepended to canvas snapshot sections when relevant. */
+export function buildArtifactChromeContextNote(
+  ctx: ChatTurnContext | undefined,
+): string {
+  if (ctx == null) return ''
+  const lines: string[] = []
+  const tabs = ctx.artifactTabsSummary
+  if (tabs != null && tabs.length > 0) {
+    lines.push('### Side panel (artifacts)')
+    for (const t of tabs) {
+      const mark =
+        ctx.activeArtifactTabId != null && t.id === ctx.activeArtifactTabId
+          ? ' **(active)**'
+          : ''
+      const label = t.label?.trim() || t.kind
+      lines.push(`- \`${t.id}\` — ${label} (${t.kind})${mark}`)
+    }
+    lines.push('')
+  }
+  if (ctx.artifactPanelCollapsed === true) {
+    lines.push(
+      '[Note: the user has **collapsed** the side panel — they may not be looking at it. The snapshot below is still the authoritative buffer for patch tools.]',
+    )
+    lines.push('')
+  }
+  return lines.join('\n').trim()
+}
+
 export function documentCanvasSnapshotPrompt(
   snapshot: NonNullable<ChatTurnContext['documentCanvasSnapshot']>,
 ): string {
@@ -666,6 +694,8 @@ export async function buildTanStackChatTurnArgs(
     ctx.contextPriorConversations.length > 0
       ? priorConversationsSystemPrompt(ctx.contextPriorConversations)
       : ''
+  const chromeNote = buildArtifactChromeContextNote(ctx)
+
   const documentSnapshotText =
     ctx?.documentCanvasSnapshot != null
       ? documentCanvasSnapshotPrompt(ctx.documentCanvasSnapshot)
@@ -674,6 +704,16 @@ export async function buildTanStackChatTurnArgs(
     ctx?.workspaceFileCanvasSnapshot != null
       ? workspaceFileCanvasSnapshotPrompt(ctx.workspaceFileCanvasSnapshot)
       : ''
+
+  let chromePrepended = false
+  const withChromeOnce = (body: string) => {
+    if (!body) return ''
+    if (chromeNote && !chromePrepended) {
+      chromePrepended = true
+      return `${chromeNote}\n\n${body}`
+    }
+    return body
+  }
 
   const systemSections: ChatSystemSectionDisplay[] = []
 
@@ -854,7 +894,7 @@ export async function buildTanStackChatTurnArgs(
       id: 'canvas-snapshot',
       label: 'Document canvas snapshot',
       source: SOURCE_CANVAS_SNAPSHOT,
-      text: documentSnapshotText,
+      text: withChromeOnce(documentSnapshotText),
     })
   }
   if (workspaceFileSnapshotText) {
@@ -862,7 +902,15 @@ export async function buildTanStackChatTurnArgs(
       id: 'workspace-file-snapshot',
       label: 'Workspace file snapshot',
       source: SOURCE_WORKSPACE_FILE_SNAPSHOT,
-      text: workspaceFileSnapshotText,
+      text: withChromeOnce(workspaceFileSnapshotText),
+    })
+  }
+  if (!documentSnapshotText && !workspaceFileSnapshotText && chromeNote) {
+    systemSections.push({
+      id: 'artifact-chrome',
+      label: 'Side panel',
+      source: 'src/lib/ai/chat-turn-args.ts (buildArtifactChromeContextNote)',
+      text: chromeNote,
     })
   }
 

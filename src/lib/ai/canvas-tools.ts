@@ -3,6 +3,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { z } from 'zod'
 
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
+import {
+  canvasLiveScopeKey,
+  getActiveArtifactPayload,
+} from '@/lib/chat-sessions/artifact-tabs'
 import { getThreadSnapshot } from '@/lib/chat-sessions/store'
 
 import { coerceTabularCellValue } from './braian-artifact-from-custom'
@@ -189,14 +193,18 @@ function resolveDocumentCanvasForTool(sessionKey: string):
     }
   | { ok: false; error: string } {
   const thread = getThreadSnapshot(sessionKey)
-  const p = thread.artifactPayload
+  const p = getActiveArtifactPayload(thread)
   if (!p || p.kind !== 'document') {
     return {
       ok: false,
-      error: 'No document canvas is open for this conversation.',
+      error: 'No document canvas is open in the active side-panel tab.',
     }
   }
-  const live = getDocumentCanvasLivePayload(sessionKey)
+  const scope = canvasLiveScopeKey(
+    sessionKey,
+    thread.activeArtifactTabId,
+  )
+  const live = getDocumentCanvasLivePayload(scope)
   const body = live?.body ?? p.body
   const revision = p.canvasRevision ?? 0
   const title = p.title
@@ -214,14 +222,19 @@ function resolveWorkspaceFileCanvasForTool(sessionKey: string):
     }
   | { ok: false; error: string } {
   const thread = getThreadSnapshot(sessionKey)
-  const p = thread.artifactPayload
+  const p = getActiveArtifactPayload(thread)
   if (!p || p.kind !== 'workspace-file') {
     return {
       ok: false,
-      error: 'No workspace file is open in the side panel for this conversation.',
+      error:
+        'No workspace file is open in the active side-panel tab for this conversation.',
     }
   }
-  const live = getWorkspaceFileCanvasLivePayload(sessionKey)
+  const scope = canvasLiveScopeKey(
+    sessionKey,
+    thread.activeArtifactTabId,
+  )
+  const live = getWorkspaceFileCanvasLivePayload(scope)
   const body = live?.body ?? p.body
   const revision = p.canvasRevision ?? 0
   return {
@@ -303,7 +316,7 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
     openDocumentCanvasTool.server(async (args, toolCtx) => {
       const input = openDocumentCanvasInputSchema.parse(args)
       const thread = getThreadSnapshot(sessionKey)
-      const p = thread.artifactPayload
+      const p = getActiveArtifactPayload(thread)
       const nextRevision =
         p?.kind === 'document' ? (p.canvasRevision ?? 0) + 1 : 1
       try {
@@ -457,7 +470,7 @@ export function buildCanvasTools(context: ChatTurnContext | undefined) {
     openWorkspaceFileCanvasTool.server(async (args, toolCtx) => {
       const input = openWorkspaceFileCanvasInputSchema.parse(args)
       const thread = getThreadSnapshot(sessionKey)
-      const p = thread.artifactPayload
+      const p = getActiveArtifactPayload(thread)
       const sameOpen =
         p?.kind === 'workspace-file' && p.relativePath === input.relativePath
       const nextRevision = sameOpen ? (p.canvasRevision ?? 0) + 1 : 1
