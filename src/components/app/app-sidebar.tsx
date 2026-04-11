@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
   ChevronDown,
@@ -37,6 +37,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -60,6 +61,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { PERSONAL_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { chatSessionKey } from '@/lib/chat-sessions/keys'
 import { useSessionGenerating } from '@/lib/chat-sessions/store'
+import { formatShortTimeSince } from '@/lib/format-updated'
 import { cn } from '@/lib/utils'
 import type { WorkspaceDto } from '@/lib/workspace-api'
 import {
@@ -156,6 +158,16 @@ function ConversationSidebarItem({
   const sessionKey = chatSessionKey(workspaceId, conversation.id)
   const generating = useSessionGenerating(sessionKey)
   const active = pathname === `/chat/${conversation.id}`
+
+  const [timeTick, setTimeTick] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setTimeTick((n) => n + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  const shortSinceLabel = useMemo(() => {
+    void timeTick
+    return formatShortTimeSince(conversation.updatedAtMs)
+  }, [conversation.updatedAtMs, timeTick])
 
   const onTogglePin = () => {
     const pinned = !conversation.pinned
@@ -279,47 +291,57 @@ function ConversationSidebarItem({
           'md:opacity-0 md:group-hover/menu-item:opacity-100 md:group-has-[[data-slot=sidebar-menu-action]:focus]/menu-item:opacity-100',
         )}
       />
-      <SidebarMenuAction
-        showOnHover
-        disabled={deletePending}
-        className="text-sidebar-foreground/80 hover:text-destructive right-9 z-20"
-        aria-label={`Delete ${conversation.title}`}
-        title="Delete chat"
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          onDelete(conversation)
-        }}
-      >
-        {deletePending ? (
-          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-        ) : (
-          <Trash2 className="size-4" aria-hidden />
+      <div
+        className={cn(
+          'absolute top-1/2 right-2 z-20 flex -translate-y-1/2 items-center gap-0.5',
+          'max-md:opacity-100',
+          'md:opacity-0 md:group-hover/menu-item:opacity-100 md:group-has-[[data-slot=sidebar-menu-action]:focus]/menu-item:opacity-100',
         )}
-      </SidebarMenuAction>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <SidebarMenuAction
-            showOnHover
-            className="right-3 z-20"
-            aria-label={`Actions for ${conversation.title}`}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }}
-          >
-            <MoreHorizontal className="size-4" aria-hidden />
-          </SidebarMenuAction>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem onSelect={() => onRename(conversation)}>
-            Rename…
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onTogglePin}>
-            {conversation.pinned ? 'Unpin from top' : 'Pin to top'}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuAction
+              showOnHover
+              className="relative !top-auto !right-auto shrink-0"
+              aria-label={`Actions for ${conversation.title}`}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+            >
+              <MoreHorizontal className="size-4" aria-hidden />
+            </SidebarMenuAction>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onSelect={() => onRename(conversation)}>
+              Rename…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onTogglePin}>
+              {conversation.pinned ? 'Unpin from top' : 'Pin to top'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={deletePending}
+              onSelect={() => onDelete(conversation)}
+            >
+              {deletePending ? (
+                <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+              ) : (
+                <Trash2 className="size-4" aria-hidden />
+              )}
+              Delete chat
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <time
+          dateTime={new Date(conversation.updatedAtMs).toISOString()}
+          title={conversation.updatedLabel}
+          className="text-sidebar-foreground/65 pointer-events-none shrink-0 tabular-nums text-[0.7rem] leading-none"
+        >
+          {shortSinceLabel}
+        </time>
+      </div>
     </SidebarMenuItem>
   )
 }
