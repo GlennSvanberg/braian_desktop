@@ -24,6 +24,37 @@ import {
 } from '@/lib/workspace-api'
 
 const ACTIVE_WS_KEY = 'braian.io.activeWorkspaceId'
+const FILE_EXPLORER_OPEN_BY_WS_KEY = 'braian.io.fileExplorerOpenByWorkspace'
+
+function readFileExplorerOpenForWorkspace(workspaceId: string): boolean {
+  if (!workspaceId || typeof localStorage === 'undefined') return false
+  try {
+    const raw = localStorage.getItem(FILE_EXPLORER_OPEN_BY_WS_KEY)
+    if (!raw) return false
+    const map = JSON.parse(raw) as Record<string, unknown>
+    return map[workspaceId] === true
+  } catch {
+    return false
+  }
+}
+
+function persistFileExplorerOpenForWorkspace(
+  workspaceId: string,
+  open: boolean,
+): void {
+  if (!workspaceId || typeof localStorage === 'undefined') return
+  try {
+    const raw = localStorage.getItem(FILE_EXPLORER_OPEN_BY_WS_KEY)
+    const map: Record<string, boolean> = raw ? JSON.parse(raw) : {}
+    map[workspaceId] = open
+    localStorage.setItem(
+      FILE_EXPLORER_OPEN_BY_WS_KEY,
+      JSON.stringify(map),
+    )
+  } catch {
+    // ignore quota / JSON errors
+  }
+}
 
 export type WorkspaceConversation = ConversationDto & {
   updatedLabel: string
@@ -72,8 +103,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     string | null
   >(null)
   const [loading, setLoading] = useState(true)
-  const [fileTreeOpen, setFileTreeOpen] = useState(true)
+  const [fileTreeOpen, setFileTreeOpenState] = useState(false)
   const isTauriRuntime = isTauri()
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setFileTreeOpenState(false)
+      return
+    }
+    setFileTreeOpenState(readFileExplorerOpenForWorkspace(activeWorkspaceId))
+  }, [activeWorkspaceId])
+
+  const setFileTreeOpen = useCallback((open: boolean) => {
+    setFileTreeOpenState(open)
+    persistFileExplorerOpenForWorkspace(activeWorkspaceId, open)
+  }, [activeWorkspaceId])
 
   const refreshWorkspaces = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
@@ -284,6 +328,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createConversationInWorkspace,
       defaultWorkspacesRoot,
       fileTreeOpen,
+      setFileTreeOpen,
       loading,
       isTauriRuntime,
     ],
