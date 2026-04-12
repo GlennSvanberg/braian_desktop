@@ -2,6 +2,7 @@ import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 
 import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
+import { touchHubRecentApp } from '@/lib/hub-recent-apps'
 import {
   workspaceWebappDevLogs,
   workspaceWebappInit,
@@ -128,6 +129,7 @@ export function buildWorkspaceWebappTools(
           workspaceId,
           path: parsed.path,
         })
+        await touchHubRecentApp(workspaceId, previewPath, null)
         return { ok: true as const, previewPath }
       } catch (e) {
         return {

@@ -1,9 +1,14 @@
 /** `.braian/dashboard.json` — section `type` values the shell understands. */
 export type HubSectionType =
   | 'welcome'
+  /** Replaces `welcome` in defaults — workspace name + memory context (no generic greeting). */
+  | 'at_a_glance'
   | 'continue'
   | 'apps'
   | 'recent_files'
+  | 'recent_documents'
+  | 'recent_apps'
+  | 'memory_queue'
   | 'kpis'
   | 'insights'
 
@@ -44,19 +49,25 @@ export type WorkspaceHubSnapshot = {
 }
 
 export const DEFAULT_HUB_SECTIONS: HubDashboardSection[] = [
-  { id: 'welcome', type: 'welcome', enabled: true },
+  { id: 'glance', type: 'at_a_glance', enabled: true },
+  { id: 'memory_queue', type: 'memory_queue', enabled: true },
   { id: 'continue', type: 'continue', enabled: true },
+  { id: 'recent_apps', type: 'recent_apps', enabled: true },
   { id: 'apps', type: 'apps', enabled: true },
-  { id: 'recent', type: 'recent_files', enabled: true },
+  { id: 'recent_docs', type: 'recent_documents', enabled: true },
   { id: 'kpis', type: 'kpis', enabled: true },
   { id: 'insights', type: 'insights', enabled: true },
 ]
 
 const KNOWN_TYPES = new Set<HubSectionType>([
   'welcome',
+  'at_a_glance',
   'continue',
   'apps',
   'recent_files',
+  'recent_documents',
+  'recent_apps',
+  'memory_queue',
   'kpis',
   'insights',
 ])

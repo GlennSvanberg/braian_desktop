@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { WORKSPACE_WEBAPP_RELATIVE_DIR } from '@/lib/workspace-webapp/constants'
+import { touchHubRecentApp } from '@/lib/hub-recent-apps'
 import {
   workspaceRunShell,
   workspaceWebappDevStart,
@@ -394,10 +395,12 @@ export function WorkspaceWebappPreviewCore({
   const onApplyPreviewPath = async () => {
     setBusy('path')
     try {
+      const nextPath = pathInput.trim() || '/'
       await workspaceWebappPreviewPathSet({
         workspaceId,
-        path: pathInput.trim() || '/',
+        path: nextPath,
       })
+      await touchHubRecentApp(workspaceId, nextPath, null)
       setIframeKey((k) => k + 1)
       await refreshStatus()
     } catch (e) {

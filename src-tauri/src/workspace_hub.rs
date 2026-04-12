@@ -27,7 +27,10 @@ fn now_ms() -> i64 {
 
 fn should_skip_recent_touch(relative_path: &str) -> bool {
   let p = relative_path.replace('\\', "/");
-  p == ".braian/recent-files.json"
+  matches!(
+    p.as_str(),
+    ".braian/recent-files.json" | ".braian/hub-recent-apps.json"
+  )
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
