@@ -3,7 +3,7 @@ name: MEMORY_PLAN full implementation
 overview: End-to-end execution roadmap for everything in MEMORY_PLAN.md through Phase 6, with locked technical decisions and no open questions. Phases 0–1 are treated as baseline with small documented close-out work; remaining work is sequenced in milestones P1-close through P7 plus documentation.
 todos:
   - id: doc-debt-d0
-    content: "D0: Update docs/app/memory.md and docs/app/model-context.md to match shipped Phase 0–1 behavior"
+    content: "D0: Update docs/app/how-memory-works.md and docs/app/model-context.md to match shipped Phase 0–1 behavior"
   - id: p1-close
     content: "P1-close: importantDecisions in conversation summaries + compaction prompt + turn injection"
   - id: p2a-files-tools
@@ -56,7 +56,7 @@ The following are **done** in code; they are not replanned except for P1-close a
 
 **Deliverables**
 
-- Update [docs/app/memory.md](docs/app/memory.md) and [docs/app/model-context.md](docs/app/model-context.md): AGENTS.md injection, token-budgeted history, conversation summaries path, archive tools, what is not yet structured memory.
+- Update [docs/app/how-memory-works.md](docs/app/how-memory-works.md) and [docs/app/model-context.md](docs/app/model-context.md): AGENTS.md injection, token-budgeted history, conversation summaries path, archive tools, what is not yet structured memory.
 
 **Exit:** Docs describe the shipped Phase 0–1 system accurately; no placeholder language that contradicts the code.
 

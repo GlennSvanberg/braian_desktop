@@ -49,6 +49,6 @@ Only layer (3) is exposed as `mcp__*` tools in the current turn.
 ## Related
 
 - [Overview](/docs/overview)
-- [Memory](/docs/memory)
+- [How memory works](/docs/how-memory-works)
 - [Tools](/docs/tools)
 - [Connections (MCP)](/docs/mcp)

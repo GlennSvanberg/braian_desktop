@@ -517,7 +517,7 @@ Important compatibility rule:
 
 **Repository status (desktop app, incremental):**
 
-- **Phase 0 — implemented:** As above; user docs `**docs/app/memory.md`** and `**docs/app/model-context.md**` updated to describe behavior.
+- **Phase 0 — implemented:** As above; user docs `**docs/app/how-memory-works.md**` and `**docs/app/model-context.md**` updated to describe behavior.
 - **Phase 1 — implemented:** Summary files are `**schemaVersion: 2`** with `**importantDecisions**` (v1 files migrate on read). Compaction prompt and persistence in `src/lib/conversation/working-memory.ts`; injection in `src/lib/ai/chat-turn-args.ts`. `**get_conversation_summary**` tool in `src/lib/ai/conversation-archive-tools.ts`.
 - **Phase 2 — largely implemented (file-first):** Structured JSON under `**.braian/memory/{facts,decisions,preferences,episodes,patterns}/`**, schema in `src/lib/memory/semantic-record.ts`, store + index in `src/lib/memory/semantic-store.ts`, tools in `src/lib/ai/semantic-memory-tools.ts` (`search_workspace_memory`, `open_memory_entry`, `remember_workspace_fact`, `remember_workspace_preference`, `forget_memory_entry`, `mark_memory_stale`, `validate_memory_entry`). System section order in `chat-turn-args.ts` matches target assembly (summary → important decisions → open loops → structured memory → `MEMORY.md` → transcript hint). `**.braian/MEMORY.md**` still injected as transitional.
 - **Phase 2b — SQLite derived index:** Table `**memory_entries`** in `braian.db` (migration in `src-tauri/src/db.rs`); `memory_index_upsert` + `memory_index_rebuild_workspace` in `src-tauri/src/memory_index.rs`; TS bridge `src/lib/memory/memory-index-bridge.ts` upserts after writes.

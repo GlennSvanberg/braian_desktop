@@ -1,6 +1,5 @@
 import overviewMd from '../../../docs/app/overview.md?raw'
 import toolsMd from '../../../docs/app/tools.md?raw'
-import memoryMd from '../../../docs/app/memory.md?raw'
 import howMemoryWorksMd from '../../../docs/app/how-memory-works.md?raw'
 import capabilitiesMd from '../../../docs/app/capabilities.md?raw'
 import dashboardMd from '../../../docs/app/dashboard.md?raw'
@@ -11,7 +10,6 @@ import workspaceHistoryMd from '../../../docs/app/workspace-history.md?raw'
 export type InAppDocSlug =
   | 'overview'
   | 'tools'
-  | 'memory'
   | 'how-memory-works'
   | 'capabilities'
   | 'dashboard'
@@ -59,12 +57,6 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     description:
       'Dashboard route: Dashboard (hub), Apps, Settings (webapp + workspace tools), Memory; Vite project under .braian/webapp.',
     body: dashboardMd,
-  },
-  {
-    slug: 'memory',
-    title: 'Memory',
-    description: 'Structured workspace memory and AGENTS.md.',
-    body: memoryMd,
   },
   {
     slug: 'how-memory-works',

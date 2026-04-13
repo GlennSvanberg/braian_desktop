@@ -2,7 +2,7 @@
 
 Braian is **local-first**: memory is stored on disk inside your workspace, not only inside the current chat window. The assistant reuses facts, preferences, and decisions over time, while keeping each model turn small enough to stay fast and coherent.
 
-This page explains the **layered memory model** (why there is more than one kind of “memory”), where data lives, and how that maps to what is **implemented today** versus what is still on the roadmap. For day-to-day tools and file paths, see [Memory](/docs/memory). For the exact order of prompt sections each turn, see [Model context](/docs/model-context).
+This page explains the **layered memory model** (why there is more than one kind of “memory”), where data lives, and how that maps to what is **implemented today** versus what is still on the roadmap. For assistant tools and file-backed operations, see [Tools](/docs/tools). For the exact order of prompt sections each turn, see [Model context](/docs/model-context).
 
 ## Why layered memory?
 
@@ -78,6 +78,6 @@ For the full phased implementation notes and open questions, see `**MEMORY_PLAN.
 
 ## Related
 
-- [Memory](/docs/memory) — tools, files, and settings
 - [Model context](/docs/model-context) — system section order each turn
 - [Tools](/docs/tools) — workspace and memory-related tools
+- [Workspace dashboard](/docs/dashboard) — workspace hub (includes **Memory**)

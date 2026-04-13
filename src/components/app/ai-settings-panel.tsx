@@ -17,10 +17,6 @@ import {
   defaultModelForProvider,
   modelOptionsForUi,
 } from '@/lib/ai/model-catalog'
-import {
-  memorySettingsGet,
-  memorySettingsSet,
-} from '@/lib/memory/memory-settings'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -35,7 +31,6 @@ export function AiSettingsPanel({ embedded, className }: Props) {
   const [showKey, setShowKey] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedOk, setSavedOk] = useState(false)
-  const [memoryAutoReview, setMemoryAutoReview] = useState(false)
   const [form, setForm] = useState<AiSettingsDto>({
     provider: 'openai',
     apiKey: '',
@@ -43,10 +38,6 @@ export function AiSettingsPanel({ embedded, className }: Props) {
     baseUrl: null,
     contextMaxHistoryTokens: CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
   })
-
-  useEffect(() => {
-    setMemoryAutoReview(memorySettingsGet().autoReviewOnIdle)
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -322,42 +313,6 @@ export function AiSettingsPanel({ embedded, className }: Props) {
             </Button>
           </form>
         )}
-
-        <div className="border-border space-y-4 rounded-xl border p-4 shadow-sm md:p-5">
-          <div>
-            <h2 className="text-text-1 text-base font-semibold tracking-tight">
-              Workspace memory
-            </h2>
-            <p className="text-text-3 mt-1 text-sm leading-relaxed">
-              Durable notes live as structured JSON under{' '}
-              <code className="text-text-2 text-xs">.braian/memory/</code> (see
-              Dashboard → Memory). Optional background review runs only after you
-              pause (debounced), not every message.
-            </p>
-          </div>
-          <label className="text-text-2 flex cursor-pointer items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="border-border text-accent-600 mt-0.5 size-4 shrink-0 rounded"
-              checked={memoryAutoReview}
-              onChange={(e) => {
-                const v = e.target.checked
-                setMemoryAutoReview(v)
-                memorySettingsSet({ autoReviewOnIdle: v })
-              }}
-            />
-            <span>
-              <span className="text-text-1 font-medium">
-                Automatically update memory when I pause chatting
-              </span>
-                <span className="text-text-3 mt-1 block text-xs leading-relaxed">
-                Uses your configured model and API key after a few minutes of idle
-                time; at most about once every 20 minutes per workspace. Suggestions
-                queue under Dashboard → Memory for you to accept or dismiss.
-              </span>
-            </span>
-          </label>
-        </div>
       </div>
     </div>
   )

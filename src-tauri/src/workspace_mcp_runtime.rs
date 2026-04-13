@@ -49,24 +49,26 @@ fn pick_port() -> Result<u16, String> {
 fn broker_binary_path() -> Option<PathBuf> {
   let exe = std::env::current_exe().ok()?;
   let dir = exe.parent()?;
-  let candidate = if cfg!(windows) {
-    dir.join("braian-mcpd.exe")
+  let bin_name = if cfg!(windows) {
+    "braian-mcpd.exe"
   } else {
-    dir.join("braian-mcpd")
+    "braian-mcpd"
   };
+  // Packaged app: Tauri externalBin installs to a path relative to the main exe (e.g. bin\braian-mcpd.exe).
+  let bundled = dir.join("bin").join(bin_name);
+  if bundled.is_file() {
+    return Some(bundled);
+  }
+  // Unbundled / flat layout (e.g. target/release beside braian-mcpd.exe).
+  let candidate = dir.join(bin_name);
   if candidate.is_file() {
     return Some(candidate);
   }
-  let dev_target = dir
-    .join("..")
-    .join("debug")
-    .join(if cfg!(windows) {
-      "braian-mcpd.exe"
-    } else {
-      "braian-mcpd"
-    });
-  if dev_target.is_file() {
-    return Some(dev_target);
+  // cargo test / nested target paths: target/debug/deps/app-*.exe → target/debug/braian-mcpd.
+  let profile_dir = if cfg!(debug_assertions) { "debug" } else { "release" };
+  let sibling_target = dir.join("..").join(profile_dir).join(bin_name);
+  if sibling_target.is_file() {
+    return Some(sibling_target);
   }
   None
 }

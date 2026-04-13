@@ -16,6 +16,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "mcpd:stage-sidecar": "node scripts/stage-mcpd-sidecar.mjs",
     "mcp:dev": "node scripts/mcp-dev/probe.mjs"
   },
   "dependencies": {

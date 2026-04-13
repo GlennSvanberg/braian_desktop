@@ -26,6 +26,6 @@ Some assistant actions only work after the conversation is **saved** (a real thr
 - [Workspace webapp](/docs/dashboard)
 - [Tools the assistant can use](/docs/tools)
 - [Connections (MCP)](/docs/mcp) — `.braian/mcp.json`, Cursor-style servers, status checks
-- [Workspace memory](/docs/memory)
+- [How memory works](/docs/how-memory-works)
 - [Workspace snapshots](/docs/workspace-history)
 - [Capabilities and limits](/docs/capabilities)

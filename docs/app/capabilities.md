@@ -29,5 +29,5 @@
 - [Workspace webapp](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Connections (MCP)](/docs/mcp)
-- [Memory](/docs/memory)
+- [How memory works](/docs/how-memory-works)
 - [Workspace snapshots](/docs/workspace-history)

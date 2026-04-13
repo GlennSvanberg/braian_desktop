@@ -7,7 +7,7 @@
     "frontendDist": "../dist/client",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build && npm run mcpd:stage-sidecar"
   },
   "app": {
     "windows": [
@@ -40,6 +40,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/webapp-template"]
+    "resources": ["resources/webapp-template"],
+    "externalBin": ["bin/braian-mcpd"]
   }
 }

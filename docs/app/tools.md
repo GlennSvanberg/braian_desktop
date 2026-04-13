@@ -78,5 +78,5 @@ The dev server itself is started from the UI, not via `npm run dev` in the shell
 - [Overview](/docs/overview)
 - [Workspace webapp](/docs/dashboard)
 - [Connections (MCP)](/docs/mcp)
-- [Memory](/docs/memory)
+- [How memory works](/docs/how-memory-works)
 - [Capabilities](/docs/capabilities)
