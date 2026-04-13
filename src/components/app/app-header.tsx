@@ -1,6 +1,6 @@
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useMatches, useRouterState } from '@tanstack/react-router'
-import { FolderTree } from 'lucide-react'
+import { useMatches, useNavigate, useRouterState } from '@tanstack/react-router'
+import { ChevronLeft, FolderTree } from 'lucide-react'
 
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
@@ -71,6 +71,7 @@ function ShellLeftPaneControls({
 }
 
 export function AppHeader() {
+  const navigate = useNavigate()
   const { toolbar: shellToolbar } = useOptionalShellHeaderToolbar() ?? {
     toolbar: null,
   }
@@ -182,9 +183,8 @@ export function AppHeader() {
     }
     if (isDashboard) {
       const tab = parseDashboardTabFromSearchStr(dashboardSearchStr)
-      if (tab === 'app-settings') return 'App settings'
       if (tab === 'apps') return 'Apps'
-      if (tab === 'workspace-settings') return 'Workspace settings'
+      if (tab === 'workspace-settings') return 'Settings'
       if (tab === 'memory') return 'Memory'
       return 'Dashboard'
     }
@@ -201,6 +201,8 @@ export function AppHeader() {
     isChatRoute || isHome || isDashboard || isWorkspaceSettings ||
     Boolean(workspaceWebappSettingsMatch) || Boolean(workspaceWebappMatch)
 
+  const showChatBackToDashboard = isChatRoute && Boolean(activeWorkspace)
+
   const tauriChrome = isTauri()
 
   const noDrag = tauriChrome ? ({ 'data-tauri-drag-region': false } as const) : {}
@@ -212,26 +214,52 @@ export function AppHeader() {
     >
       <ShellLeftPaneControls {...noDrag} />
       <div
-        className="flex min-w-0 max-w-[min(100%,40%)] shrink-0 flex-col justify-center gap-0.5 py-1 sm:max-w-[min(100%,50%)]"
-        onDoubleClick={
-          tauriChrome
-            ? () => {
-                void getCurrentWindow().toggleMaximize()
-              }
-            : undefined
-        }
+        className={cn(
+          'flex min-w-0 max-w-[min(100%,40%)] shrink-0 items-center gap-2 py-1 sm:max-w-[min(100%,50%)]',
+          showChatBackToDashboard ? 'gap-1.5 md:gap-2' : '',
+        )}
       >
-        <h1
-          className={cn(
-            'text-text-1 truncate font-semibold tracking-tight',
-            workspaceLedHeader
-              ? 'text-base md:text-lg'
-              : 'text-sm md:text-base',
-          )}
+        {showChatBackToDashboard && activeWorkspace ? (
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            className="h-9 shrink-0 gap-1.5 px-3 text-sm font-semibold shadow-sm"
+            data-tauri-drag-region={tauriChrome ? false : undefined}
+            title="Back to workspace home (dashboard)"
+            onClick={() => {
+              void navigate({
+                to: '/dashboard',
+                search: { tab: 'overview' },
+              })
+            }}
+          >
+            <ChevronLeft className="size-5 shrink-0 opacity-95" aria-hidden />
+            <span className="whitespace-nowrap">Back to home</span>
+          </Button>
+        ) : null}
+        <div
+          className="flex min-w-0 min-h-0 flex-1 flex-col justify-center gap-0.5"
+          onDoubleClick={
+            tauriChrome
+              ? () => {
+                  void getCurrentWindow().toggleMaximize()
+                }
+              : undefined
+          }
         >
-          {title}
-        </h1>
-        <p className="text-text-3 truncate text-xs leading-snug">{subtitle}</p>
+          <h1
+            className={cn(
+              'text-text-1 truncate font-semibold tracking-tight',
+              workspaceLedHeader
+                ? 'text-base md:text-lg'
+                : 'text-sm md:text-base',
+            )}
+          >
+            {title}
+          </h1>
+          <p className="text-text-3 truncate text-xs leading-snug">{subtitle}</p>
+        </div>
       </div>
       <div
         className="flex min-h-0 min-w-0 flex-1 items-center justify-end gap-2 py-0.5"

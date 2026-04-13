@@ -45,8 +45,8 @@ export const MODEL_CONTEXT_SECTION_ORDER_HELP: { title: string; items: string[] 
     items: [
       'Core — Routing: decision tree (document vs code mode) plus mode-specific rules.',
       'Skills — Catalog of `.braian/skills/<slug>/SKILL.md` (metadata only; full bodies loaded on demand).',
-      'User — Profile and automatic client time.',
-      'Workspace — AGENTS.md, MEMORY.md, short-term summary, open loops, transcript pointer.',
+      'User — Client time (workspace chats); profile chat uses the profile coach only.',
+      'Workspace — AGENTS.md, structured memory, short-term summary, open loops, transcript pointer.',
       'This turn — Attached files, prior conversation transcripts, document canvas snapshot, and (when App mode is on) dashboard builder instructions.',
     ],
   }

@@ -329,11 +329,10 @@ export function AiSettingsPanel({ embedded, className }: Props) {
               Workspace memory
             </h2>
             <p className="text-text-3 mt-1 text-sm leading-relaxed">
-              Each workspace keeps notes in{' '}
-              <code className="text-text-2 text-xs">.braian/MEMORY.md</code>. The
-              assistant reads a summary of this file during chat. Optional
-              background updates run only after you pause (debounced), not every
-              message.
+              Durable notes live as structured JSON under{' '}
+              <code className="text-text-2 text-xs">.braian/memory/</code> (see
+              Dashboard → Memory). Optional background review runs only after you
+              pause (debounced), not every message.
             </p>
           </div>
           <label className="text-text-2 flex cursor-pointer items-start gap-3 text-sm">
@@ -351,11 +350,10 @@ export function AiSettingsPanel({ embedded, className }: Props) {
               <span className="text-text-1 font-medium">
                 Automatically update memory when I pause chatting
               </span>
-              <span className="text-text-3 mt-1 block text-xs leading-relaxed">
+                <span className="text-text-3 mt-1 block text-xs leading-relaxed">
                 Uses your configured model and API key after a few minutes of idle
-                time; at most about once every 20 minutes per workspace. You can
-                always edit the file directly or use &quot;Update memory&quot; under
-                Workspace settings for that folder.
+                time; at most about once every 20 minutes per workspace. Suggestions
+                queue under Dashboard → Memory for you to accept or dismiss.
               </span>
             </span>
           </label>

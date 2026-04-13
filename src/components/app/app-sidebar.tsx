@@ -6,9 +6,9 @@ import {
   MoreHorizontal,
   PanelLeftIcon,
   PanelLeftClose,
+  House,
   Pin,
   Plus,
-  Settings,
   Trash2,
   UserRound,
 } from 'lucide-react'
@@ -361,7 +361,6 @@ function WorkspaceConversationGroup({
   navigate,
   createConversationInWorkspace,
   setActiveWorkspaceId,
-  hideFolderSettings = false,
 }: {
   workspace: WorkspaceDto
   conversations: WorkspaceConversation[]
@@ -378,8 +377,6 @@ function WorkspaceConversationGroup({
   navigate: ReturnType<typeof useNavigate>
   createConversationInWorkspace: (id: string) => Promise<string>
   setActiveWorkspaceId: (id: string) => void
-  /** Built-in Simple chats: no per-folder MCP/settings entry. */
-  hideFolderSettings?: boolean
 }) {
   const [newPending, setNewPending] = useState(false)
 
@@ -398,11 +395,10 @@ function WorkspaceConversationGroup({
   const dashboardTab = pathname.startsWith('/dashboard')
     ? parseDashboardTabFromSearchStr(routerSearchStr)
     : null
-  const workspaceSettingsGearActive =
-    pathname === `/workspace/${workspace.id}/settings` ||
-    (pathname.startsWith('/dashboard') &&
-      dashboardTab === 'workspace-settings' &&
-      workspace.id === activeWorkspaceId)
+  const workspaceHomeActive =
+    pathname.startsWith('/dashboard') &&
+    dashboardTab === 'overview' &&
+    workspace.id === activeWorkspaceId
 
   const onNewInWorkspace = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -494,29 +490,27 @@ function WorkspaceConversationGroup({
           />
         </SidebarMenuButton>
 
-        {hideFolderSettings ? null : (
-          <SidebarMenuAction
-            className="text-sidebar-foreground/80 right-9 z-30 size-7 [&>svg]:size-4"
-            aria-label={`Workspace settings for ${workspace.name}`}
-            title="Workspace settings (Connections)"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setActiveWorkspaceId(workspace.id)
-              navigate({
-                to: '/dashboard',
-                search: { tab: 'workspace-settings' },
-              })
-            }}
-          >
-            <Settings
-              className={cn(
-                workspaceSettingsGearActive && 'text-sidebar-accent-foreground',
-              )}
-              aria-hidden
-            />
-          </SidebarMenuAction>
-        )}
+        <SidebarMenuAction
+          className="text-sidebar-foreground/80 right-9 z-30 size-7 [&>svg]:size-4"
+          aria-label={`Open dashboard for ${workspace.name}`}
+          title={`Open dashboard for ${workspace.name}`}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setActiveWorkspaceId(workspace.id)
+            navigate({
+              to: '/dashboard',
+              search: { tab: 'overview' },
+            })
+          }}
+        >
+          <House
+            className={cn(
+              workspaceHomeActive && 'text-sidebar-accent-foreground',
+            )}
+            aria-hidden
+          />
+        </SidebarMenuAction>
 
         <SidebarMenuAction
           className="text-sidebar-foreground/80 right-3 z-30 size-7 [&>svg]:size-4"
@@ -708,7 +702,6 @@ export function AppSidebar() {
           navigate={navigate}
           createConversationInWorkspace={createConversationInWorkspace}
           setActiveWorkspaceId={setActiveWorkspaceId}
-          hideFolderSettings
         />
       ) : null}
       {projectWorkspaces.length === 0 ? (

@@ -241,27 +241,9 @@ fn canvas_md_path(workspace_root: &Path, conversation_id: &str) -> PathBuf {
   canvas_dir(workspace_root).join(format!("{conversation_id}.md"))
 }
 
-fn memory_md_path(workspace_root: &Path) -> PathBuf {
-  braian_dir(workspace_root).join("MEMORY.md")
-}
-
 fn skill_main_path(workspace_root: &Path, slug: &str) -> PathBuf {
   skills_dir(workspace_root).join(slug).join("SKILL.md")
 }
-
-const MEMORY_MD_TEMPLATE: &str = r#"# Workspace memory
-
-Durable notes for this workspace (preferences, decisions, names). Braian may append when **automatic memory update** is enabled; you can edit freely.
-
-**Git:** This file may be committed. Do not store secrets or API keys here.
-
-## Preferences
-
-## Decisions
-
-## Open questions
-
-"#;
 
 pub(crate) fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> {
   let b = braian_dir(workspace_root);
@@ -288,11 +270,6 @@ pub(crate) fn ensure_braian_layout(workspace_root: &Path) -> Result<(), String> 
   if !schema_path.exists() {
     fs::create_dir_all(&b).map_err(|e| e.to_string())?;
     fs::write(&schema_path, "{\"version\":1}\n").map_err(|e| e.to_string())?;
-  }
-  let mem_path = memory_md_path(workspace_root);
-  if !mem_path.exists() {
-    fs::create_dir_all(&b).map_err(|e| e.to_string())?;
-    fs::write(&mem_path, MEMORY_MD_TEMPLATE).map_err(|e| e.to_string())?;
   }
   let mcp_path = b.join("mcp.json");
   if !mcp_path.exists() {

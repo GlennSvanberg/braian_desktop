@@ -1,12 +1,5 @@
-import { completeChatText } from '@/lib/ai/complete-text'
 import type { ChatMessage, ChatThreadState } from '@/lib/chat-sessions/types'
-import { workspaceReadTextFile, workspaceWriteTextFile } from '@/lib/workspace-api'
-
-import {
-  MEMORY_RELATIVE_PATH,
-  MEMORY_REVIEW_MAX_MESSAGES,
-  MEMORY_REVIEW_READ_MAX_BYTES,
-} from './constants'
+import { MEMORY_REVIEW_MAX_MESSAGES } from './constants'
 import { formatMessagesForMemoryReview } from './format-transcript'
 import {
   getLastReviewedUserMessageId,
@@ -15,17 +8,6 @@ import {
   writeMemoryReviewState,
 } from './review-state'
 import { queueStructuredSuggestionsFromReviewExcerpt } from './suggestion-extraction'
-
-const REVIEWER_SYSTEM = `You maintain a workspace memory file (Markdown) for Braian Desktop.
-
-Rules:
-- Output ONLY the full replacement Markdown body for the memory file. No preamble or explanation.
-- Prefer bullet lists under existing sections (Preferences, Decisions, Open questions). Add sections if needed.
-- Include only durable, workspace-specific facts that were stated or clearly implied in the conversation.
-- Merge with the previous memory: update contradictions, do not duplicate.
-- Omit transient chit-chat, one-off tasks, and tool error noise.
-- Never invent names, dates, or commitments that did not appear in the input.
-- Do not store secrets, API keys, or credentials.`
 
 export type MemoryReviewResult =
   | { ok: true; skipped: true; reason: string }
@@ -48,16 +30,6 @@ export function withMemoryReviewMutex<T>(
     ),
   )
   return result
-}
-
-export function parseMemoryMdOutput(raw: string): string {
-  let t = raw.trim()
-  const fence =
-    /^```(?:markdown|md)?\s*\n([\s\S]*?)\n```(?:\s*$|\s*\n)/m.exec(t)
-  if (fence) return fence[1].trim()
-  const loose = /^```(?:markdown|md)?\s*\n([\s\S]*?)\n```/m.exec(t)
-  if (loose) return loose[1].trim()
-  return t
 }
 
 function sliceMessagesSinceLastReview(
@@ -121,49 +93,14 @@ export async function runMemoryReviewForConversation(options: {
         }
       }
 
-      let memoryText = ''
-      try {
-        const r = await workspaceReadTextFile(
-          workspaceId,
-          MEMORY_RELATIVE_PATH,
-          MEMORY_REVIEW_READ_MAX_BYTES,
-        )
-        memoryText = r.text
-      } catch {
-        memoryText = ''
-      }
-
       const transcript = formatMessagesForMemoryReview(slice)
-      const userPayload = `Current memory file (\`${MEMORY_RELATIVE_PATH}\`):
 
----
-${memoryText.trim() || '(empty or missing)'}
----
-
-Conversation excerpt to merge (most recent turns; roles preserved):
-
----
-${transcript}
----
-
-Return the complete updated Markdown for the memory file only.`
-
-      const raw = await completeChatText({
-        systemPrompts: [REVIEWER_SYSTEM],
-        userMessage: userPayload,
+      await queueStructuredSuggestionsFromReviewExcerpt({
+        workspaceId,
+        conversationId,
+        transcriptExcerpt: transcript,
         signal,
       })
-
-      const nextMd = parseMemoryMdOutput(raw)
-      if (!nextMd.trim()) {
-        return { ok: false, error: 'Model returned empty memory content.' }
-      }
-
-      await workspaceWriteTextFile(
-        workspaceId,
-        MEMORY_RELATIVE_PATH,
-        nextMd.endsWith('\n') ? nextMd : `${nextMd}\n`,
-      )
 
       const lastUser = lastUserMessageId(thread.messages)
       const nextState = setLastReviewedUserMessageId(
@@ -172,13 +109,6 @@ Return the complete updated Markdown for the memory file only.`
         lastUser,
       )
       await writeMemoryReviewState(workspaceId, nextState)
-
-      void queueStructuredSuggestionsFromReviewExcerpt({
-        workspaceId,
-        conversationId,
-        transcriptExcerpt: transcript,
-        signal,
-      })
 
       return { ok: true, skipped: false }
     } catch (e) {

@@ -11,7 +11,7 @@ import {
 
 import { WorkspaceFolderManagementPanel } from '@/components/app/workspace-folder-management-panel'
 import { WorkspaceHistoryPanel } from '@/components/app/workspace-history-panel'
-import { WorkspaceMemorySettingsPanel } from '@/components/app/workspace-memory-settings-panel'
+import { WorkspaceWebappSettingsPanel } from '@/components/app/workspace-webapp-settings-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,8 @@ import { cn } from '@/lib/utils'
 
 export type WorkspaceSettingsScreenProps = {
   workspaceId: string
+  /** When omitted, uses `isTauri()` (e.g. standalone `/workspace/…/settings` route). */
+  isTauriRuntime?: boolean
 }
 
 type ConnKind = 'stdio' | 'remote'
@@ -157,6 +159,7 @@ function hydrateFormFromEntry(
 
 export function WorkspaceSettingsScreen({
   workspaceId: wsId,
+  isTauriRuntime: isTauriRuntimeProp,
 }: WorkspaceSettingsScreenProps) {
   const {
     workspaces,
@@ -173,7 +176,7 @@ export function WorkspaceSettingsScreen({
     setActiveWorkspaceId(wsId)
   }, [workspacesLoading, wsId, setActiveWorkspaceId])
 
-  const tauri = isTauri()
+  const tauri = isTauriRuntimeProp ?? isTauri()
   const [doc, setDoc] = useState<WorkspaceMcpConfigDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -589,15 +592,24 @@ export function WorkspaceSettingsScreen({
           <WorkspaceFolderManagementPanel workspaceId={wsId} />
         ) : null}
 
+        {wsId ? (
+          <WorkspaceWebappSettingsPanel
+            workspaceId={wsId}
+            isTauriRuntime={tauri}
+          />
+        ) : null}
+
         <div>
           <h1 className="text-text-1 text-lg font-semibold tracking-tight">
-            Workspace settings
+            Snapshots & MCP
           </h1>
           <p className="text-text-3 mt-1 text-sm leading-relaxed">
             <span className="text-text-2 font-medium">Snapshots</span> for file
             history and rollback, and{' '}
             <span className="text-text-2 font-medium">connections (MCP)</span>{' '}
-            for this workspace. MCP config lives in{' '}
+            for this workspace. Structured memory and preferences live under{' '}
+            <strong className="text-text-2">Dashboard → Memory</strong>. MCP
+            config lives in{' '}
             <code className="text-text-2 text-xs">.braian/mcp.json</code> using
             the same <code className="text-text-2 text-xs">mcpServers</code>{' '}
             shape as Cursor. Status uses a real MCP handshake (stdio or HTTP).
@@ -606,10 +618,6 @@ export function WorkspaceSettingsScreen({
             use Git—avoid secrets in tracked files.
           </p>
         </div>
-
-        {tauri && wsId ? (
-          <WorkspaceMemorySettingsPanel workspaceId={wsId} />
-        ) : null}
 
         {tauri && wsId ? (
           <WorkspaceHistoryPanel workspaceId={wsId} />
@@ -627,7 +635,7 @@ export function WorkspaceSettingsScreen({
             {workspacesLoading
               ? 'Loading workspaces…'
               : loadError === 'Workspace not found.'
-                ? 'This workspace is not in your list. Add the folder again from Dashboard → Workspace settings → Workspace folder.'
+                ? 'This workspace is not in your list. Add the folder again from Dashboard → Settings → Workspace folder.'
                 : 'Open workspace settings from the gear icon next to a workspace in the sidebar.'}
           </p>
         ) : null}

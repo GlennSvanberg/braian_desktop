@@ -42,7 +42,7 @@ A **retrieval layer** over the workspace: searchable chunks and paths, not a sec
 
 ### 5. Preference memory
 
-**Explicit** preferences and corrections—scoped globally, per workspace, or per session where supported. Workspace defaults can live in `**.braian/preferences/workspace-preferences.json`** (for example opting out of injecting legacy `**MEMORY.md**` when you no longer need it).
+**Explicit** preferences you want the model to respect can live as **structured records** under `**.braian/memory/preferences/`** (via `remember_workspace_preference` and related tools), with prose-style workspace norms in root **`AGENTS.md`**.
 
 ## Design principles
 
@@ -61,7 +61,7 @@ Typical locations (not every file exists until used):
 | `conversations/`          | Full transcript JSON per chat                    |
 | `conversation-summaries/` | Rolling summary, open loops, important decisions |
 | `memory/`                 | Structured JSON records + `index.md`             |
-| `preferences/`            | Workspace preference JSON                        |
+| `preferences/`            | Optional app-local files (not used for prompt injection) |
 | `retrieval/`              | Derived index state (when used)                  |
 
 
@@ -71,7 +71,7 @@ The app may also use a **SQLite** database under the application data directory 
 
 The product evolves incrementally. In broad strokes:
 
-- **In place:** `AGENTS.md` loading; token-budgeted history with rolling summaries; structured semantic memory files and tools; conversation archive and summary tools; optional workspace preferences injection; lexical codebase search helpers tied to memory; SQLite indexing for memory entries; optional post–memory-review **suggestion** queue for future structured entries.
+- **In place:** `AGENTS.md` loading; token-budgeted history with rolling summaries; structured semantic memory files and tools; conversation archive and summary tools; lexical codebase search helpers tied to memory; SQLite indexing for memory entries; optional post–memory-review **suggestion** queue for future structured entries.
 - **Still maturing:** Full memory management UI (browse, edit, validate, suggestion review), stronger staleness and validation automation, and a full hybrid codebase index (embeddings + symbols) as described in the engineering plan.
 
 For the full phased implementation notes and open questions, see `**MEMORY_PLAN.md`** in the repository root (contributor-facing).

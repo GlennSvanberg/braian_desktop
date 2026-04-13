@@ -10,14 +10,12 @@ For a normal chat attached to a **workspace folder** (not "new chat" without a f
 
 1. **Routing (Core)** — A numbered **decision tree** for the current turn, plus a short addendum for **document/triage** or **code** mode, and in **App** mode an extra **App mode** subsection (workspace webapp, live preview).
 2. **Skills** — A **catalog** listing every skill's `name`, `description`, and main path (usually `.braian/skills/<slug>/SKILL.md`) as metadata only. Full skill bodies load **on demand** via `read_workspace_skill`.
-3. **User context** — Your saved **profile** (sidebar → **You**) and the app's **current client time**.
-4. **Workspace preferences** (if the file exists) — **`.braian/preferences/workspace-preferences.json`**. JSON may include **`injectLegacyMemoryMd: false`** to omit legacy **`.braian/MEMORY.md`** from the prompt.
-5. **Workspace instructions** — Root **`AGENTS.md`** when present (size-capped).
-6. **Earlier conversation (summary)** / **Important decisions** / **Open loops** — From the rolling **`.braian/conversation-summaries/<id>.summary.json`** when history is token-trimmed or the file has content; includes **important decisions** extracted during compaction.
-7. **Structured workspace memory** — Active entries from **`.braian/memory/**/*.json`** (generated overview: `.braian/memory/index.md`).
-8. **Workspace memory (`MEMORY.md`)** — Legacy markdown notes from **`.braian/MEMORY.md`** when non-empty.
-9. **Full transcript** — Pointer to **`.braian/conversations/<id>.json`** and tools to search older messages (`search_conversation_archive`, `open_conversation_span`, `get_conversation_summary`).
-10. **This turn** — Optional blocks when relevant:
+3. **User context** — **Current client time** (workspace chats do not inject your global profile; the **You** / profile coach chat uses profile sections instead).
+4. **Workspace instructions** — Root **`AGENTS.md`** when present (size-capped).
+5. **Earlier conversation (summary)** / **Important decisions** / **Open loops** — From the rolling **`.braian/conversation-summaries/<id>.summary.json`** when history is token-trimmed or the file has content; includes **important decisions** extracted during compaction.
+6. **Structured workspace memory** — Active entries from **`.braian/memory/**/*.json`** (generated overview: `.braian/memory/index.md`).
+7. **Full transcript** — Pointer to **`.braian/conversations/<id>.json`** and tools to search older messages (`search_conversation_archive`, `open_conversation_span`, `get_conversation_summary`).
+8. **This turn** — Optional blocks when relevant:
    - **Attached workspace files** (excerpts from @-attachments),
    - **Prior conversations** (attached),
    - **Document canvas snapshot** (latest side-panel markdown + **revision**, optional **selection** excerpt),

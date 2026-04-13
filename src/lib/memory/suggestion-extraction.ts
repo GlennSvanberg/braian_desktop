@@ -47,7 +47,7 @@ function parseJsonObject(raw: string): unknown {
 }
 
 /**
- * After a successful markdown memory review, optionally queue structured-memory suggestions (file-backed).
+ * After an automatic memory review pass, optionally queue structured-memory suggestions (file-backed).
  * Best-effort: failures are logged and do not throw.
  */
 export async function queueStructuredSuggestionsFromReviewExcerpt(options: {

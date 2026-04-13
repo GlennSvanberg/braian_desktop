@@ -9,7 +9,7 @@ export type BuildRoutingPromptOptions = {
   hasMcpTools: boolean
   /** OpenAI/Anthropic `web_search` or Gemini `google_search` is registered for this turn. */
   hasProviderWebSearch?: boolean
-  /** `add_workspace_memory` — append to `.braian/MEMORY.md` for this workspace. */
+  /** `add_workspace_memory` — append structured JSON under `.braian/memory/`. */
   hasWorkspaceMemoryTool?: boolean
   mcpServerNames?: string[]
   inactiveMcpServerNames?: string[]
@@ -30,15 +30,15 @@ function buildProviderWebSearchLine(
   options: BuildRoutingPromptOptions,
 ): string | null {
   if (!options.hasProviderWebSearch) return null
-  return '**Live web:** For current events, fresh facts, or information likely after your training cutoff, call the provider native search tool when it helps: **`web_search`** (OpenAI and Anthropic) or **`google_search`** (Google Gemini). Prefer workspace files, attachments, and MEMORY when they already answer the question. Summarize what the tool returns and cite sources when the tool provides them.'
+  return '**Live web:** For current events, fresh facts, or information likely after your training cutoff, call the provider native search tool when it helps: **`web_search`** (OpenAI and Anthropic) or **`google_search`** (Google Gemini). Prefer workspace files, attachments, and structured workspace memory when they already answer the question. Summarize what the tool returns and cite sources when the tool provides them.'
 }
 
 function buildWebappRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasSwitchToAppBuilder) {
-    return '**Braian workspace webapp** — real interactive UI (forms, React): call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and webapp helper tools unlock. Edit `.braian/webapp/src/**`; use `init_workspace_webapp` if there is no `package.json`; use `publish_workspace_webapp` when the user should update the **published** app shown on **Dashboard → Apps**. **Dashboard → App settings** has template, deps, and dev preview. App-mode **artifact** starts dev preview automatically when possible. Do **not** use standalone `.html` only when the user asked for the in-workspace Vite app. **New mini-apps:** always a sub-route (`/email-checker`, etc.) via `app-routes.tsx` + `src/pages/` — **never** implement new features on `/` or replace the My apps landing.'
+    return '**Braian workspace webapp** — real interactive UI (forms, React): call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and webapp helper tools unlock. Edit `.braian/webapp/src/**`; use `init_workspace_webapp` if there is no `package.json`; use `publish_workspace_webapp` when the user should update the **published** app shown on **Dashboard → Apps**. **Dashboard → Settings** has template, deps, and dev preview. App-mode **artifact** starts dev preview automatically when possible. Do **not** use standalone `.html` only when the user asked for the in-workspace Vite app. **New mini-apps:** always a sub-route (`/email-checker`, etc.) via `app-routes.tsx` + `src/pages/` — **never** implement new features on `/` or replace the My apps landing.'
   }
   if (options.hasWebappTools) {
-    return '**Braian workspace webapp** — implement UI in `.braian/webapp/` (Vite + React). Use file and shell tools plus `init_workspace_webapp`, `publish_workspace_webapp`, and `read_workspace_webapp_dev_logs` when relevant. **Dashboard → Apps** shows the **published** build only; **Dashboard → App settings** has template, deps, and dev preview (legacy URLs `/workspace/<id>/webapp` still work). App-mode **artifact** auto-starts dev preview when possible. Do **not** satisfy webapp requests with unrelated standalone `.html` only. **New mini-apps** go on their own path (`/slug`); not on `/`.'
+    return '**Braian workspace webapp** — implement UI in `.braian/webapp/` (Vite + React). Use file and shell tools plus `init_workspace_webapp`, `publish_workspace_webapp`, and `read_workspace_webapp_dev_logs` when relevant. **Dashboard → Apps** shows the **published** build only; **Dashboard → Settings** has template, deps, and dev preview (legacy URLs `/workspace/<id>/webapp` still work). App-mode **artifact** auto-starts dev preview when possible. Do **not** satisfy webapp requests with unrelated standalone `.html` only. **New mini-apps** go on their own path (`/slug`); not on `/`.'
   }
   return null
 }
@@ -82,7 +82,7 @@ function buildWorkspaceMemoryRoutingLine(
   options: BuildRoutingPromptOptions,
 ): string | null {
   if (!options.hasWorkspaceMemoryTool) return null
-  return '**Workspace memory:** When the user asks to **remember** something for **this workspace** (coding conventions, project names, “always do X”, durable preferences), call **`add_workspace_memory`** with concise markdown (usually bullets). Do not use `update_user_profile` for workspace-only facts; do not rely on file-write tools for this when `add_workspace_memory` is available. Never store secrets or API keys.'
+  return '**Workspace memory:** When the user asks to **remember** something for **this workspace** (coding conventions, project names, “always do X”, durable preferences), call **`add_workspace_memory`** with concise markdown (usually bullets); it is stored as structured JSON under `.braian/memory/`. Do not use `update_user_profile` for workspace-only facts; do not rely on generic file-write tools for this when `add_workspace_memory` is available. Never store secrets or API keys.'
 }
 
 function buildUnsavedChatLine(options: BuildRoutingPromptOptions): string | null {
@@ -154,8 +154,8 @@ You build the workspace **Vite + React** app under \`.braian/webapp/\`.
 - Use \`init_workspace_webapp\` when \`package.json\` is missing or the user wants the template reset (\`overwrite: true\`).
 - Use \`publish_workspace_webapp\` when the user wants **Dashboard → Apps** to show the latest UI (or after major changes they care about).
 - Use \`read_workspace_webapp_dev_logs\` for output from the Braian-managed Vite dev process after preview issues.
-- **Published vs dev:** **Dashboard → Apps** shows only the **published** build; **Dashboard → App settings** has dev preview and template tools (legacy **Webapp** URLs still work). In **App mode**, the **artifact** panel runs **dev preview** (auto-started when possible). Publish again to refresh the Apps tab.
+- **Published vs dev:** **Dashboard → Apps** shows only the **published** build; **Dashboard → Settings** has dev preview and template tools (legacy **Webapp** URLs still work). In **App mode**, the **artifact** panel runs **dev preview** (auto-started when possible). Publish again to refresh the Apps tab.
 - If a **document canvas snapshot** is present, focus on the surface the user is clearly iterating on.`
 
 /** Fallback if \`.braian/skills/app-builder/SKILL.md\` is missing or invalid (no frontmatter). */
-export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). **\`/\` is only My apps** (\`MyAppsLandingPage\` in \`app-routes.tsx\`). **Every** new mini-app — including “simple” tools — goes on **\`/kebab-slug\`**: new \`src/pages/*Page.tsx\`, append \`APP_ROUTES\`, preview path = that slug (not \`/\`). Never replace the landing or root route with feature UI. Use semantic theme classes; keep \`BraianShell\` in \`App.tsx\`. **Dashboard → Apps** is **published** only; **Dashboard → App settings** has dev preview and template; use \`publish_workspace_webapp\` (or UI Publish) to refresh the published app. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` — not \`npm run dev\`. Use \`init_workspace_webapp\` when needed; \`read_workspace_webapp_dev_logs\` for dev-server issues.`
+export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). **\`/\` is only My apps** (\`MyAppsLandingPage\` in \`app-routes.tsx\`). **Every** new mini-app — including “simple” tools — goes on **\`/kebab-slug\`**: new \`src/pages/*Page.tsx\`, append \`APP_ROUTES\`, preview path = that slug (not \`/\`). Never replace the landing or root route with feature UI. Use semantic theme classes; keep \`BraianShell\` in \`App.tsx\`. **Dashboard → Apps** is **published** only; **Dashboard → Settings** has dev preview and template; use \`publish_workspace_webapp\` (or UI Publish) to refresh the published app. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` — not \`npm run dev\`. Use \`init_workspace_webapp\` when needed; \`read_workspace_webapp_dev_logs\` for dev-server issues.`

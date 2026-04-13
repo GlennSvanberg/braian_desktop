@@ -775,10 +775,10 @@ export function WorkspaceWebappPreviewCore({
                     Open the{' '}
                     <Link
                       to="/dashboard"
-                      search={{ tab: 'app-settings' }}
+                      search={{ tab: 'workspace-settings' }}
                       className="text-text-2 font-medium underline-offset-2 hover:underline"
                     >
-                      App settings
+                      Settings
                     </Link>{' '}
                     tab on the Dashboard to publish and manage the app.
                   </>

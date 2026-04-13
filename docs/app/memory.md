@@ -21,13 +21,7 @@ Braian stores **durable workspace context** on disk so the assistant can reuse f
 - **`get_conversation_summary`** — Read the current chat’s rolling summary JSON.
 - **`search_codebase_index`** / **`get_related_files_for_memory`** — Lexical workspace search and file refs from a memory entry.
 
-## Workspace preferences (optional)
-
-If present, **`.braian/preferences/workspace-preferences.json`** is injected as its own system section.
-
-Optional JSON fields:
-
-- **`injectLegacyMemoryMd`** (boolean, default `true`) — When set to **`false`**, the legacy **`.braian/MEMORY.md`** file is **not** injected into the model (structured memory under `.braian/memory/` and other layers still apply). Use this when structured JSON memory is sufficient and you want a smaller prompt.
+If you previously used **`.braian/preferences/workspace-preferences.json`**, that file is no longer read by the app — move anything the model should still follow into root **`AGENTS.md`** (prose) or structured memory under **`.braian/memory/`**, then delete the old JSON if you like.
 
 ## Suggestion queue
 

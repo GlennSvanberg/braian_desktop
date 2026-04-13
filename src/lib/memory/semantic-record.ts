@@ -11,8 +11,14 @@ export const MEMORY_ENTRY_STATUSES = [
 
 export type MemoryEntryStatus = (typeof MEMORY_ENTRY_STATUSES)[number]
 
-export const MEMORY_SCOPES = ['workspace', 'global', 'session'] as const
+/** Workspace-scoped only; `global` from older files is coerced to `workspace` at parse time. */
+export const MEMORY_SCOPES = ['workspace', 'session'] as const
 export type MemoryScope = (typeof MEMORY_SCOPES)[number]
+
+const scopeSchema = z.preprocess(
+  (v) => (v === 'global' ? 'workspace' : v),
+  z.enum(['workspace', 'session']),
+)
 
 const sourceRefFile = z.object({
   type: z.literal('file'),
@@ -48,7 +54,7 @@ export const semanticMemoryRecordSchemaV1 = z.object({
     'episode',
     'pattern',
   ]),
-  scope: z.enum(['workspace', 'global', 'session']),
+  scope: scopeSchema,
   text: z.string(),
   summary: z.string(),
   confidence: z.number().min(0).max(1),

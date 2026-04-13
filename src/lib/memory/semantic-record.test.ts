@@ -26,6 +26,27 @@ describe('semanticMemoryRecordSchemaV1', () => {
     expect(r.success).toBe(true)
   })
 
+  it('coerces legacy global scope to workspace', () => {
+    const raw = {
+      schemaVersion: 1,
+      id: 'mem_x',
+      kind: 'fact',
+      scope: 'global',
+      text: 't',
+      summary: 's',
+      confidence: 1,
+      status: 'active',
+      tags: [],
+      sourceRefs: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      supersedes: [],
+    }
+    const r = semanticMemoryRecordSchemaV1.safeParse(raw)
+    expect(r.success).toBe(true)
+    if (r.success) expect(r.data.scope).toBe('workspace')
+  })
+
   it('rejects invalid status', () => {
     const raw = {
       schemaVersion: 1,

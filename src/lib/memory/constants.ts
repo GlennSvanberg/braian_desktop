@@ -1,6 +1,3 @@
-/** Workspace-relative path to durable memory markdown. */
-export const MEMORY_RELATIVE_PATH = '.braian/MEMORY.md'
-
 /** Compatibility instruction file at workspace root (agent workspaces). */
 export const AGENTS_RELATIVE_PATH = 'AGENTS.md'
 
@@ -24,12 +21,6 @@ export const CONVERSATION_TRANSCRIPT_READ_MAX_BYTES = 8 * 1024 * 1024
 
 /** Workspace-relative JSON: last-reviewed message ids per conversation. */
 export const MEMORY_REVIEW_STATE_RELATIVE_PATH = '.braian/memory-review-state.json'
-
-/** Max bytes read from MEMORY.md when injecting into chat context. */
-export const MEMORY_INJECT_MAX_BYTES = 24 * 1024
-
-/** Max bytes when loading MEMORY.md for the review model (full file for merge). */
-export const MEMORY_REVIEW_READ_MAX_BYTES = 512 * 1024
 
 /** Idle debounce before running auto memory review (ms). */
 export const MEMORY_REVIEW_DEBOUNCE_MS = 3 * 60 * 1000
@@ -61,7 +52,3 @@ export const SEMANTIC_MEMORY_INJECT_MAX_BYTES = 24 * 1024
 
 /** Pending promotion suggestions (file-backed queue). */
 export const SEMANTIC_MEMORY_SUGGESTIONS_DIR = '.braian/memory/_suggestions'
-
-/** Workspace-scoped preference JSON (Phase 5). */
-export const WORKSPACE_PREFERENCES_RELATIVE_PATH =
-  '.braian/preferences/workspace-preferences.json'

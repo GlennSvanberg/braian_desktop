@@ -166,7 +166,7 @@ The following are **done** in code; they are not replanned except for P1-close a
 
 **Deliverables**
 
-1. **Models:** Three scopes with defined storage: **global** (app data directory JSON), **workspace** (`.braian/preferences/workspace-preferences.json` plus structured preference records under `.braian/memory/preferences/` as already used), **session** (ephemeral or session-scoped file under `.braian/` if persisted per session id).
+1. **Models:** Three scopes with defined storage: **global** (app data directory JSON), **workspace** (root `AGENTS.md` for prose plus structured preference records under `.braian/memory/preferences/` as already used), **session** (ephemeral or session-scoped file under `.braian/` if persisted per session id).
 2. **Injection:** Merge preferences into context assembly per MEMORY_PLAN order after AGENTS.md and user profile as specified in the plan.
 3. **Repeated correction:** Detector writes **preference candidates** into the P2c suggestion queue rather than auto-writing durable prefs.
 4. **Editing:** CRUD via APIs used by P6 UI; session scope may be read-only in UI if product prefers.

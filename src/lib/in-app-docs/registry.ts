@@ -57,20 +57,20 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'dashboard',
     title: 'Workspace dashboard',
     description:
-      'Dashboard route: Dashboard (hub), Apps, App settings, Workspace settings; Vite project under .braian/webapp.',
+      'Dashboard route: Dashboard (hub), Apps, Settings (webapp + workspace tools), Memory; Vite project under .braian/webapp.',
     body: dashboardMd,
   },
   {
     slug: 'memory',
     title: 'Memory',
-    description: 'Workspace MEMORY.md, injection, and how it updates.',
+    description: 'Structured workspace memory and AGENTS.md.',
     body: memoryMd,
   },
   {
     slug: 'how-memory-works',
     title: 'How memory works',
     description:
-      'Layered memory architecture: instructions, working set, semantic memory, codebase retrieval, and preferences.',
+      'Layered memory architecture: instructions, working set, semantic memory, and codebase retrieval.',
     body: howMemoryWorksMd,
   },
   {

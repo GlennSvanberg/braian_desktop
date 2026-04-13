@@ -45,7 +45,10 @@ export type WorkspaceTextFileCanvasProps = {
   title?: string
   /** Registers live buffer for the model (fresher than debounced disk + thread patch). */
   liveSessionKey?: string
-  sessionKey: string
+  /** When set, also patches the open chat artifact so the side panel stays in sync. */
+  sessionKey?: string
+  /** Called after each successful write to disk (including debounced saves). */
+  onPersistSuccess?: () => void
   className?: string
 }
 
@@ -57,6 +60,7 @@ export function WorkspaceTextFileCanvas({
   title,
   liveSessionKey,
   sessionKey,
+  onPersistSuccess,
   className,
 }: WorkspaceTextFileCanvasProps) {
   const [text, setText] = useState(body)
@@ -103,14 +107,17 @@ export function WorkspaceTextFileCanvas({
       try {
         setWriteError(null)
         await workspaceWriteTextFile(workspaceId, relativePath, next)
-        patchWorkspaceFileArtifactBody(sessionKey, next)
+        if (sessionKey) {
+          patchWorkspaceFileArtifactBody(sessionKey, next)
+        }
         lastSyncedRef.current = next
+        onPersistSuccess?.()
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setWriteError(msg)
       }
     },
-    [workspaceId, relativePath, sessionKey],
+    [workspaceId, relativePath, sessionKey, onPersistSuccess],
   )
 
   const onChange = useCallback(

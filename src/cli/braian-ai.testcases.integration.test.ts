@@ -179,7 +179,7 @@ describe('testcases.md (CLI: braian-ai dump-request)', () => {
   )
 
   it(
-    '§5 MEMORY.md — Node CLI has no Tauri file read; memory block is omitted (desktop verifies injection)',
+    '§5 Legacy MEMORY.md block removed; no memory id in Node CLI dump',
     { timeout: 60_000 },
     () => {
       const snap = runDumpRequest('What product name should you use?', {

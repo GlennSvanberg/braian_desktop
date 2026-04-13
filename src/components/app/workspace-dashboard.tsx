@@ -5,7 +5,6 @@ import { MemoryManagementScreen } from '@/components/app/memory-management-scree
 import { WorkspaceHubOverview } from '@/components/app/workspace-hub-overview'
 import { WorkspaceSettingsScreen } from '@/components/app/workspace-settings-screen'
 import { WorkspaceWebappPanel } from '@/components/app/workspace-webapp-panel'
-import { WorkspaceWebappSettingsPanel } from '@/components/app/workspace-webapp-settings-panel'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 
@@ -14,14 +13,15 @@ import { useWorkspace } from './workspace-context'
 export type DashboardTab =
   | 'overview'
   | 'apps'
-  | 'app-settings'
   | 'workspace-settings'
   | 'memory'
 
 function parseDashboardTabValue(t: unknown): DashboardTab {
+  if (t === 'app-settings') {
+    return 'workspace-settings'
+  }
   if (
     t === 'apps' ||
-    t === 'app-settings' ||
     t === 'overview' ||
     t === 'workspace-settings' ||
     t === 'memory'
@@ -42,7 +42,8 @@ export function parseDashboardTabFromSearchStr(searchStr: string): DashboardTab 
 
 const dashboardTabTriggerClass = cn(
   'rounded-md px-3 py-2',
-  'data-[state=active]:after:opacity-0',
+  // Default list variant (not "line") avoids the TabsTrigger ::after underline entirely.
+  'group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none',
   'data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground',
   'dark:data-[state=active]:!bg-primary dark:data-[state=active]:!text-primary-foreground',
   'data-[state=inactive]:text-foreground/60 hover:data-[state=inactive]:text-foreground',
@@ -61,8 +62,7 @@ export function WorkspaceDashboard({
   isTauriRuntime,
 }: Props) {
   const navigate = useNavigate()
-  const { activeWorkspace, conversationsByWorkspace } = useWorkspace()
-  const workspaceName = activeWorkspace?.name ?? 'Workspace'
+  const { conversationsByWorkspace } = useWorkspace()
   const conversations = conversationsByWorkspace[workspaceId] ?? []
 
   let body: ReactNode
@@ -70,7 +70,6 @@ export function WorkspaceDashboard({
     body = (
       <WorkspaceHubOverview
         workspaceId={workspaceId}
-        workspaceName={workspaceName}
         isTauriRuntime={isTauriRuntime}
         conversations={conversations}
       />
@@ -78,14 +77,6 @@ export function WorkspaceDashboard({
   } else if (tab === 'apps') {
     body = (
       <WorkspaceWebappPanel
-        workspaceId={workspaceId}
-        isTauriRuntime={isTauriRuntime}
-        className="min-h-0 flex-1"
-      />
-    )
-  } else if (tab === 'app-settings') {
-    body = (
-      <WorkspaceWebappSettingsPanel
         workspaceId={workspaceId}
         isTauriRuntime={isTauriRuntime}
         className="min-h-0 flex-1"
@@ -99,7 +90,12 @@ export function WorkspaceDashboard({
       />
     )
   } else {
-    body = <WorkspaceSettingsScreen workspaceId={workspaceId} />
+    body = (
+      <WorkspaceSettingsScreen
+        workspaceId={workspaceId}
+        isTauriRuntime={isTauriRuntime}
+      />
+    )
   }
 
   return (
@@ -115,10 +111,7 @@ export function WorkspaceDashboard({
             })
           }}
         >
-          <TabsList
-            variant="line"
-            className="h-auto w-full justify-start gap-1 rounded-none bg-transparent p-0"
-          >
+          <TabsList className="h-auto w-full justify-start gap-1 rounded-none bg-transparent p-0">
             <TabsTrigger
               value="overview"
               className={dashboardTabTriggerClass}
@@ -129,16 +122,10 @@ export function WorkspaceDashboard({
               Apps
             </TabsTrigger>
             <TabsTrigger
-              value="app-settings"
-              className={dashboardTabTriggerClass}
-            >
-              App settings
-            </TabsTrigger>
-            <TabsTrigger
               value="workspace-settings"
               className={dashboardTabTriggerClass}
             >
-              Workspace settings
+              Settings
             </TabsTrigger>
             <TabsTrigger value="memory" className={dashboardTabTriggerClass}>
               Memory

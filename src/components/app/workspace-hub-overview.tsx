@@ -1,13 +1,22 @@
 import { Link, useNavigate } from '@tanstack/react-router'
+import type { LucideIcon } from 'lucide-react'
 import {
+  Activity,
   ArrowRight,
+  Bell,
   Brain,
   Calculator,
   FileText,
+  GitBranch,
+  Info,
   LayoutGrid,
   MessageSquare,
+  Package,
+  Pin,
+  Plug,
   Sparkles,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useWorkspace } from '@/components/app/workspace-context'
@@ -15,12 +24,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
 import { loadHubRecentApps, touchHubRecentApp, type HubRecentAppEntry } from '@/lib/hub-recent-apps'
-import {
-  AGENTS_RELATIVE_PATH,
-  MEMORY_INJECT_MAX_BYTES,
-  MEMORY_RELATIVE_PATH,
-  SEMANTIC_MEMORY_INDEX_RELATIVE_PATH,
-} from '@/lib/memory/constants'
+import { AGENTS_RELATIVE_PATH } from '@/lib/memory/constants'
 import {
   acceptMemorySuggestion,
   dismissMemorySuggestion,
@@ -43,9 +47,15 @@ import { workspaceGitListCheckpoints, workspaceGitStatus } from '@/lib/workspace
 import { isTauri } from '@/lib/tauri-env'
 import { cn } from '@/lib/utils'
 
+/** Matches `DashboardTab` in workspace-dashboard (avoid circular import). */
+type HubDashboardTab =
+  | 'overview'
+  | 'apps'
+  | 'workspace-settings'
+  | 'memory'
+
 type Props = {
   workspaceId: string
-  workspaceName: string
   isTauriRuntime: boolean
   conversations: ConversationDto[]
 }
@@ -78,29 +88,6 @@ function hubGridSpanClass(type: HubDashboardSection['type']): string {
   return ''
 }
 
-function memorySnippetFromText(text: string, maxLen: number): string {
-  const oneLine = text.replace(/\s+/g, ' ').trim()
-  if (oneLine.length <= maxLen) return oneLine
-  return `${oneLine.slice(0, maxLen - 1)}…`
-}
-
-function snippetFromIndexMarkdown(raw: string, maxLen: number): string | null {
-  const lines = raw.split(/\r?\n/)
-  const parts: string[] = []
-  for (const line of lines) {
-    const t = line.trim()
-    if (!t) {
-      if (parts.length) break
-      continue
-    }
-    if (t.startsWith('#')) continue
-    parts.push(t)
-    if (parts.join(' ').length > maxLen * 2) break
-  }
-  const joined = parts.join(' ').trim()
-  return joined ? memorySnippetFromText(joined, maxLen) : null
-}
-
 function formatShortTime(ms: number): string {
   const d = Date.now() - ms
   if (d < 60_000) return 'Just now'
@@ -109,9 +96,114 @@ function formatShortTime(ms: number): string {
   return new Date(ms).toLocaleDateString()
 }
 
+type HubSectionTint = 'accent' | 'info' | 'warning' | 'success'
+
+function hubSectionTintClass(tint: HubSectionTint): string {
+  if (tint === 'info') return 'bg-info/12 text-info'
+  if (tint === 'warning') return 'bg-warning/12 text-warning'
+  if (tint === 'success') return 'bg-success/12 text-success'
+  return 'bg-attention-soft text-attention'
+}
+
+function HubSectionHeader({
+  icon: Icon,
+  title,
+  tint = 'accent',
+  right,
+}: {
+  icon: LucideIcon
+  title: string
+  tint?: HubSectionTint
+  right?: ReactNode
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <div
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-lg',
+            hubSectionTintClass(tint),
+          )}
+        >
+          <Icon className="size-[1.125rem]" aria-hidden />
+        </div>
+        <h3 className="text-text-1 text-sm font-semibold tracking-tight">{title}</h3>
+      </div>
+      {right}
+    </div>
+  )
+}
+
+type AttentionTone = 'attention' | 'warning' | 'info'
+
+type AttentionDestination =
+  | { type: 'dashboard'; tab: HubDashboardTab }
+  | { type: 'chat'; conversationId: string }
+
+type AttentionStripItem = {
+  id: string
+  label: string
+  Icon: LucideIcon
+  tone: AttentionTone
+  to: AttentionDestination
+}
+
+function notificationChipClass(tone: AttentionTone): string {
+  if (tone === 'warning') {
+    return 'border-warning/35 bg-warning/10 text-text-1 hover:bg-warning/15'
+  }
+  if (tone === 'info') {
+    return 'border-info/35 bg-info/10 text-text-1 hover:bg-info/15'
+  }
+  return 'border-[color:color-mix(in_srgb,var(--app-attention)_32%,transparent)] bg-attention-soft text-attention hover:brightness-110'
+}
+
+function HubNotificationChip({ item }: { item: AttentionStripItem }) {
+  const Icon = item.Icon
+  const chip = cn(
+    'inline-flex max-w-[min(100%,17rem)] shrink-0 items-center gap-1 rounded-full border px-2 py-1.5 text-xs font-medium transition-colors',
+    notificationChipClass(item.tone),
+  )
+  const inner = (
+    <>
+      <Icon className="size-3.5 shrink-0 opacity-90" aria-hidden />
+      <span className="min-w-0 truncate">{item.label}</span>
+      <ArrowRight className="text-text-3 size-3 shrink-0 opacity-80" aria-hidden />
+    </>
+  )
+  if (item.to.type === 'chat') {
+    return (
+      <Link
+        to="/chat/$conversationId"
+        params={{ conversationId: item.to.conversationId }}
+        className={chip}
+      >
+        {inner}
+      </Link>
+    )
+  }
+  return (
+    <Link to="/dashboard" search={{ tab: item.to.tab }} className={chip}>
+      {inner}
+    </Link>
+  )
+}
+
+function HubRowIcon({ icon: Icon, tint = 'accent' }: { icon: LucideIcon; tint?: HubSectionTint }) {
+  return (
+    <div
+      className={cn(
+        'flex size-8 shrink-0 items-center justify-center rounded-md',
+        hubSectionTintClass(tint),
+      )}
+    >
+      <Icon className="size-4" aria-hidden />
+    </div>
+  )
+}
+
 export function WorkspaceHubOverview({
   workspaceId,
-  workspaceName,
   isTauriRuntime,
   conversations,
 }: Props) {
@@ -128,8 +220,6 @@ export function WorkspaceHubOverview({
         },
   )
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [memorySnippet, setMemorySnippet] = useState<string | null>(null)
-  const [indexSnippet, setIndexSnippet] = useState<string | null>(null)
   const [agentsFilePresent, setAgentsFilePresent] = useState(false)
   const [publishStatus, setPublishStatus] = useState<Awaited<
     ReturnType<typeof workspaceWebappPublishStatus>
@@ -146,7 +236,6 @@ export function WorkspaceHubOverview({
   const [busySuggestionPath, setBusySuggestionPath] = useState<string | null>(
     null,
   )
-
   const reload = useCallback(async () => {
     if (!isTauriRuntime) {
       setSnapshot({
@@ -159,8 +248,6 @@ export function WorkspaceHubOverview({
       setGitStatus(null)
       setLastCheckpointMs(null)
       setMcpServerCount(0)
-      setMemorySnippet(null)
-      setIndexSnippet(null)
       setAgentsFilePresent(false)
       setRecentApps([])
       setPendingSuggestions([])
@@ -168,22 +255,12 @@ export function WorkspaceHubOverview({
     }
     setLoadError(null)
     try {
-      const [snap, pub, gs, mcp, mem, idx, agentsProbe, sug, appsRecent] =
+      const [snap, pub, gs, mcp, agentsProbe, sug, appsRecent] =
         await Promise.all([
           workspaceHubSnapshot(workspaceId),
           workspaceWebappPublishStatus(workspaceId),
           workspaceGitStatus(workspaceId),
           workspaceMcpConfigGet(workspaceId),
-          workspaceReadTextFile(
-            workspaceId,
-            MEMORY_RELATIVE_PATH,
-            MEMORY_INJECT_MAX_BYTES,
-          ).catch(() => null),
-          workspaceReadTextFile(
-            workspaceId,
-            SEMANTIC_MEMORY_INDEX_RELATIVE_PATH,
-            8192,
-          ).catch(() => null),
           workspaceReadTextFile(workspaceId, AGENTS_RELATIVE_PATH, 16).catch(
             () => null,
           ),
@@ -197,16 +274,6 @@ export function WorkspaceHubOverview({
       setPendingSuggestions(sug)
       setRecentApps(appsRecent)
 
-      if (mem?.text?.trim()) {
-        setMemorySnippet(memorySnippetFromText(mem.text, 220))
-      } else {
-        setMemorySnippet(null)
-      }
-      if (idx?.text?.trim()) {
-        setIndexSnippet(snippetFromIndexMarkdown(idx.text, 280))
-      } else {
-        setIndexSnippet(null)
-      }
       setAgentsFilePresent(Boolean(agentsProbe?.text?.length))
 
       const checkpoints = await workspaceGitListCheckpoints(workspaceId)
@@ -253,26 +320,60 @@ export function WorkspaceHubOverview({
 
   const pendingSuggestionCount = pendingSuggestions.length
 
-  const heuristicInsights = useMemo(() => {
-    const lines: string[] = []
-    if (unreadCount > 0) {
-      lines.push(
-        `You have ${unreadCount} conversation${unreadCount === 1 ? '' : 's'} with new activity.`,
-      )
-    }
+  const attentionStripItems = useMemo((): AttentionStripItem[] => {
+    const items: AttentionStripItem[] = []
+    const firstUnread = sortedConversations.find((c) => c.unread)
     if (pendingSuggestionCount > 0) {
-      lines.push(
-        `${pendingSuggestionCount} structured memory suggestion${pendingSuggestionCount === 1 ? '' : 's'} pending review.`,
-      )
+      items.push({
+        id: 'memory-suggestions',
+        label: `${pendingSuggestionCount} memory suggestion${pendingSuggestionCount === 1 ? '' : 's'} to review`,
+        Icon: Brain,
+        tone: 'warning',
+        to: { type: 'dashboard', tab: 'memory' },
+      })
+    }
+    if (unreadCount > 0) {
+      items.push({
+        id: 'unread',
+        label: `${unreadCount} chat${unreadCount === 1 ? '' : 's'} with new activity`,
+        Icon: MessageSquare,
+        tone: 'attention',
+        to: firstUnread
+          ? { type: 'chat', conversationId: firstUnread.id }
+          : { type: 'dashboard', tab: 'overview' },
+      })
     }
     if (publishStatus?.hasUnpublishedChanges) {
-      lines.push('The workspace app has changes that are not published yet.')
+      items.push({
+        id: 'unpublished',
+        label: 'App has unpublished changes',
+        Icon: Package,
+        tone: 'warning',
+        to: { type: 'dashboard', tab: 'workspace-settings' },
+      })
     }
     if (gitStatus?.enabled && gitStatus.isRepo && gitStatus.dirty) {
-      lines.push(
-        'Working tree has uncommitted changes (relative to the last Git checkpoint).',
-      )
+      items.push({
+        id: 'git-dirty',
+        label: 'Uncommitted changes since last checkpoint',
+        Icon: GitBranch,
+        tone: 'warning',
+        to: { type: 'dashboard', tab: 'workspace-settings' },
+      })
     }
+    return items
+  }, [
+    sortedConversations,
+    pendingSuggestionCount,
+    unreadCount,
+    publishStatus?.hasUnpublishedChanges,
+    gitStatus?.enabled,
+    gitStatus?.isRepo,
+    gitStatus?.dirty,
+  ])
+
+  const fyiInsights = useMemo(() => {
+    const lines: string[] = []
     if (mcpServerCount === 0) {
       lines.push(
         'No MCP connections configured — add servers in workspace settings if you use tools.',
@@ -282,32 +383,16 @@ export function WorkspaceHubOverview({
         `${mcpServerCount} MCP server${mcpServerCount === 1 ? '' : 's'} in this workspace’s config.`,
       )
     }
-    if (gitStatus?.enabled && lastCheckpointMs) {
-      lines.push(`Last Git checkpoint: ${formatShortTime(lastCheckpointMs)}.`)
-    }
     if (!agentsFilePresent) {
       lines.push(
         'No AGENTS.md at the workspace root (optional file for agent instructions).',
       )
     }
+    if (gitStatus?.enabled && lastCheckpointMs) {
+      lines.push(`Last Git checkpoint: ${formatShortTime(lastCheckpointMs)}.`)
+    }
     return lines
-  }, [
-    unreadCount,
-    pendingSuggestionCount,
-    publishStatus?.hasUnpublishedChanges,
-    mcpServerCount,
-    gitStatus?.enabled,
-    gitStatus?.isRepo,
-    gitStatus?.dirty,
-    lastCheckpointMs,
-    agentsFilePresent,
-  ])
-
-  const heroSubtitle = useMemo(() => {
-    if (indexSnippet) return indexSnippet
-    if (memorySnippet) return memorySnippet
-    return `Context and preferences for ${workspaceName} show up here as you use memory and chats.`
-  }, [indexSnippet, memorySnippet, workspaceName])
+  }, [mcpServerCount, agentsFilePresent, gitStatus?.enabled, lastCheckpointMs])
 
   const openAppRoute = useCallback(
     async (path: string, labelHint?: string | null) => {
@@ -355,59 +440,57 @@ export function WorkspaceHubOverview({
     [workspaceId, reload],
   )
 
-  const renderGlanceSection = () => (
-    <section className={sectionCardClass()}>
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0 space-y-2">
-          <p className="text-text-3 text-xs font-semibold tracking-widest uppercase">
-            Workspace
-          </p>
-          <h2 className="text-text-1 text-xl font-semibold tracking-tight md:text-2xl">
-            {workspaceName}
-          </h2>
-          <p className="text-text-2 max-w-3xl text-sm leading-relaxed lg:max-w-none lg:text-pretty">
-            {heroSubtitle}
-          </p>
+  const renderNotificationsSection = () => {
+    if (attentionStripItems.length === 0) return null
+    return (
+      <section className={sectionCardClass()}>
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-2"
+          role="region"
+          aria-label="Notifications"
+        >
+          <div className="flex shrink-0 items-center gap-2.5">
+            <div
+              className={cn(
+                'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                hubSectionTintClass('accent'),
+              )}
+            >
+              <Bell className="size-[1.125rem]" aria-hidden />
+            </div>
+            <h3 className="text-text-1 text-sm font-semibold tracking-tight">Notifications</h3>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {attentionStripItems.map((item) => (
+              <HubNotificationChip key={item.id} item={item} />
+            ))}
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            onClick={() => {
-              setActiveWorkspaceId(workspaceId)
-              void navigate({ to: '/chat/new' })
-            }}
-          >
-            New agent
-          </Button>
-        </div>
-      </div>
-    </section>
-  )
+      </section>
+    )
+  }
 
   const renderSection = (s: HubDashboardSection) => {
     switch (s.type) {
       case 'at_a_glance':
       case 'welcome':
-        return renderGlanceSection()
+        return renderNotificationsSection()
       case 'memory_queue':
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Brain className="text-text-3 size-4" aria-hidden />
-                <h3 className="text-text-1 text-sm font-semibold">
-                  Memory suggestions
-                </h3>
-              </div>
-              <Button type="button" variant="ghost" size="sm" className="text-text-2 h-8" asChild>
-                <Link to="/dashboard" search={{ tab: 'memory' }}>
-                  Open Memory
-                  <ArrowRight className="size-3.5" aria-hidden />
-                </Link>
-              </Button>
-            </div>
+            <HubSectionHeader
+              icon={Brain}
+              title="Memory suggestions"
+              tint="info"
+              right={
+                <Button type="button" variant="ghost" size="sm" className="text-text-2 h-8" asChild>
+                  <Link to="/dashboard" search={{ tab: 'memory' }}>
+                    Open Memory
+                    <ArrowRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Button>
+              }
+            />
             {!isTauriRuntime ? (
               <p className="text-text-3 text-sm">
                 Pending memory reviews are available in the desktop app.
@@ -464,10 +547,24 @@ export function WorkspaceHubOverview({
       case 'continue':
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex items-center gap-2">
-              <MessageSquare className="text-text-3 size-4" aria-hidden />
-              <h3 className="text-text-1 text-sm font-semibold">Continue</h3>
-            </div>
+            <HubSectionHeader
+              icon={MessageSquare}
+              title="Continue"
+              tint="accent"
+              right={
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    setActiveWorkspaceId(workspaceId)
+                    void navigate({ to: '/chat/new' })
+                  }}
+                >
+                  New agent
+                </Button>
+              }
+            />
             {sortedConversations.length === 0 ? (
               <p className="text-text-3 text-sm">No conversations yet. Start a new agent to begin.</p>
             ) : (
@@ -482,12 +579,17 @@ export function WorkspaceHubOverview({
                         c.unread && 'border-primary/30 bg-primary/5',
                       )}
                     >
-                      <span className="text-text-1 min-w-0 truncate font-medium">
-                        {c.pinned ? '· ' : ''}
-                        {c.title}
-                        {c.unread ? (
-                          <span className="text-primary ml-1.5 text-xs font-normal">· New</span>
-                        ) : null}
+                      <span className="text-text-1 flex min-w-0 items-center gap-2.5">
+                        <HubRowIcon
+                          icon={c.pinned ? Pin : MessageSquare}
+                          tint={c.pinned ? 'warning' : 'accent'}
+                        />
+                        <span className="min-w-0 truncate font-medium">
+                          {c.title}
+                          {c.unread ? (
+                            <span className="text-primary ml-1.5 text-xs font-normal">· New</span>
+                          ) : null}
+                        </span>
                       </span>
                       <span className="text-text-3 shrink-0 text-xs">
                         {formatShortTime(c.updatedAtMs)}
@@ -502,49 +604,110 @@ export function WorkspaceHubOverview({
       case 'kpis':
         return (
           <section className={sectionCardClass()}>
-            <h3 className="text-text-1 mb-4 text-sm font-semibold">Status</h3>
+            <HubSectionHeader icon={Activity} title="Status" tint="accent" />
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="border-border bg-muted/15 rounded-lg border px-3 py-3">
-                <p className="text-text-3 text-xs font-medium">Chats</p>
-                <p className="text-text-1 mt-1 text-2xl font-semibold tabular-nums">
-                  {conversations.length}
-                </p>
-                {unreadCount > 0 ? (
-                  <p className="text-primary mt-0.5 text-xs">{unreadCount} unread</p>
-                ) : null}
-              </div>
-              <div className="border-border bg-muted/15 rounded-lg border px-3 py-3">
-                <p className="text-text-3 text-xs font-medium">Published app</p>
-                <p className="text-text-1 mt-1 text-sm font-medium leading-snug">
-                  {publishStatus?.hasPublishedDist ? 'Built' : 'Not built'}
-                </p>
-                {publishStatus?.hasUnpublishedChanges ? (
-                  <p className="text-primary mt-0.5 text-xs">Unpublished changes</p>
-                ) : null}
-              </div>
-              <div className="border-border bg-muted/15 rounded-lg border px-3 py-3">
-                <p className="text-text-3 text-xs font-medium">MCP</p>
-                <p className="text-text-1 mt-1 text-2xl font-semibold tabular-nums">
-                  {mcpServerCount}
-                </p>
-                <p className="text-text-3 mt-0.5 text-xs">servers in config</p>
-              </div>
-              <div className="border-border bg-muted/15 rounded-lg border px-3 py-3">
-                <p className="text-text-3 text-xs font-medium">Git</p>
-                <p className="text-text-1 mt-1 text-sm font-medium leading-snug">
-                  {gitStatus?.enabled
-                    ? gitStatus.isRepo
-                      ? gitStatus.dirty
-                        ? 'Dirty'
-                        : 'Clean'
-                      : 'No repo'
-                    : 'Off'}
-                </p>
-                {lastCheckpointMs ? (
-                  <p className="text-text-3 mt-0.5 text-xs">
-                    Last checkpoint {formatShortTime(lastCheckpointMs)}
+              <div className="border-border bg-muted/15 flex gap-2.5 rounded-lg border px-3 py-3">
+                <HubRowIcon icon={MessageSquare} tint="accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-text-3 text-xs font-medium">Chats</p>
+                  <p className="text-text-1 mt-0.5 text-2xl font-semibold tabular-nums">
+                    {conversations.length}
                   </p>
-                ) : null}
+                  {unreadCount > 0 ? (
+                    <p className="text-primary mt-0.5 text-xs font-medium">{unreadCount} unread</p>
+                  ) : (
+                    <p className="text-success mt-0.5 text-xs">All caught up</p>
+                  )}
+                </div>
+              </div>
+              <div
+                className={cn(
+                  'border-border bg-muted/15 flex gap-2.5 rounded-lg border px-3 py-3',
+                  publishStatus?.hasUnpublishedChanges && 'border-warning/40 bg-warning/5',
+                  publishStatus?.hasPublishedDist &&
+                    !publishStatus?.hasUnpublishedChanges &&
+                    'border-success/25 bg-success/5',
+                )}
+              >
+                <HubRowIcon
+                  icon={Package}
+                  tint={
+                    publishStatus?.hasUnpublishedChanges
+                      ? 'warning'
+                      : publishStatus?.hasPublishedDist
+                        ? 'success'
+                        : 'accent'
+                  }
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-text-3 text-xs font-medium">Published app</p>
+                  <p className="text-text-1 mt-0.5 text-sm font-semibold leading-snug">
+                    {publishStatus?.hasPublishedDist ? 'Built' : 'Not built'}
+                  </p>
+                  {publishStatus?.hasUnpublishedChanges ? (
+                    <p className="text-warning mt-0.5 text-xs font-medium">Unpublished changes</p>
+                  ) : publishStatus?.hasPublishedDist ? (
+                    <p className="text-success mt-0.5 text-xs">Published</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="border-border bg-muted/15 flex gap-2.5 rounded-lg border px-3 py-3">
+                <HubRowIcon icon={Plug} tint="info" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-text-3 text-xs font-medium">MCP</p>
+                  <p className="text-text-1 mt-0.5 text-2xl font-semibold tabular-nums">
+                    {mcpServerCount}
+                  </p>
+                  <p className="text-text-3 mt-0.5 text-xs">servers in config</p>
+                </div>
+              </div>
+              <div
+                className={cn(
+                  'border-border bg-muted/15 flex gap-2.5 rounded-lg border px-3 py-3',
+                  gitStatus?.enabled &&
+                    gitStatus.isRepo &&
+                    gitStatus.dirty &&
+                    'border-warning/40 bg-warning/5',
+                  gitStatus?.enabled &&
+                    gitStatus.isRepo &&
+                    !gitStatus.dirty &&
+                    'border-success/25 bg-success/5',
+                )}
+              >
+                <HubRowIcon
+                  icon={GitBranch}
+                  tint={
+                    gitStatus?.enabled && gitStatus.isRepo && gitStatus.dirty
+                      ? 'warning'
+                      : gitStatus?.enabled && gitStatus.isRepo
+                        ? 'success'
+                        : 'accent'
+                  }
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-text-3 text-xs font-medium">Git</p>
+                  <p
+                    className={cn(
+                      'mt-0.5 text-sm font-semibold leading-snug',
+                      gitStatus?.enabled && gitStatus.isRepo && gitStatus.dirty
+                        ? 'text-warning'
+                        : 'text-text-1',
+                    )}
+                  >
+                    {gitStatus?.enabled
+                      ? gitStatus.isRepo
+                        ? gitStatus.dirty
+                          ? 'Dirty'
+                          : 'Clean'
+                        : 'No repo'
+                      : 'Off'}
+                  </p>
+                  {lastCheckpointMs ? (
+                    <p className="text-text-3 mt-0.5 text-xs">
+                      Last checkpoint {formatShortTime(lastCheckpointMs)}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
           </section>
@@ -552,18 +715,19 @@ export function WorkspaceHubOverview({
       case 'apps':
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Calculator className="text-text-3 size-4" aria-hidden />
-                <h3 className="text-text-1 text-sm font-semibold">Workspace apps</h3>
-              </div>
-              <Button type="button" variant="ghost" size="sm" className="text-text-2 h-8" asChild>
-                <Link to="/dashboard" search={{ tab: 'apps' }}>
-                  Open Apps tab
-                  <ArrowRight className="size-3.5" aria-hidden />
-                </Link>
-              </Button>
-            </div>
+            <HubSectionHeader
+              icon={Calculator}
+              title="Workspace apps"
+              tint="accent"
+              right={
+                <Button type="button" variant="ghost" size="sm" className="text-text-2 h-8" asChild>
+                  <Link to="/dashboard" search={{ tab: 'apps' }}>
+                    Open Apps tab
+                    <ArrowRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Button>
+              }
+            />
             {!isTauriRuntime ? (
               <p className="text-text-3 text-sm">Apps are available in the desktop app.</p>
             ) : snapshot?.webappAppRoutes?.length ? (
@@ -575,8 +739,11 @@ export function WorkspaceHubOverview({
                       onClick={() => void openAppRoute(r.path, r.label)}
                       className="border-border bg-muted/20 hover:bg-muted/40 flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors"
                     >
-                      <span className="text-text-1 font-medium">{r.label}</span>
-                      <span className="text-text-3 font-mono text-xs">{r.path}</span>
+                      <span className="text-text-1 flex min-w-0 items-center gap-2.5 font-medium">
+                        <HubRowIcon icon={Calculator} tint="accent" />
+                        <span className="min-w-0 truncate">{r.label}</span>
+                      </span>
+                      <span className="text-text-3 shrink-0 font-mono text-xs">{r.path}</span>
                     </button>
                   </li>
                 ))}
@@ -592,18 +759,19 @@ export function WorkspaceHubOverview({
       case 'recent_apps':
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <LayoutGrid className="text-text-3 size-4" aria-hidden />
-                <h3 className="text-text-1 text-sm font-semibold">Recent in apps</h3>
-              </div>
-              <Button type="button" variant="ghost" size="sm" className="text-text-2 h-8" asChild>
-                <Link to="/dashboard" search={{ tab: 'apps' }}>
-                  Apps
-                  <ArrowRight className="size-3.5" aria-hidden />
-                </Link>
-              </Button>
-            </div>
+            <HubSectionHeader
+              icon={LayoutGrid}
+              title="Recent in apps"
+              tint="accent"
+              right={
+                <Button type="button" variant="ghost" size="sm" className="text-text-2 h-8" asChild>
+                  <Link to="/dashboard" search={{ tab: 'apps' }}>
+                    Apps
+                    <ArrowRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Button>
+              }
+            />
             {!isTauriRuntime ? (
               <p className="text-text-3 text-sm">Recent app routes are tracked in the desktop app.</p>
             ) : recentApps.length === 0 ? (
@@ -620,7 +788,10 @@ export function WorkspaceHubOverview({
                       onClick={() => void openAppRoute(e.path, e.label)}
                       className="border-border bg-muted/20 hover:bg-muted/40 flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors"
                     >
-                      <span className="text-text-1 min-w-0 truncate font-medium">{e.label}</span>
+                      <span className="text-text-1 flex min-w-0 items-center gap-2.5 font-medium">
+                        <HubRowIcon icon={LayoutGrid} tint="info" />
+                        <span className="min-w-0 truncate">{e.label}</span>
+                      </span>
                       <span className="text-text-3 shrink-0 font-mono text-xs">{e.path}</span>
                     </button>
                   </li>
@@ -634,10 +805,7 @@ export function WorkspaceHubOverview({
           snapshot?.recentFiles?.filter((f) => isDocumentPath(f.relativePath)) ?? []
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex items-center gap-2">
-              <FileText className="text-text-3 size-4" aria-hidden />
-              <h3 className="text-text-1 text-sm font-semibold">Recent documents</h3>
-            </div>
+            <HubSectionHeader icon={FileText} title="Recent documents" tint="info" />
             {docs.length === 0 ? (
               <p className="text-text-3 text-sm">
                 Markdown and text files you open in this workspace appear here (see also the
@@ -650,8 +818,11 @@ export function WorkspaceHubOverview({
                     key={f.relativePath}
                     className="text-text-2 flex items-center justify-between gap-2 text-sm"
                   >
-                    <span className="min-w-0 truncate font-mono text-xs" title={f.relativePath}>
-                      {f.label ?? f.relativePath}
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <HubRowIcon icon={FileText} tint="info" />
+                      <span className="min-w-0 truncate font-mono text-xs" title={f.relativePath}>
+                        {f.label ?? f.relativePath}
+                      </span>
                     </span>
                     <span className="text-text-3 shrink-0 text-xs">
                       {formatShortTime(f.lastAccessedAtMs)}
@@ -666,10 +837,7 @@ export function WorkspaceHubOverview({
       case 'recent_files':
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex items-center gap-2">
-              <FileText className="text-text-3 size-4" aria-hidden />
-              <h3 className="text-text-1 text-sm font-semibold">Recent files</h3>
-            </div>
+            <HubSectionHeader icon={FileText} title="Recent files" tint="accent" />
             {!snapshot?.recentFiles?.length ? (
               <p className="text-text-3 text-sm">
                 Files you attach, import, or save will appear here automatically.
@@ -681,8 +849,11 @@ export function WorkspaceHubOverview({
                     key={f.relativePath}
                     className="text-text-2 flex items-center justify-between gap-2 text-sm"
                   >
-                    <span className="min-w-0 truncate font-mono text-xs" title={f.relativePath}>
-                      {f.label ?? f.relativePath}
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <HubRowIcon icon={FileText} tint="accent" />
+                      <span className="min-w-0 truncate font-mono text-xs" title={f.relativePath}>
+                        {f.label ?? f.relativePath}
+                      </span>
                     </span>
                     <span className="text-text-3 shrink-0 text-xs">
                       {formatShortTime(f.lastAccessedAtMs)}
@@ -696,25 +867,26 @@ export function WorkspaceHubOverview({
       case 'insights':
         return (
           <section className={sectionCardClass()}>
-            <div className="mb-4 flex items-center gap-2">
-              <Sparkles className="text-text-3 size-4" aria-hidden />
-              <h3 className="text-text-1 text-sm font-semibold">Insights</h3>
-            </div>
-            <ul className="text-text-2 space-y-2 text-sm leading-relaxed">
-              {heuristicInsights.map((line, i) => (
-                <li key={`h-${i}`} className="flex gap-2">
-                  <span className="text-text-3 shrink-0">·</span>
+            <HubSectionHeader icon={Sparkles} title="Insights" tint="accent" />
+            <ul className="text-text-2 space-y-2.5 text-sm leading-relaxed">
+              {fyiInsights.map((line, i) => (
+                <li key={`fyi-${i}`} className="flex gap-2.5">
+                  <span className="mt-0.5 shrink-0">
+                    <Info className="text-info size-4" aria-hidden />
+                  </span>
                   <span>{line}</span>
                 </li>
               ))}
               {(snapshot?.insightItems ?? []).slice(0, 6).map((it) => (
-                <li key={it.id} className="flex gap-2">
-                  <span className="text-text-3 shrink-0">·</span>
+                <li key={it.id} className="flex gap-2.5">
+                  <span className="mt-0.5 shrink-0">
+                    <Sparkles className="text-attention size-4" aria-hidden />
+                  </span>
                   <span>{it.text}</span>
                 </li>
               ))}
             </ul>
-            {heuristicInsights.length === 0 && (snapshot?.insightItems?.length ?? 0) === 0 ? (
+            {fyiInsights.length === 0 && (snapshot?.insightItems?.length ?? 0) === 0 ? (
               <p className="text-text-3 text-sm">
                 Tips will show as you use chats, apps, and memory. Optional: add{' '}
                 <code className="text-text-2 text-xs">.braian/insights.json</code> for custom notes.
@@ -750,11 +922,15 @@ export function WorkspaceHubOverview({
     <ScrollArea className="min-h-0 flex-1">
       <div className="w-full min-w-0 px-4 pb-10 pt-1 md:px-6 md:pb-12">
         <div className="flex w-full min-w-0 flex-col gap-6">
-          {topSections.map((s) => (
-            <div key={s.id} className="w-full min-w-0">
-              {renderSection(s)}
-            </div>
-          ))}
+          {topSections.map((s) => {
+            const node = renderSection(s)
+            if (node == null) return null
+            return (
+              <div key={s.id} className="w-full min-w-0">
+                {node}
+              </div>
+            )
+          })}
           {bodySections.length > 0 ? (
             <div
               className={cn(

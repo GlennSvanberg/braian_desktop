@@ -23,7 +23,6 @@ import {
   documentCanvasSnapshotPrompt,
   PROFILE_COACH_SYSTEM,
 } from '@/lib/ai/chat-turn-args'
-import { MEMORY_RELATIVE_PATH } from '@/lib/memory/constants'
 import { USER_PROFILE_WORKSPACE_SESSION_ID } from '@/lib/chat-sessions/detached'
 import { aiSettingsGet } from '@/lib/ai-settings-api'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
@@ -417,7 +416,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(false)
   })
 
-  it('includes user-context section with ISO time on default turns', async () => {
+  it('includes client time user-context (no cross-workspace profile) on default turns', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -431,7 +430,7 @@ describe('buildTanStackChatTurnArgs', () => {
     const uc = r.systemSections.find((s) => s.id === 'user-context')
     expect(uc).toBeDefined()
     expect(uc?.text).toMatch(/ISO:/)
-    expect(uc?.text).toMatch(/User profile/)
+    expect(uc?.text).not.toMatch(/User profile/)
     const routingIdx = r.systemSections.findIndex((s) => s.id === 'routing-doc')
     const userIdx = r.systemSections.findIndex((s) => s.id === 'user-context')
     expect(routingIdx).toBeLessThan(userIdx)
@@ -518,18 +517,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.text).not.toContain('switch_to_code_agent')
   })
 
-  it('testcases.md §5: injects workspace memory when MEMORY.md is readable', async () => {
-    vi.mocked(workspaceReadTextFile).mockImplementation(
-      async (_ws: string, rel: string) => {
-        if (rel === MEMORY_RELATIVE_PATH) {
-          return {
-            text: 'Always call the product **WidgetPro**, never Acme.',
-            truncated: false,
-          }
-        }
-        throw new Error('no file')
-      },
-    )
+  it('testcases.md §5: legacy MEMORY.md is not injected (structured memory only)', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'What is our product called?',
       context: {
@@ -540,11 +528,7 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const mem = r.systemSections.find((s) => s.id === 'memory')
-    expect(mem).toBeDefined()
-    expect(mem?.text).toMatch(/WidgetPro/)
-    vi.mocked(workspaceReadTextFile).mockReset()
-    vi.mocked(workspaceReadTextFile).mockRejectedValue(new Error('no file'))
+    expect(r.systemSections.some((s) => s.id === 'memory')).toBe(false)
   })
 
   it('omits webapp tools for user profile workspace id even in app mode', async () => {

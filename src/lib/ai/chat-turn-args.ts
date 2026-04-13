@@ -7,12 +7,8 @@ import { estimateTextTokens } from '@/lib/ai/token-estimate'
 import {
   AGENTS_INJECT_MAX_BYTES,
   AGENTS_RELATIVE_PATH,
-  MEMORY_INJECT_MAX_BYTES,
-  MEMORY_RELATIVE_PATH,
-  WORKSPACE_PREFERENCES_RELATIVE_PATH,
 } from '@/lib/memory/constants'
 import { buildSemanticMemorySystemText } from '@/lib/memory/semantic-store'
-import { getWorkspacePreferencesState } from '@/lib/memory/workspace-preferences'
 import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 import {
   formatUserProfileForPrompt,
@@ -118,7 +114,6 @@ const SOURCE_ROUTING_CODE =
 const SOURCE_SKILLS_CATALOG = 'src/lib/skills/load-skill-catalog.ts'
 const SOURCE_APP_BUILDER =
   'src/lib/skills/load-skill-catalog.ts → app-builder/SKILL.md (+ legacy app-builder.md fallback, + APP_BUILDER_INSTRUCTIONS_FALLBACK)'
-const SOURCE_MEMORY = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${MEMORY_RELATIVE_PATH})`
 const SOURCE_AGENTS = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${AGENTS_RELATIVE_PATH})`
 const SOURCE_WM_SUMMARY =
   'src/lib/ai/chat-turn-args.ts (conversation working memory — summary)'
@@ -136,8 +131,8 @@ const SOURCE_PRIOR_CONVERSATIONS =
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
 const SOURCE_WORKSPACE_FILE_SNAPSHOT =
   'src/lib/ai/chat-turn-args.ts (workspaceFileCanvasSnapshotPrompt)'
-const SOURCE_USER_CONTEXT = 'src/lib/ai/chat-turn-args.ts (user context + client time)'
-const SOURCE_WORKSPACE_PREFERENCES = `src/lib/ai/chat-turn-args.ts → workspaceReadTextFile (${WORKSPACE_PREFERENCES_RELATIVE_PATH})`
+const SOURCE_USER_CONTEXT =
+  'src/lib/ai/chat-turn-args.ts (client time only for workspace chats; profile is profile-chat only)'
 const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM)'
 const SOURCE_PROFILE_STATE =
   'src/lib/user-profile-api.ts (formatUserProfileForPrompt)'
@@ -201,49 +196,23 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   google_search: 'src/lib/ai/provider-native-search-tools.ts',
 }
 
-/** User profile lines plus automatic local time (injected on every default agent turn). */
-export function buildUserContextSystemSectionText(now: Date = new Date()): string {
-  const profileBlock = formatUserProfileForPrompt(userProfileGet())
+/** Client clock for workspace chats (no cross-workspace profile injection). */
+export function buildWorkspaceUserContextSystemSectionText(
+  now: Date = new Date(),
+): string {
   const local = now.toLocaleString(undefined, {
     dateStyle: 'full',
     timeStyle: 'long',
   })
   const iso = now.toISOString()
   return [
-    '## User profile (editable in sidebar → You)',
-    '',
-    profileBlock,
-    '',
     '## Current client time (automatic; not a user setting)',
     '',
     `Local: ${local}`,
     `ISO: ${iso}`,
     '',
-    'Use the profile and time for tone, locale, scheduling, and recency. Only read the clock aloud when the user asks for the time or date.',
+    'Use the clock for scheduling and recency when relevant. Only read the time aloud when the user asks for the time or date.',
   ].join('\n')
-}
-
-export async function loadWorkspaceMemorySystemBlock(
-  workspaceId: string,
-): Promise<string> {
-  if (isNonWorkspaceScopedSessionId(workspaceId)) {
-    return ''
-  }
-  try {
-    const { text, truncated } = await workspaceReadTextFile(
-      workspaceId,
-      MEMORY_RELATIVE_PATH,
-      MEMORY_INJECT_MAX_BYTES,
-    )
-    const t = text.trim()
-    if (!t) return ''
-    const note = truncated
-      ? '\n[Note: MEMORY.md was truncated for context size — beginning only.]\n'
-      : ''
-    return `Workspace memory (from \`${MEMORY_RELATIVE_PATH}\`):${note}\n\n${t}`
-  } catch {
-    return ''
-  }
 }
 
 export async function loadAgentsMdSystemBlock(
@@ -267,14 +236,6 @@ export async function loadAgentsMdSystemBlock(
   } catch {
     return ''
   }
-}
-
-/** @deprecated Prefer getWorkspacePreferencesState (single read + flags). */
-export async function loadWorkspacePreferencesSystemBlock(
-  workspaceId: string,
-): Promise<string> {
-  const s = await getWorkspacePreferencesState(workspaceId)
-  return s.preferencesBlock
 }
 
 export function contextFilesSystemPrompt(
@@ -667,22 +628,15 @@ export async function buildTanStackChatTurnArgs(
   ]
 
   const memoryBlockStart = nowMs()
-  let memoryBlock = ''
   let agentsBlock = ''
   let semanticMemoryBlock = ''
-  let workspacePreferencesBlock = ''
   if (ctx?.workspaceId != null) {
-    const [agents, semantic, prefsState] = await Promise.all([
+    const [agents, semantic] = await Promise.all([
       loadAgentsMdSystemBlock(ctx.workspaceId),
       buildSemanticMemorySystemText(ctx.workspaceId),
-      getWorkspacePreferencesState(ctx.workspaceId),
     ])
     agentsBlock = agents
     semanticMemoryBlock = semantic
-    workspacePreferencesBlock = prefsState.preferencesBlock
-    memoryBlock = prefsState.injectLegacyMemoryMd
-      ? await loadWorkspaceMemorySystemBlock(ctx.workspaceId)
-      : ''
     logChatPerf('loadWorkspaceMemory+AGENTS+semantic', memoryBlockStart)
   }
   const cf =
@@ -771,19 +725,10 @@ export async function buildTanStackChatTurnArgs(
 
   systemSections.push({
     id: 'user-context',
-    label: 'User context',
+    label: 'Client time',
     source: SOURCE_USER_CONTEXT,
-    text: buildUserContextSystemSectionText(),
+    text: buildWorkspaceUserContextSystemSectionText(),
   })
-
-  if (workspacePreferencesBlock) {
-    systemSections.push({
-      id: 'workspace-preferences',
-      label: 'Workspace preferences',
-      source: SOURCE_WORKSPACE_PREFERENCES,
-      text: workspacePreferencesBlock,
-    })
-  }
 
   if (agentsBlock) {
     systemSections.push({
@@ -845,15 +790,6 @@ export async function buildTanStackChatTurnArgs(
       label: 'Structured workspace memory',
       source: SOURCE_SEMANTIC_MEMORY,
       text: semanticMemoryBlock.trim(),
-    })
-  }
-
-  if (memoryBlock) {
-    systemSections.push({
-      id: 'memory',
-      label: `Workspace memory (${MEMORY_RELATIVE_PATH})`,
-      source: SOURCE_MEMORY,
-      text: memoryBlock,
     })
   }
 

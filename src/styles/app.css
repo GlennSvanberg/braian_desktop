@@ -78,6 +78,9 @@ html.light {
   --app-warning: #b08b4a;
   --app-danger: #b85a5a;
   --app-info: #7a8fa3;
+  /* Dashboard / status: “look here” without new hues (maps to accent) */
+  --app-attention: var(--app-accent-600);
+  --app-attention-soft: color-mix(in srgb, var(--app-accent-500) 14%, var(--app-bg-1));
   --app-muted: #eceae4;
   --app-muted-fg: #6b6e66;
   --sidebar: var(--app-bg-1);
@@ -112,6 +115,8 @@ html.dark {
   --app-warning: #b08b4a;
   --app-danger: #b85a5a;
   --app-info: #7a8fa3;
+  --app-attention: var(--app-accent-500);
+  --app-attention-soft: color-mix(in srgb, var(--app-accent-500) 14%, var(--app-bg-1));
   --app-muted: #1b2229;
   --app-muted-fg: #8f8a80;
   --sidebar: var(--app-bg-1);
@@ -147,6 +152,8 @@ html:not(.light):not(.dark) {
   --app-warning: #b08b4a;
   --app-danger: #b85a5a;
   --app-info: #7a8fa3;
+  --app-attention: var(--app-accent-500);
+  --app-attention-soft: color-mix(in srgb, var(--app-accent-500) 14%, var(--app-bg-1));
   --app-muted: #1b2229;
   --app-muted-fg: #8f8a80;
   --sidebar: var(--app-bg-1);
@@ -200,6 +207,8 @@ html:not(.light):not(.dark) {
   --color-warning: var(--app-warning);
   --color-danger: var(--app-danger);
   --color-info: var(--app-info);
+  --color-attention: var(--app-attention);
+  --color-attention-soft: var(--app-attention-soft);
   --radius-sm: 0.125rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
