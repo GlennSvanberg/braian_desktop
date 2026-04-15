@@ -6,6 +6,7 @@ export type ArtifactKind =
   | 'document'
   | 'workspace-file'
   | 'tabular'
+  | 'tabular-file'
   | 'tabular-multi'
   | 'visual'
   | 'app-preview'
@@ -57,6 +58,21 @@ export type TabularArtifactPayload = {
   rows: TabularRow[]
 }
 
+/**
+ * Data panel view backed by a workspace file (CSV/TSV on disk).
+ * Rows are loaded in the UI — not persisted in `.braian/artifacts` JSON (slim save).
+ */
+export type TabularFileArtifactPayload = {
+  kind: 'tabular-file'
+  relativePath: string
+  title?: string
+  sourceLabel?: string
+  /** Bumped on refresh from disk (session UI). */
+  canvasRevision?: number
+  /** Max data rows to parse from disk (excluding header); default from tabular constants. */
+  maxRows?: number
+}
+
 /** One sheet/table block inside a multi-file canvas */
 export type TabularSection = {
   title?: string
@@ -91,6 +107,7 @@ export type WorkspaceArtifactPayload =
   | DocumentArtifactPayload
   | WorkspaceTextFileArtifactPayload
   | TabularArtifactPayload
+  | TabularFileArtifactPayload
   | TabularMultiArtifactPayload
   | VisualArtifactPayload
   | AppPreviewArtifactPayload
@@ -111,6 +128,12 @@ export function isTabularArtifact(
   p: WorkspaceArtifactPayload,
 ): p is TabularArtifactPayload {
   return p.kind === 'tabular'
+}
+
+export function isTabularFileArtifact(
+  p: WorkspaceArtifactPayload,
+): p is TabularFileArtifactPayload {
+  return p.kind === 'tabular-file'
 }
 
 export function isTabularMultiArtifact(

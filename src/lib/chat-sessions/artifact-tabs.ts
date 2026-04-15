@@ -25,6 +25,8 @@ export function artifactTabIdentityKey(p: WorkspaceArtifactPayload): string {
       return 'document:conversation-canvas'
     case 'workspace-file':
       return `workspace-file:${p.relativePath}`
+    case 'tabular-file':
+      return `tabular-file:${p.relativePath}`
     case 'tabular':
       return `tabular:${p.title ?? 'data'}`
     case 'tabular-multi':
@@ -33,8 +35,6 @@ export function artifactTabIdentityKey(p: WorkspaceArtifactPayload): string {
       return `visual:${p.title ?? 'image'}`
     case 'app-preview':
       return 'app-preview'
-    default:
-      return p.kind
   }
 }
 
@@ -70,6 +70,13 @@ export function artifactTabLabel(tab: ArtifactTab): string {
   if (p.kind === 'workspace-file')
     return (
       p.title?.trim() ||
+      p.relativePath.replace(/^.*\//, '') ||
+      p.relativePath
+    )
+  if (p.kind === 'tabular-file')
+    return (
+      p.title?.trim() ||
+      p.sourceLabel?.trim() ||
       p.relativePath.replace(/^.*\//, '') ||
       p.relativePath
     )
@@ -180,11 +187,36 @@ export function mergeStreamArtifactIntoTabs(
     return { artifactTabs: tabs, activeArtifactTabId: id }
   }
   if (payload.kind === 'workspace-file' && payload.canvasRevision == null) {
+    const prevPayload = idx >= 0 ? tabs[idx]?.payload : undefined
     const samePath =
-      idx >= 0 &&
-      tabs[idx]?.payload.kind === 'workspace-file' &&
-      tabs[idx]!.payload.relativePath === payload.relativePath
-    const prevRev = samePath ? (tabs[idx]!.payload.canvasRevision ?? 0) : 0
+      prevPayload?.kind === 'workspace-file' &&
+      prevPayload.relativePath === payload.relativePath
+    const prevRev =
+      samePath && prevPayload.kind === 'workspace-file'
+        ? (prevPayload.canvasRevision ?? 0)
+        : 0
+    const resolvedRev = samePath ? prevRev + 1 : 1
+    const merged: WorkspaceArtifactPayload = {
+      ...payload,
+      canvasRevision: resolvedRev,
+    }
+    if (idx >= 0) {
+      tabs[idx] = { ...tabs[idx]!, payload: merged }
+      return { artifactTabs: tabs, activeArtifactTabId: tabs[idx]!.id }
+    }
+    const id = randomTabId()
+    tabs.push({ id, payload: merged })
+    return { artifactTabs: tabs, activeArtifactTabId: id }
+  }
+  if (payload.kind === 'tabular-file' && payload.canvasRevision == null) {
+    const prevPayload = idx >= 0 ? tabs[idx]?.payload : undefined
+    const samePath =
+      prevPayload?.kind === 'tabular-file' &&
+      prevPayload.relativePath === payload.relativePath
+    const prevRev =
+      samePath && prevPayload.kind === 'tabular-file'
+        ? (prevPayload.canvasRevision ?? 0)
+        : 0
     const resolvedRev = samePath ? prevRev + 1 : 1
     const merged: WorkspaceArtifactPayload = {
       ...payload,

@@ -18,6 +18,7 @@ import type {
 import { loadContextConversationsForModel } from '@/lib/context-conversations-for-ai'
 import { loadContextFilesForModel } from '@/lib/context-files-for-ai'
 import { getMockArtifactPayloadForChat } from '@/lib/artifacts'
+import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
 import { getConversationById } from '@/lib/mock-workspace-data'
 import {
   cancelWorkspaceMcpIdleDisconnect,
@@ -496,6 +497,33 @@ export async function openWorkspaceTextFileArtifact(
       title: displayName,
       canvasRevision: nextRev,
     })
+    return {
+      ...prev,
+      ...merged,
+      artifactPanelCollapsed: false,
+    }
+  })
+}
+
+/** Open the Data panel with a CSV/TSV file read from disk (not model-generated rows). */
+export function openTabularFileArtifact(
+  sessionKey: string,
+  _workspaceId: string,
+  relativePath: string,
+  displayName: string,
+) {
+  const title =
+    displayName.trim() ||
+    relativePath.split('/').pop() ||
+    relativePath
+  patchThread(sessionKey, (prev) => {
+    const payload: WorkspaceArtifactPayload = {
+      kind: 'tabular-file',
+      relativePath,
+      title,
+      sourceLabel: relativePath,
+    }
+    const merged = mergeStreamArtifactIntoTabs(prev, payload)
     return {
       ...prev,
       ...merged,

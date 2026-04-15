@@ -69,6 +69,22 @@ describe('braianArtifactFromCustomValue', () => {
     ).toBe(null)
   })
 
+  it('parses tabular-file', () => {
+    expect(
+      braianArtifactFromCustomValue({
+        kind: 'tabular-file',
+        relativePath: 'data/x.csv',
+        title: 'x.csv',
+        canvasRevision: 1,
+      }),
+    ).toEqual({
+      kind: 'tabular-file',
+      relativePath: 'data/x.csv',
+      title: 'x.csv',
+      canvasRevision: 1,
+    })
+  })
+
   it('parses tabular with optional fields', () => {
     expect(
       braianArtifactFromCustomValue({

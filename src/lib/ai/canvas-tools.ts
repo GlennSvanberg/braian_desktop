@@ -169,7 +169,7 @@ const openWorkspaceFileCanvasTool = toolDefinition({
 const applyTabularCanvasTool = toolDefinition({
   name: 'apply_tabular_canvas',
   description:
-    'Display structured tabular data in the side-panel data canvas. Replaces any current canvas content with a table view.',
+    'Display **derived** structured tabular data in the side-panel Data canvas (analysis output, computed tables, transformed rows). Replaces the current canvas tab content. Do **not** use this to duplicate an attached CSV/TSV that the user can open from disk in the Data panel; use it when you are presenting **new** tabular results.',
   inputSchema: applyTabularCanvasInputSchema,
 })
 

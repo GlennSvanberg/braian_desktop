@@ -5,6 +5,7 @@ import {
   MarkdownDocumentCanvas,
   type CanvasSelectionSubmitPayload,
 } from '@/components/workspace/markdown-document-canvas'
+import { TabularFileCanvas } from '@/components/workspace/tabular-file-canvas'
 import { WorkspaceTextFileCanvas } from '@/components/workspace/workspace-text-file-canvas'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
@@ -13,6 +14,7 @@ import {
   isAppPreviewArtifact,
   isDocumentArtifact,
   isTabularArtifact,
+  isTabularFileArtifact,
   isTabularMultiArtifact,
   isVisualArtifact,
   isWorkspaceTextFileArtifact,
@@ -270,6 +272,19 @@ export function ArtifactPanel({
         ) : isWorkspaceTextFileArtifact(payload) ? (
           <p className="text-text-3 px-0.5 text-sm">
             Open this chat in a workspace folder to edit files from the side panel.
+          </p>
+        ) : null}
+        {isTabularFileArtifact(payload) &&
+        workspaceFileWorkspaceId != null ? (
+          <TabularFileCanvas
+            workspaceId={workspaceFileWorkspaceId}
+            relativePath={payload.relativePath}
+            title={payload.title}
+            maxRows={payload.maxRows}
+          />
+        ) : isTabularFileArtifact(payload) ? (
+          <p className="text-text-3 px-0.5 text-sm">
+            Open this chat in a workspace folder to view tables from disk.
           </p>
         ) : null}
         {isTabularArtifact(payload) ? (

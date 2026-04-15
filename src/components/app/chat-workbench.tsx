@@ -12,6 +12,7 @@ import {
   PanelRightOpen,
   Plus,
   Square,
+  Table2,
   X,
 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -81,11 +82,9 @@ import {
 import {
   PROFILE_CHAT_SESSION_KEY,
   getThreadSnapshot,
-  removeArtifactTab,
+  openTabularFileArtifact,
   replaceThread,
   seedCanvasPreviewIfEmpty,
-  setActiveArtifactTab,
-  setArtifactPanelCollapsed,
   useChatThread,
   useChatThreadActions,
 } from '@/lib/chat-sessions/store'
@@ -120,12 +119,15 @@ import {
 import { registerWorkspaceFilePointerDropHandler } from '@/lib/workspace-file-pointer-dnd'
 import { workspaceHubRecentFileTouch } from '@/lib/workspace-hub-api'
 import { formatRelativeTime } from '@/lib/time'
+import { isDelimitedDataFilePath } from '@/lib/tabular/parse-delimited'
 import { cn } from '@/lib/utils'
 
 function normalizeCanvasKind(
   s: string | undefined,
 ): 'document' | 'tabular' | 'visual' {
-  if (s === 'tabular' || s === 'tabular-multi') return 'tabular'
+  if (s === 'tabular' || s === 'tabular-multi' || s === 'tabular-file') {
+    return 'tabular'
+  }
   if (s === 'visual') return 'visual'
   return 'document'
 }
@@ -1455,6 +1457,31 @@ export function ChatWorkbench({
                 f.relativePath.split('/').pop() ||
                 f.relativePath}
             </span>
+            {isTauriRuntime &&
+            conversationId &&
+            threadWorkspaceId &&
+            !isProfileSession &&
+            !isPersonalSimpleChat &&
+            isDelimitedDataFilePath(f.relativePath) ? (
+              <button
+                type="button"
+                className="text-text-2 hover:text-text-1 shrink-0 rounded p-0.5"
+                title="Open in Data panel (from disk)"
+                aria-label={`Open ${f.displayName?.trim() || f.relativePath} in Data panel`}
+                onClick={() =>
+                  openTabularFileArtifact(
+                    sessionKey,
+                    threadWorkspaceId,
+                    f.relativePath,
+                    f.displayName?.trim() ||
+                      f.relativePath.split('/').pop() ||
+                      f.relativePath,
+                  )
+                }
+              >
+                <Table2 className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
             <button
               type="button"
               className="braian-context-chip-remove text-text-2"
