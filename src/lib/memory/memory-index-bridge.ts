@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type { SemanticMemoryRecordV1 } from '@/lib/memory/semantic-record'
+import { scheduleWorkspaceSemanticIndex } from '@/lib/retrieval/workspace-indexer'
 import { isTauri } from '@/lib/tauri-env'
 
 /** Upsert derived SQLite row after a canonical JSON file write. */
@@ -23,6 +24,9 @@ export async function maybeNotifyMemoryIndexUpsert(
   } catch {
     /* ignore if command missing or DB unavailable */
   }
+  void scheduleWorkspaceSemanticIndex(workspaceId, {
+    memoryRelativePath: relativePath.replace(/\\/g, '/'),
+  })
 }
 
 export async function memoryIndexRebuildWorkspace(

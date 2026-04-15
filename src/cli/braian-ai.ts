@@ -9,6 +9,7 @@ import { z } from 'zod'
 
 import {
   CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
+  RETRIEVAL_MAX_TOKENS_DEFAULT,
   type AiSettingsDto,
 } from '@/lib/ai-settings-api'
 import type { AiProviderId } from '@/lib/ai/model-catalog'
@@ -249,6 +250,12 @@ function settingsFromEnv(): AiSettingsDto {
       : null,
     /** CLI does not apply on-disk compaction; `buildTanStackChatTurnArgs` only uses this for budgeting if wired. */
     contextMaxHistoryTokens: CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
+    embeddingModelId: '',
+    retrievalAutoInject: 1,
+    retrievalMaxTokens: RETRIEVAL_MAX_TOKENS_DEFAULT,
+    embeddingFallbackBaseUrl: null,
+    embeddingFallbackApiKey: null,
+    embeddingFallbackModel: null,
   }
 }
 

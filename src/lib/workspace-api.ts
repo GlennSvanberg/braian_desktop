@@ -448,6 +448,12 @@ export async function conversationSave(input: ConversationSavePayload): Promise<
   if (!isTauri()) return
   await invoke('conversation_save', { input })
   emitWorkspaceDurableActivity(input.workspaceId)
+  const { scheduleWorkspaceSemanticIndex } = await import(
+    '@/lib/retrieval/workspace-indexer'
+  )
+  void scheduleWorkspaceSemanticIndex(input.workspaceId, {
+    conversationId: input.id,
+  })
 }
 
 /** Snapshot for persisting; normalizes streaming messages to complete for disk. */

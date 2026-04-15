@@ -9,6 +9,9 @@ import {
   CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
   CONTEXT_MAX_HISTORY_TOKENS_MAX,
   CONTEXT_MAX_HISTORY_TOKENS_MIN,
+  RETRIEVAL_MAX_TOKENS_DEFAULT,
+  RETRIEVAL_MAX_TOKENS_MAX,
+  RETRIEVAL_MAX_TOKENS_MIN,
   type AiSettingsDto,
 } from '@/lib/ai-settings-api'
 import {
@@ -37,6 +40,12 @@ export function AiSettingsPanel({ embedded, className }: Props) {
     modelId: defaultModelForProvider('openai'),
     baseUrl: null,
     contextMaxHistoryTokens: CONTEXT_MAX_HISTORY_TOKENS_DEFAULT,
+    embeddingModelId: '',
+    retrievalAutoInject: 1,
+    retrievalMaxTokens: RETRIEVAL_MAX_TOKENS_DEFAULT,
+    embeddingFallbackBaseUrl: null,
+    embeddingFallbackApiKey: null,
+    embeddingFallbackModel: null,
   })
 
   useEffect(() => {
@@ -65,6 +74,12 @@ export function AiSettingsPanel({ embedded, className }: Props) {
       provider: p,
       modelId: defaultModelForProvider(p),
       baseUrl: p === 'openai_compatible' ? f.baseUrl : null,
+      embeddingFallbackBaseUrl:
+        p === 'anthropic' ? f.embeddingFallbackBaseUrl : null,
+      embeddingFallbackApiKey:
+        p === 'anthropic' ? f.embeddingFallbackApiKey : null,
+      embeddingFallbackModel:
+        p === 'anthropic' ? f.embeddingFallbackModel : null,
     }))
   }, [])
 
@@ -257,6 +272,157 @@ export function AiSettingsPanel({ embedded, className }: Props) {
                 {CONTEXT_MAX_HISTORY_TOKENS_MAX.toLocaleString()}.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="ai-embedding-model"
+                className="text-text-2 text-sm font-medium"
+              >
+                Embedding model (optional)
+              </label>
+              <Input
+                id="ai-embedding-model"
+                placeholder="e.g. text-embedding-3-small (OpenAI) or text-embedding-004 (Gemini)"
+                value={form.embeddingModelId}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, embeddingModelId: e.target.value }))
+                }
+                autoComplete="off"
+              />
+              <p className="text-text-3 text-xs leading-relaxed">
+                Leave empty to use provider defaults for semantic search and workspace
+                indexing. Gemini uses the Generative Language embedding API.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                id="ai-retrieval-auto"
+                type="checkbox"
+                className="border-border size-4 rounded"
+                checked={form.retrievalAutoInject !== 0}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    retrievalAutoInject: e.target.checked ? 1 : 0,
+                  }))
+                }
+              />
+              <label
+                htmlFor="ai-retrieval-auto"
+                className="text-text-2 text-sm font-medium"
+              >
+                Include retrieved workspace context each turn
+              </label>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="ai-retrieval-max-tokens"
+                className="text-text-2 text-sm font-medium"
+              >
+                Retrieved context token budget
+              </label>
+              <Input
+                id="ai-retrieval-max-tokens"
+                type="number"
+                min={RETRIEVAL_MAX_TOKENS_MIN}
+                max={RETRIEVAL_MAX_TOKENS_MAX}
+                step={256}
+                value={form.retrievalMaxTokens}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10)
+                  setForm((f) => ({
+                    ...f,
+                    retrievalMaxTokens: Number.isFinite(v)
+                      ? Math.min(
+                          RETRIEVAL_MAX_TOKENS_MAX,
+                          Math.max(RETRIEVAL_MAX_TOKENS_MIN, v),
+                        )
+                      : f.retrievalMaxTokens,
+                  }))
+                }}
+                autoComplete="off"
+              />
+              <p className="text-text-3 text-xs leading-relaxed">
+                Approximate max tokens for the auto-injected retrieval section (RAG
+                excerpts). Range {RETRIEVAL_MAX_TOKENS_MIN.toLocaleString()}–
+                {RETRIEVAL_MAX_TOKENS_MAX.toLocaleString()}.
+              </p>
+            </div>
+
+            {form.provider === 'anthropic' ? (
+              <div className="border-border space-y-3 rounded-lg border p-3">
+                <p className="text-text-2 text-sm font-medium">
+                  Anthropic: embedding fallback
+                </p>
+                <p className="text-text-3 text-xs leading-relaxed">
+                  Anthropic does not provide a public embeddings API. For semantic search,
+                  supply an OpenAI-compatible embeddings endpoint (URL + key + model).
+                </p>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ai-emb-fallback-url"
+                    className="text-text-2 text-xs font-medium"
+                  >
+                    Base URL
+                  </label>
+                  <Input
+                    id="ai-emb-fallback-url"
+                    placeholder="https://api.openai.com/v1"
+                    value={form.embeddingFallbackBaseUrl ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        embeddingFallbackBaseUrl: e.target.value.trim() || null,
+                      }))
+                    }
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ai-emb-fallback-key"
+                    className="text-text-2 text-xs font-medium"
+                  >
+                    API key
+                  </label>
+                  <Input
+                    id="ai-emb-fallback-key"
+                    type="password"
+                    placeholder="sk-…"
+                    value={form.embeddingFallbackApiKey ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        embeddingFallbackApiKey: e.target.value.trim() || null,
+                      }))
+                    }
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ai-emb-fallback-model"
+                    className="text-text-2 text-xs font-medium"
+                  >
+                    Embedding model id
+                  </label>
+                  <Input
+                    id="ai-emb-fallback-model"
+                    placeholder="text-embedding-3-small"
+                    value={form.embeddingFallbackModel ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        embeddingFallbackModel: e.target.value.trim() || null,
+                      }))
+                    }
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <label

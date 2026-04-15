@@ -125,6 +125,47 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
   }
 
+  if version < 9 {
+    conn.execute_batch(
+      "CREATE TABLE IF NOT EXISTS retrieval_chunks (
+        workspace_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        chunk_ordinal INTEGER NOT NULL,
+        source_kind TEXT NOT NULL,
+        source_ref TEXT NOT NULL,
+        body_text TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        indexed_at_ms INTEGER NOT NULL,
+        embedding_model_id TEXT NOT NULL,
+        embedding_dim INTEGER NOT NULL,
+        embedding BLOB NOT NULL,
+        PRIMARY KEY (workspace_id, source_id, chunk_ordinal)
+      );
+      CREATE INDEX IF NOT EXISTS idx_retrieval_chunks_workspace_model
+        ON retrieval_chunks(workspace_id, embedding_model_id);
+      CREATE TABLE IF NOT EXISTS retrieval_source_state (
+        workspace_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        mtime_ms INTEGER,
+        content_hash TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, source_id)
+      );
+      UPDATE _schema_version SET version = 9 WHERE id = 1;",
+    )?;
+  }
+
+  if version < 10 {
+    conn.execute_batch(
+      "ALTER TABLE ai_settings ADD COLUMN embedding_model_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE ai_settings ADD COLUMN retrieval_auto_inject INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE ai_settings ADD COLUMN retrieval_max_tokens INTEGER NOT NULL DEFAULT 4096;
+      ALTER TABLE ai_settings ADD COLUMN embedding_fallback_base_url TEXT;
+      ALTER TABLE ai_settings ADD COLUMN embedding_fallback_api_key TEXT;
+      ALTER TABLE ai_settings ADD COLUMN embedding_fallback_model TEXT;
+      UPDATE _schema_version SET version = 10 WHERE id = 1;",
+    )?;
+  }
+
   Ok(())
 }
 

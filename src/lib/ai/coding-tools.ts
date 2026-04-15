@@ -1,17 +1,17 @@
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 
+import { aiSettingsGet } from '@/lib/ai-settings-api'
 import {
   workspaceListDir,
   workspaceReadTextFile,
   workspaceRunCommand,
   workspaceRunShell,
-  workspaceSearchText,
   workspaceWriteTextFile,
   type WorkspaceDirEntryDto,
   type WorkspaceReadTextFileResult,
-  type WorkspaceSearchResult,
 } from '@/lib/workspace-api'
+import { hybridWorkspaceSearch } from '@/lib/retrieval/hybrid-workspace-search'
 
 import { applyTextPatches } from './text-patches'
 
@@ -245,7 +245,7 @@ export function buildCodingTools(
   const searchWorkspaceTool = toolDefinition({
     name: 'search_workspace',
     description:
-      'Search for text across all files in the workspace (recursive). Returns matching lines with file paths and line numbers.',
+      'Search the workspace: **lexical** line matches (regex) across files, plus **semantic** excerpts from the indexed corpus (repo files, `.braian/conversations`, structured memory under `.braian/memory`) when embeddings are configured in Settings. Returns `matches` (lexical), `semanticHits`, and `mergedPreview`.',
     inputSchema: searchWorkspaceSchema,
     lazy,
   })
@@ -339,12 +339,14 @@ export function buildCodingTools(
     searchWorkspaceTool.server(async (args) => {
       const input = searchWorkspaceSchema.parse(args)
       try {
-        const result: WorkspaceSearchResult = await workspaceSearchText({
+        const settings = await aiSettingsGet()
+        const result = await hybridWorkspaceSearch({
           workspaceId,
           query: input.query,
           fileGlob: input.fileGlob ?? null,
           caseInsensitive: input.caseInsensitive ?? null,
           maxResults: input.maxResults ?? null,
+          settings,
         })
         return { ok: true as const, ...result }
       } catch (e) {

@@ -33,6 +33,12 @@ const validSettings = {
   modelId: 'gpt-4o-mini',
   baseUrl: null as string | null,
   contextMaxHistoryTokens: 65_536,
+  embeddingModelId: '',
+  retrievalAutoInject: 1,
+  retrievalMaxTokens: 4096,
+  embeddingFallbackBaseUrl: null as string | null,
+  embeddingFallbackApiKey: null as string | null,
+  embeddingFallbackModel: null as string | null,
 }
 
 describe('buildTanStackChatTurnArgs', () => {

@@ -15,6 +15,7 @@ mod workspace_webapp_dev;
 mod workspace_webapp_static;
 mod workspace_hub;
 mod memory_index;
+mod retrieval_index;
 
 use tauri::Manager;
 
@@ -105,6 +106,13 @@ pub fn run() {
       workspace_hub::workspace_hub_recent_file_touch,
       memory_index::memory_index_upsert,
       memory_index::memory_index_rebuild_workspace,
+      retrieval_index::retrieval_replace_source_chunks,
+      retrieval_index::retrieval_delete_source,
+      retrieval_index::retrieval_clear_workspace,
+      retrieval_index::retrieval_search,
+      retrieval_index::retrieval_index_status,
+      retrieval_index::retrieval_put_source_state,
+      retrieval_index::retrieval_get_source_state,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

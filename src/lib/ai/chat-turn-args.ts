@@ -9,11 +9,13 @@ import {
   AGENTS_RELATIVE_PATH,
 } from '@/lib/memory/constants'
 import { buildSemanticMemorySystemText } from '@/lib/memory/semantic-store'
+import { buildRetrievedContextSystemText } from '@/lib/retrieval/retrieval-prompt'
 import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 import {
   formatUserProfileForPrompt,
   userProfileGet,
 } from '@/lib/user-profile-api'
+import { isTauri } from '@/lib/tauri-env'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
 import { disabledSetFromDoc } from '@/lib/mcp-config-types'
@@ -125,6 +127,8 @@ const SOURCE_WM_DECISIONS =
   'src/lib/ai/chat-turn-args.ts (conversation working memory — important decisions)'
 const SOURCE_SEMANTIC_MEMORY =
   'src/lib/memory/semantic-store.ts (structured JSON under .braian/memory/)'
+const SOURCE_RETRIEVAL =
+  'src/lib/retrieval/retrieval-prompt.ts (semantic RAG from indexed workspace sources)'
 const SOURCE_CONTEXT_FILES = 'src/lib/ai/chat-turn-args.ts (contextFilesSystemPrompt)'
 const SOURCE_PRIOR_CONVERSATIONS =
   'src/lib/ai/chat-turn-args.ts (priorConversationsSystemPrompt)'
@@ -630,14 +634,27 @@ export async function buildTanStackChatTurnArgs(
   const memoryBlockStart = nowMs()
   let agentsBlock = ''
   let semanticMemoryBlock = ''
+  let retrievedContextBlock = ''
   if (ctx?.workspaceId != null) {
-    const [agents, semantic] = await Promise.all([
-      loadAgentsMdSystemBlock(ctx.workspaceId),
-      buildSemanticMemorySystemText(ctx.workspaceId),
+    const wsId = ctx.workspaceId
+    const allowRetrieval =
+      !mockAi &&
+      isTauri() &&
+      !isNonWorkspaceScopedSessionId(wsId) &&
+      settings.retrievalAutoInject !== 0
+    const [agents, semantic, retrieved] = await Promise.all([
+      loadAgentsMdSystemBlock(wsId),
+      buildSemanticMemorySystemText(wsId),
+      allowRetrieval
+        ? buildRetrievedContextSystemText(wsId, options.userText, settings).catch(
+            () => null,
+          )
+        : Promise.resolve<string | null>(null),
     ])
     agentsBlock = agents
     semanticMemoryBlock = semantic
-    logChatPerf('loadWorkspaceMemory+AGENTS+semantic', memoryBlockStart)
+    retrievedContextBlock = retrieved ?? ''
+    logChatPerf('loadWorkspaceMemory+AGENTS+semantic+retrieval', memoryBlockStart)
   }
   const cf =
     ctx?.contextFiles != null && ctx.contextFiles.length > 0
@@ -790,6 +807,15 @@ export async function buildTanStackChatTurnArgs(
       label: 'Structured workspace memory',
       source: SOURCE_SEMANTIC_MEMORY,
       text: semanticMemoryBlock.trim(),
+    })
+  }
+
+  if (retrievedContextBlock.trim()) {
+    systemSections.push({
+      id: 'workspace-retrieval',
+      label: 'Retrieved workspace context',
+      source: SOURCE_RETRIEVAL,
+      text: retrievedContextBlock.trim(),
     })
   }
 

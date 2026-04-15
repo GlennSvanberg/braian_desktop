@@ -71,8 +71,8 @@ The app may also use a **SQLite** database under the application data directory 
 
 The product evolves incrementally. In broad strokes:
 
-- **In place:** `AGENTS.md` loading; token-budgeted history with rolling summaries; structured semantic memory files and tools; conversation archive and summary tools; lexical codebase search helpers tied to memory; SQLite indexing for memory entries; optional post–memory-review **suggestion** queue for future structured entries.
-- **Still maturing:** Full memory management UI (browse, edit, validate, suggestion review), stronger staleness and validation automation, and a full hybrid codebase index (embeddings + symbols) as described in the engineering plan.
+- **In place:** `AGENTS.md` loading; token-budgeted history with rolling summaries; structured semantic memory files and tools; conversation archive and summary tools; **hybrid workspace search** (`search_workspace`: lexical lines + semantic excerpts when embeddings are configured); **automatic retrieved context** injected each turn (toggle + token budget in AI Settings); SQLite **semantic index** over workspace files (excluding `.env*`), `.braian/conversations`, and structured memory JSON; SQLite row index for memory entry metadata; optional post–memory-review **suggestion** queue for future structured entries.
+- **Still maturing:** Full memory management UI (browse, edit, validate, suggestion review), stronger staleness and validation automation, AST/symbol-aware chunking, and ANN acceleration for very large corpora (see `MEMORY_PLAN.md`).
 
 For the full phased implementation notes and open questions, see `**MEMORY_PLAN.md`** in the repository root (contributor-facing).
 

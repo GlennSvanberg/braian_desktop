@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 
 import { WorkspaceFolderManagementPanel } from '@/components/app/workspace-folder-management-panel'
+import { WorkspaceSemanticIndexPanel } from '@/components/app/workspace-semantic-index-panel'
 import { WorkspaceHistoryPanel } from '@/components/app/workspace-history-panel'
 import { WorkspaceWebappSettingsPanel } from '@/components/app/workspace-webapp-settings-panel'
 import { useWorkspace } from '@/components/app/workspace-context'
@@ -591,6 +592,8 @@ export function WorkspaceSettingsScreen({
         {tauri && wsId ? (
           <WorkspaceFolderManagementPanel workspaceId={wsId} />
         ) : null}
+
+        {tauri && wsId ? <WorkspaceSemanticIndexPanel workspaceId={wsId} /> : null}
 
         {wsId ? (
           <WorkspaceWebappSettingsPanel

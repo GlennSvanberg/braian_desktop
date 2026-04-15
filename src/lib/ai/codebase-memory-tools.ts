@@ -1,12 +1,13 @@
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 
+import { aiSettingsGet } from '@/lib/ai-settings-api'
 import { isNonWorkspaceScopedSessionId } from '@/lib/chat-sessions/detached'
 import { kindToDir } from '@/lib/memory/semantic-record'
 import { SEMANTIC_MEMORY_ROOT } from '@/lib/memory/constants'
 import { readSemanticMemoryRecord } from '@/lib/memory/semantic-store'
+import { hybridWorkspaceSearch } from '@/lib/retrieval/hybrid-workspace-search'
 import { isTauri } from '@/lib/tauri-env'
-import { workspaceSearchText } from '@/lib/workspace-api'
 
 import type { ChatTurnContext } from './types'
 
@@ -28,7 +29,7 @@ const relatedFilesSchema = z.object({
 
 const searchCodebaseIndexTool = toolDefinition({
   name: 'search_codebase_index',
-  description: `Lexical search across **workspace files** (same engine as the workspace search tool). Use to locate code by keyword before reading files. Does not use embeddings; prefer \`search_workspace\` in code mode for large refactors.`,
+  description: `Search workspace files (lexical + semantic when indexed), same hybrid engine as \`search_workspace\`. Prefer \`search_workspace\` in code mode for large refactors.`,
   inputSchema: searchCodebaseIndexSchema,
 })
 
@@ -52,18 +53,24 @@ export function buildCodebaseMemoryTools(context: ChatTurnContext | undefined) {
   return [
     searchCodebaseIndexTool.server(async (args) => {
       const input = searchCodebaseIndexSchema.parse(args)
-      const r = await workspaceSearchText({
+      const settings = await aiSettingsGet()
+      const max = input.maxResults ?? 80
+      const r = await hybridWorkspaceSearch({
         workspaceId,
         query: input.query,
         fileGlob: input.fileGlob ?? null,
         caseInsensitive: true,
-        maxResults: input.maxResults ?? 80,
+        maxResults: max,
+        settings,
       })
       return {
         ok: true as const,
         truncated: r.truncated,
         filesSearched: r.filesSearched,
-        matches: r.matches.slice(0, input.maxResults ?? 80),
+        matches: r.matches.slice(0, max),
+        semanticHits: r.semanticHits,
+        mergedPreview: r.mergedPreview,
+        semanticSkippedReason: r.semanticSkippedReason,
       }
     }),
 
