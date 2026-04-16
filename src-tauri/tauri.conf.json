@@ -23,7 +23,8 @@
         "decorations": false,
         "shadow": true,
         "center": true,
-        "backgroundColor": "#0f1114"
+        "backgroundColor": "#0f1114",
+        "zoomHotkeysEnabled": true
       }
     ],
     "security": {
