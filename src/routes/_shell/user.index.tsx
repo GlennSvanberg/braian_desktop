@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSyncExternalStore } from 'react'
 
 import { AiSettingsPanel } from '@/components/app/ai-settings-panel'
+import { SignInCard } from '@/components/app/auth/sign-in-card'
 import { ChatWorkbench } from '@/components/app/chat-workbench'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMinWidthXl } from '@/hooks/use-min-width-xl'
@@ -96,6 +97,7 @@ function UserPage() {
     <>
       {profileBlurb}
       <AppearanceSection />
+      <SignInCard />
       <div
         className={cn(
           'border-border bg-card/50 rounded-xl border p-4 md:p-5',

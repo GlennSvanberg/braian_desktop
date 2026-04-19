@@ -20,6 +20,7 @@
     "mcp:dev": "node scripts/mcp-dev/probe.mjs"
   },
   "dependencies": {
+    "@auth/core": "^0.37.0",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-go": "^6.0.1",
@@ -32,6 +33,7 @@
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.3",
+    "@convex-dev/auth": "^0.0.91",
     "@mdxeditor/editor": "^3.53.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.1.18",
@@ -57,6 +59,7 @@
     "ajv-formats": "^3.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.35.1",
     "gpt-tokenizer": "^3.4.0",
     "lucide-react": "^0.545.0",
     "radix-ui": "^1.4.3",

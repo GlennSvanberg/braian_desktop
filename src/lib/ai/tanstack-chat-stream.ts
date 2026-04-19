@@ -4,6 +4,7 @@ import {
   type AnyTextAdapter,
 } from '@tanstack/ai'
 import type { AiSettingsDto } from '@/lib/ai-settings-api'
+import { streamCloudChatTurn } from '@/lib/cloud/cloud-chat-stream'
 import { isTauri } from '@/lib/tauri-env'
 
 import { braianArtifactFromCustomValue } from './braian-artifact-from-custom'
@@ -232,9 +233,16 @@ export async function* streamTanStackChatTurn(
   options?: StreamTanStackChatTurnOptions,
 ): AsyncGenerator<ChatStreamChunk> {
   if (!isTauri()) {
-    throw new Error(
-      'AI chat requires the Braian desktop app so requests can reach providers without browser CORS limits. Run `npm run tauri:dev`, or use mock mode in dev: localStorage.setItem("braian.mockAi","1").',
-    )
+    // Web build: route through the Convex provider proxy. Tools, MCP,
+    // skills, and workspace context aren't available here (they all need
+    // the Tauri runtime); the cloud path produces text-only replies.
+    yield* streamCloudChatTurn({
+      userText,
+      signal,
+      context,
+      priorMessages,
+    })
+    return
   }
 
   const ac = mergeAbortParent(signal)

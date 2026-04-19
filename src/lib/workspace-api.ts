@@ -21,6 +21,11 @@ import {
   type ReasoningMode,
 } from '@/lib/chat-sessions/types'
 import type { WorkspaceArtifactPayload } from '@/lib/artifacts/types'
+import { isCloudConfigured } from '@/lib/cloud/convex-client'
+import {
+  CLOUD_WORKSPACE_SESSION_ID,
+  cloudVirtualWorkspaceDto,
+} from '@/lib/cloud/workspace'
 import { isTauri } from '@/lib/tauri-env'
 import { emitWorkspaceDurableActivity } from '@/lib/workspace/workspace-activity'
 
@@ -44,6 +49,12 @@ export type ConversationDto = {
 
 export async function workspaceList(): Promise<WorkspaceDto[]> {
   if (!isTauri()) {
+    if (isCloudConfigured()) {
+      // Web build with cloud sync configured: never show demo mocks; the
+      // sidebar shows only the user's cloud-synced threads (empty until they
+      // sign in, then populated via the live Convex subscription).
+      return [cloudVirtualWorkspaceDto()]
+    }
     return MOCK_WORKSPACES.map((w, i) => ({
       id: w.id,
       name: w.name,
@@ -119,6 +130,11 @@ export async function conversationList(
   workspaceId: string,
 ): Promise<ConversationDto[]> {
   if (!isTauri()) {
+    // Cloud bucket is populated by `CloudConversationsSync` directly into the
+    // workspace provider via `onCloudList`; this call must return empty so we
+    // don't blow away the live subscription with stale/mock data.
+    if (workspaceId === CLOUD_WORKSPACE_SESSION_ID) return []
+    if (isCloudConfigured()) return []
     const now = Date.now()
     const rows = getConversationsForWorkspace(workspaceId).map((c, i) => ({
       id: c.id,
@@ -153,15 +169,16 @@ export async function conversationSetTitle(input: {
 }): Promise<void> {
   if (!isTauri()) {
     mockConversationSetTitle(input.id, input.title)
-    return
+  } else {
+    await invoke('conversation_set_title', {
+      input: {
+        id: input.id,
+        workspaceId: input.workspaceId,
+        title: input.title,
+      },
+    })
   }
-  await invoke('conversation_set_title', {
-    input: {
-      id: input.id,
-      workspaceId: input.workspaceId,
-      title: input.title,
-    },
-  })
+  void mirrorToCloudPartial({ clientId: input.id, title: input.title })
 }
 
 export async function conversationSetPinned(input: {
@@ -171,15 +188,16 @@ export async function conversationSetPinned(input: {
 }): Promise<void> {
   if (!isTauri()) {
     mockConversationSetPinned(input.id, input.pinned)
-    return
+  } else {
+    await invoke('conversation_set_pinned', {
+      input: {
+        id: input.id,
+        workspaceId: input.workspaceId,
+        pinned: input.pinned,
+      },
+    })
   }
-  await invoke('conversation_set_pinned', {
-    input: {
-      id: input.id,
-      workspaceId: input.workspaceId,
-      pinned: input.pinned,
-    },
-  })
+  void mirrorToCloudPartial({ clientId: input.id, pinned: input.pinned })
 }
 
 export async function conversationSetUnread(input: {
@@ -189,15 +207,16 @@ export async function conversationSetUnread(input: {
 }): Promise<void> {
   if (!isTauri()) {
     mockConversationSetUnread(input.id, input.unread)
-    return
+  } else {
+    await invoke('conversation_set_unread', {
+      input: {
+        id: input.id,
+        workspaceId: input.workspaceId,
+        unread: input.unread,
+      },
+    })
   }
-  await invoke('conversation_set_unread', {
-    input: {
-      id: input.id,
-      workspaceId: input.workspaceId,
-      unread: input.unread,
-    },
-  })
+  void mirrorToCloudPartial({ clientId: input.id, unread: input.unread })
 }
 
 export async function conversationDelete(input: {
@@ -206,14 +225,59 @@ export async function conversationDelete(input: {
 }): Promise<void> {
   if (!isTauri()) {
     mockConversationDelete(input.id)
-    return
+  } else {
+    await invoke('conversation_delete', {
+      input: {
+        id: input.id,
+        workspaceId: input.workspaceId,
+      },
+    })
   }
-  await invoke('conversation_delete', {
-    input: {
-      id: input.id,
-      workspaceId: input.workspaceId,
-    },
-  })
+  void mirrorToCloudDelete(input.id)
+}
+
+/**
+ * Cloud-mirror helpers. Lazy-import the sync facade so the cloud module tree
+ * (Convex client, auth state, etc.) only loads when something actually calls
+ * one of these mutations. Keeps the offline / signed-out boot path free of
+ * any cloud-related JS work.
+ */
+async function mirrorToCloudPartial(input: {
+  clientId: string
+  title?: string
+  pinned?: boolean
+  unread?: boolean
+  draft?: string
+}): Promise<void> {
+  try {
+    const mod = await import('@/lib/cloud/sync')
+    if (!mod.isCloudEnabled()) return
+    await mod.pushPartialUpdate(input)
+  } catch (err) {
+    console.error('[braian/cloud] partial mirror failed', err)
+  }
+}
+
+async function mirrorToCloudDelete(clientId: string): Promise<void> {
+  try {
+    const mod = await import('@/lib/cloud/sync')
+    if (!mod.isCloudEnabled()) return
+    await mod.pushDelete(clientId)
+  } catch (err) {
+    console.error('[braian/cloud] delete mirror failed', err)
+  }
+}
+
+async function mirrorToCloudSave(
+  payload: ConversationSavePayload,
+): Promise<void> {
+  try {
+    const mod = await import('@/lib/cloud/sync')
+    if (!mod.isCloudEnabled()) return
+    await mod.pushConversation(payload)
+  } catch (err) {
+    console.error('[braian/cloud] save mirror failed', err)
+  }
 }
 
 export async function conversationMoveToWorkspace(input: {
@@ -380,7 +444,10 @@ export async function conversationOpen(
 ): Promise<ConversationOpenResult | null> {
   if (!isTauri()) {
     const c = getConversationById(id)
-    if (!c) return null
+    if (!c) {
+      const cloudOnly = await openCloudOnlyConversation(id)
+      return cloudOnly
+    }
     const conversation: ConversationDto = {
       id: c.id,
       workspaceId: c.workspaceId,
@@ -438,22 +505,133 @@ export async function conversationOpen(
     id,
   })
   if (!raw) return null
-  return {
+  const result: ConversationOpenResult = {
     conversation: raw.conversation,
     thread: mapInvokeThreadToState(raw.thread),
+  }
+  return mergeCloudIntoOpenResult(result)
+}
+
+/**
+ * Open a conversation that only exists in the cloud (browser preview, or a
+ * thread created on another device that hasn't been mirrored locally yet).
+ * Returns `null` when cloud is disabled or the thread doesn't exist remotely.
+ */
+async function openCloudOnlyConversation(
+  id: string,
+): Promise<ConversationOpenResult | null> {
+  try {
+    const mod = await import('@/lib/cloud/sync')
+    if (!mod.isCloudEnabled()) return null
+    const pull = await mod.pullConversation(id, {
+      title: '',
+      pinned: false,
+      unread: false,
+      draft: '',
+      updatedAtMs: 0,
+      messages: [],
+    })
+    if (!pull.newSnapshot) return null
+    const conv = pull.newSnapshot.conversation
+    const conversation: ConversationDto = {
+      id: conv.clientId,
+      workspaceId: 'cloud',
+      title: conv.title,
+      updatedAtMs: conv.updatedAtMs,
+      canvasKind: 'document',
+      pinned: conv.pinned,
+      unread: conv.unread,
+    }
+    const thread: ChatThreadState = {
+      ...DEFAULT_CHAT_THREAD,
+      draft: pull.scalarOverlay.draft ?? conv.draft,
+      messages: [],
+    }
+    const merged = mod.applyCloudPullToThread(thread, pull)
+    return { conversation, thread: merged }
+  } catch (err) {
+    console.error('[braian/cloud] openCloudOnlyConversation failed', err)
+    return null
+  }
+}
+
+/**
+ * If signed in to the cloud, merge the remote thread into the freshly opened
+ * local copy and write the merge back to disk so the next render picks it up.
+ *
+ * - Scalar fields are LWW (cloud wins only when its `updatedAtMs` is newer).
+ * - Messages are append-only and identified by `clientMsgId`. Cloud-only
+ *   messages are appended to the end of the local list.
+ *
+ * Failures are swallowed so the local-first open path is never blocked by
+ * cloud unavailability.
+ */
+async function mergeCloudIntoOpenResult(
+  result: ConversationOpenResult,
+): Promise<ConversationOpenResult> {
+  try {
+    const mod = await import('@/lib/cloud/sync')
+    if (!mod.isCloudEnabled()) return result
+    const local = {
+      title: result.conversation.title,
+      pinned: result.conversation.pinned ?? false,
+      unread: result.conversation.unread ?? false,
+      draft: result.thread.draft,
+      updatedAtMs: result.conversation.updatedAtMs,
+      messages: result.thread.messages,
+    }
+    const pull = await mod.pullConversation(result.conversation.id, local)
+    const noScalar =
+      pull.scalarOverlay.title === undefined &&
+      pull.scalarOverlay.pinned === undefined &&
+      pull.scalarOverlay.unread === undefined &&
+      pull.scalarOverlay.draft === undefined
+    if (noScalar && pull.appendedMessages.length === 0) {
+      return result
+    }
+    const mergedConversation: ConversationDto = {
+      ...result.conversation,
+      title: pull.scalarOverlay.title ?? result.conversation.title,
+      pinned: pull.scalarOverlay.pinned ?? result.conversation.pinned,
+      unread: pull.scalarOverlay.unread ?? result.conversation.unread,
+      updatedAtMs: pull.newSnapshot?.conversation.updatedAtMs ?? result.conversation.updatedAtMs,
+    }
+    const mergedThread = mod.applyCloudPullToThread(result.thread, pull)
+    const merged: ConversationOpenResult = {
+      conversation: mergedConversation,
+      thread: mergedThread,
+    }
+    // Write the merge back to disk so the file copy catches up. We avoid
+    // re-mirroring in `conversationSave` by calling the underlying invoke
+    // directly without going through the cloud layer.
+    if (isTauri()) {
+      try {
+        const payload = buildConversationSavePayload(mergedThread, mergedConversation)
+        await invoke('conversation_save', { input: payload })
+      } catch (err) {
+        console.error('[braian/cloud] write-back to local file failed', err)
+      }
+    }
+    return merged
+  } catch (err) {
+    console.error('[braian/cloud] mergeCloudIntoOpenResult failed', err)
+    return result
   }
 }
 
 export async function conversationSave(input: ConversationSavePayload): Promise<void> {
-  if (!isTauri()) return
-  await invoke('conversation_save', { input })
-  emitWorkspaceDurableActivity(input.workspaceId)
-  const { scheduleWorkspaceSemanticIndex } = await import(
-    '@/lib/retrieval/workspace-indexer'
-  )
-  void scheduleWorkspaceSemanticIndex(input.workspaceId, {
-    conversationId: input.id,
-  })
+  if (isTauri()) {
+    await invoke('conversation_save', { input })
+    emitWorkspaceDurableActivity(input.workspaceId)
+    const { scheduleWorkspaceSemanticIndex } = await import(
+      '@/lib/retrieval/workspace-indexer'
+    )
+    void scheduleWorkspaceSemanticIndex(input.workspaceId, {
+      conversationId: input.id,
+    })
+  }
+  // Mirror to Convex when signed in. No-op when cloud is disabled.
+  void mirrorToCloudSave(input)
 }
 
 /** Snapshot for persisting; normalizes streaming messages to complete for disk. */

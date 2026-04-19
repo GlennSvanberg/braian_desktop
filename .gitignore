@@ -4,6 +4,7 @@ dist
 dist-ssr
 *.local
 .env
+.env.local
 .nitro
 .tanstack
 .wrangler
@@ -12,3 +13,8 @@ dist-ssr
 __unconfig*
 todos.json
 src-tauri/target
+
+# Convex deployment selector lives in .env.local (gitignored above).
+# `convex/_generated/` is intentionally checked in: stub types so the project
+# type-checks without a deployment. Running `npx convex dev` overwrites the
+# stubs with the real generated types for your deployment.

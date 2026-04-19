@@ -13,6 +13,7 @@ import {
   unregisterConversationListRefresh,
 } from '@/lib/conversation-list-refresh'
 import { isPersonalWorkspaceSessionId } from '@/lib/chat-sessions/detached'
+import { CLOUD_WORKSPACE_SESSION_ID } from '@/lib/cloud/workspace'
 import { isTauri } from '@/lib/tauri-env'
 import {
   type ConversationDto,
@@ -22,6 +23,8 @@ import {
   workspaceList,
   workspaceTouch,
 } from '@/lib/workspace-api'
+
+import { CloudConversationsSync } from './cloud-conversations-sync'
 
 const ACTIVE_WS_KEY = 'braian.io.activeWorkspaceId'
 const FILE_EXPLORER_OPEN_BY_WS_KEY = 'braian.io.fileExplorerOpenByWorkspace'
@@ -155,7 +158,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const refreshConversationLists = useCallback(async () => {
     const ids = workspaces.map((w) => w.id)
     if (ids.length === 0) {
-      setConversationsByWorkspace({})
+      setConversationsByWorkspace((prev) => {
+        const cloud = prev[CLOUD_WORKSPACE_SESSION_ID]
+        const next: Record<string, WorkspaceConversation[]> = {}
+        if (cloud) next[CLOUD_WORKSPACE_SESSION_ID] = cloud
+        return next
+      })
       return
     }
     const { formatUpdatedLabel } = await import('@/lib/format-updated')
@@ -171,8 +179,38 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ] as const
       }),
     )
-    setConversationsByWorkspace(Object.fromEntries(results))
+    setConversationsByWorkspace((prev) => {
+      const next: Record<string, WorkspaceConversation[]> =
+        Object.fromEntries(results)
+      const cloud = prev[CLOUD_WORKSPACE_SESSION_ID]
+      if (cloud) next[CLOUD_WORKSPACE_SESSION_ID] = cloud
+      return next
+    })
   }, [workspaces])
+
+  const handleCloudList = useCallback(async (rows: WorkspaceConversation[]) => {
+    const { formatUpdatedLabel } = await import('@/lib/format-updated')
+    const decorated = rows.map((r) => ({
+      ...r,
+      updatedLabel: formatUpdatedLabel(r.updatedAtMs),
+    }))
+    setConversationsByWorkspace((prev) => {
+      if (decorated.length === 0) {
+        if (!prev[CLOUD_WORKSPACE_SESSION_ID]) return prev
+        const next = { ...prev }
+        delete next[CLOUD_WORKSPACE_SESSION_ID]
+        return next
+      }
+      return { ...prev, [CLOUD_WORKSPACE_SESSION_ID]: decorated }
+    })
+  }, [])
+
+  const handleCloudListSync = useCallback(
+    (rows: WorkspaceConversation[]) => {
+      void handleCloudList(rows)
+    },
+    [handleCloudList],
+  )
 
   useEffect(() => {
     void refreshConversationLists()
@@ -336,6 +374,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkspaceContext.Provider value={value}>
+      <CloudConversationsSync onCloudList={handleCloudListSync} />
       {children}
     </WorkspaceContext.Provider>
   )
