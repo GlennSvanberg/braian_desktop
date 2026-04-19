@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
+import { desktopReleasesLatestPageUrl } from '@/lib/desktop-releases'
 
 export function WebLanding() {
   return (
@@ -69,20 +70,18 @@ export function WebLanding() {
               Continue in browser
             </Link>
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="min-w-[12rem]"
-            disabled
-            title="Installers are not published yet"
-          >
-            Download for desktop
+          <Button asChild variant="outline" size="lg" className="min-w-[12rem]">
+            <a
+              href={desktopReleasesLatestPageUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Download for desktop
+            </a>
           </Button>
         </div>
         <p className="text-text-3 text-center text-xs">
-          Desktop downloads are coming soon. Use the app from source or your
-          internal builds until then.
+          Opens the latest GitHub release (pick the installer for your OS).
         </p>
       </main>
     </div>

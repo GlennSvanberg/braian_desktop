@@ -2,6 +2,7 @@
 #[allow(unused_imports)]
 use braian_mcpd as _;
 
+mod app_release;
 mod ai_settings;
 mod braian_store;
 mod db;
@@ -113,6 +114,7 @@ pub fn run() {
       retrieval_index::retrieval_index_status,
       retrieval_index::retrieval_put_source_state,
       retrieval_index::retrieval_get_source_state,
+      app_release::check_github_release,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

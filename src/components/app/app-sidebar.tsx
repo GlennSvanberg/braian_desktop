@@ -72,6 +72,8 @@ import {
 
 import type { WorkspaceConversation } from './workspace-context'
 import { useWorkspace } from './workspace-context'
+import { useDesktopReleaseCheck } from '@/lib/desktop-release-check'
+
 import { parseDashboardTabFromSearchStr } from './workspace-dashboard'
 
 const VISIBLE_WORKSPACES_DEFAULT = 8
@@ -607,6 +609,12 @@ export function AppSidebar() {
 
   const { setOpen } = useSidebar()
 
+  const desktopUpdate = useDesktopReleaseCheck(isTauriRuntime)
+  const updateNotesSnippet = desktopUpdate.latest?.body
+    ? desktopUpdate.latest.body.slice(0, 280).trim() +
+        (desktopUpdate.latest.body.length > 280 ? '…' : '')
+    : null
+
   const visibleProjectWorkspaces = showAllWorkspaces
     ? projectWorkspaces
     : projectWorkspaces.slice(0, VISIBLE_WORKSPACES_DEFAULT)
@@ -932,6 +940,60 @@ export function AppSidebar() {
               onClick={executeDeleteChat}
             >
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={desktopUpdate.dialogOpen}
+        onOpenChange={(open) => {
+          if (!open) desktopUpdate.dismiss()
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update available</DialogTitle>
+            <DialogDescription asChild>
+              <div className="text-text-2 space-y-2 text-sm leading-relaxed">
+                <p>
+                  A newer Braian Desktop release is on GitHub:{' '}
+                  <span className="text-text-1 font-medium">
+                    {desktopUpdate.latest?.tagName ?? ''}
+                  </span>{' '}
+                  (you are on{' '}
+                  <span className="text-text-1 font-medium">
+                    {desktopUpdate.currentVersion || '…'}
+                  </span>
+                  ).
+                </p>
+                {updateNotesSnippet ? (
+                  <p className="text-text-3 text-xs whitespace-pre-wrap">
+                    {updateNotesSnippet}
+                  </p>
+                ) : null}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={desktopUpdate.dismiss}>
+              Later
+            </Button>
+            <Button
+              type="button"
+              className="gap-2"
+              disabled={!desktopUpdate.downloadTargetUrl}
+              onClick={() => {
+                const url = desktopUpdate.downloadTargetUrl
+                if (!url) return
+                void (async () => {
+                  const { openUrl } = await import('@tauri-apps/plugin-opener')
+                  await openUrl(url)
+                })().catch(console.error)
+                desktopUpdate.dismiss()
+              }}
+            >
+              View download
             </Button>
           </DialogFooter>
         </DialogContent>
