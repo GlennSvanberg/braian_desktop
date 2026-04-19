@@ -48,7 +48,10 @@ async function getMasterKey(): Promise<CryptoKey> {
   const raw = hexToBytes(hex)
   if (raw.length !== 32) {
     throw new Error(
-      `BRAIAN_KEY_ENCRYPTION_KEY must decode to 32 bytes (got ${raw.length}).`,
+      `BRAIAN_KEY_ENCRYPTION_KEY must decode to 32 bytes (got ${raw.length}). ` +
+        'AES-256-GCM needs 64 hex characters. Regenerate with ' +
+        '`node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"` ' +
+        'or `openssl rand -hex 32`, then `npx convex env set BRAIAN_KEY_ENCRYPTION_KEY <64-char-hex>`.',
     )
   }
   return crypto.subtle.importKey(

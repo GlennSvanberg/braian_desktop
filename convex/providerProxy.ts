@@ -54,27 +54,33 @@ const PROVIDER_ROUTES: Record<ProviderId, ProviderRoute> = {
 
 const PROXY_PREFIX = '/provider-proxy/'
 
-const ALLOW_HEADERS = [
-  'authorization',
-  'content-type',
-  'accept',
-  'anthropic-version',
-  'anthropic-dangerous-direct-browser-access',
-  'x-stainless-arch',
-  'x-stainless-lang',
-  'x-stainless-os',
-  'x-stainless-package-version',
-  'x-stainless-runtime',
-  'x-stainless-runtime-version',
-].join(', ')
+/**
+ * Echo whatever the browser's preflight asked for instead of enumerating
+ * every header the OpenAI/Anthropic/Gemini SDKs might send (each ships
+ * dozens of `x-stainless-*` headers that change between SDK versions).
+ *
+ * Falls back to a generous static list when the request didn't include a
+ * `Access-Control-Request-Headers` header (i.e. the actual POST, not the
+ * preflight) so the response still validates if the browser bothered to
+ * check.
+ */
+const FALLBACK_ALLOW_HEADERS =
+  'authorization,content-type,accept,anthropic-version,anthropic-dangerous-direct-browser-access,openai-beta,openai-organization,user-agent,x-stainless-arch,x-stainless-lang,x-stainless-os,x-stainless-package-version,x-stainless-runtime,x-stainless-runtime-version,x-stainless-retry-count,x-stainless-timeout,x-requested-with'
 
-function corsHeaders(origin: string | null): Record<string, string> {
+function corsHeaders(
+  origin: string | null,
+  requestHeaders?: string | null,
+): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origin ?? '*',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': ALLOW_HEADERS,
+    'Access-Control-Allow-Headers':
+      requestHeaders && requestHeaders.length > 0
+        ? requestHeaders
+        : FALLBACK_ALLOW_HEADERS,
+    'Access-Control-Expose-Headers': '*',
     'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
+    Vary: 'Origin, Access-Control-Request-Headers',
   }
 }
 
@@ -95,6 +101,28 @@ function unauthorized(message: string, origin: string | null): Response {
     headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
   })
 }
+
+function logProxy(...args: unknown[]) {
+  console.log('[braian/proxy]', ...args)
+}
+
+/**
+ * Trivial liveness endpoint for diagnosing routing / CORS from a browser tab.
+ * Returns plain "ok" with permissive CORS. Visit:
+ *   `${VITE_CONVEX_SITE_URL}/provider-proxy-ping`
+ * If you see "ok", the HTTP router is reachable. If you see Convex's default
+ * 404 instead, your Convex dev server hasn't picked up the latest http.ts.
+ */
+export const providerProxyPing = httpAction(async (_ctx, request) => {
+  const origin = request.headers.get('Origin')
+  return new Response('ok', {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/plain',
+      ...corsHeaders(origin, request.headers.get('Access-Control-Request-Headers')),
+    },
+  })
+})
 
 /**
  * Strip headers that would confuse the upstream (auth aimed at us, encoding
@@ -137,10 +165,15 @@ function rewriteRequestHeaders(
 
 export const providerProxyHandler = httpAction(async (ctx, request) => {
   const origin = request.headers.get('Origin')
+  const requestedHeaders = request.headers.get('Access-Control-Request-Headers')
   const url = new URL(request.url)
+  logProxy(request.method, url.pathname, 'origin=', origin)
 
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) })
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(origin, requestedHeaders),
+    })
   }
 
   if (!url.pathname.startsWith(PROXY_PREFIX)) {
@@ -157,7 +190,10 @@ export const providerProxyHandler = httpAction(async (ctx, request) => {
   const upstreamPath = '/' + pathSegments.join('/')
 
   const userId = await getAuthUserId(ctx)
-  if (!userId) return unauthorized('Sign in to use the chat proxy.', origin)
+  if (!userId) {
+    logProxy('unauthorized: no auth identity on request')
+    return unauthorized('Sign in to use the chat proxy.', origin)
+  }
 
   const stored = await ctx.runQuery(
     internal.providerProxy._getEncryptedKeyForProxy,
@@ -211,6 +247,7 @@ export const providerProxyHandler = httpAction(async (ctx, request) => {
     upstreamReq.body = await request.arrayBuffer()
   }
 
+  logProxy('forwarding to', targetUrl)
   let upstream: Response
   try {
     upstream = await fetch(targetUrl, upstreamReq)
@@ -224,6 +261,7 @@ export const providerProxyHandler = httpAction(async (ctx, request) => {
       },
     )
   }
+  logProxy('upstream replied', upstream.status, upstream.statusText)
 
   // Mirror upstream headers but strip ones that would break browser semantics.
   const responseHeaders = new Headers()
@@ -233,7 +271,12 @@ export const providerProxyHandler = httpAction(async (ctx, request) => {
       k === 'content-encoding' ||
       k === 'transfer-encoding' ||
       k === 'connection' ||
-      k === 'content-length'
+      k === 'content-length' ||
+      k === 'access-control-allow-origin' ||
+      k === 'access-control-allow-headers' ||
+      k === 'access-control-allow-methods' ||
+      k === 'access-control-expose-headers' ||
+      k === 'access-control-max-age'
     ) {
       return
     }

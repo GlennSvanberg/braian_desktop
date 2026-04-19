@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 
 import { ChatWorkbench } from '@/components/app/chat-workbench'
+import { CloudActiveThreadSync } from '@/components/app/cloud-active-thread-sync'
 import { useWorkspace } from '@/components/app/workspace-context'
 import { conversationOpen, conversationSetUnread } from '@/lib/workspace-api'
 
@@ -62,11 +63,17 @@ function ChatPage() {
   ])
 
   return (
-    <ChatWorkbench
-      key={conversation.id}
-      conversationId={conversation.id}
-      conversationMeta={conversation}
-      initialThread={initialThread}
-    />
+    <>
+      <CloudActiveThreadSync
+        conversationId={conversation.id}
+        workspaceId={conversation.workspaceId}
+      />
+      <ChatWorkbench
+        key={conversation.id}
+        conversationId={conversation.id}
+        conversationMeta={conversation}
+        initialThread={initialThread}
+      />
+    </>
   )
 }

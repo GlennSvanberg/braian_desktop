@@ -70,12 +70,21 @@ export function buildCloudProxyFetch(provider: AiProviderId): typeof fetch {
           : input.url
     const rewritten = rewriteUrl(provider, inputUrl)
     if (!rewritten) {
+      console.warn(
+        '[braian/cloud] proxy fetch: not rewriting',
+        inputUrl,
+        '(provider=',
+        provider,
+        ', siteUrl=',
+        getConvexSiteUrl(),
+        ')',
+      )
       return globalThis.fetch(input, init)
     }
     const token = getCloudAuthToken()
     if (!token) {
       throw new Error(
-        'Sign in (Cloud sync card) before chatting from the web client.',
+        'Sign in (Cloud sync card) before chatting from the web client. (No Convex Auth token attached.)',
       )
     }
     const headers = new Headers(init?.headers)
@@ -85,6 +94,26 @@ export function buildCloudProxyFetch(provider: AiProviderId): typeof fetch {
     headers.delete('x-goog-api-key')
     // Auth ourselves to Convex.
     headers.set('Authorization', `Bearer ${token}`)
-    return globalThis.fetch(rewritten, { ...init, headers })
+    console.info(
+      '[braian/cloud] proxy fetch →',
+      rewritten,
+      '(method=',
+      init?.method ?? 'GET',
+      ')',
+    )
+    try {
+      const res = await globalThis.fetch(rewritten, { ...init, headers })
+      console.info(
+        '[braian/cloud] proxy response',
+        res.status,
+        res.statusText,
+        'content-type=',
+        res.headers.get('content-type'),
+      )
+      return res
+    } catch (err) {
+      console.error('[braian/cloud] proxy fetch threw', err)
+      throw err
+    }
   }
 }

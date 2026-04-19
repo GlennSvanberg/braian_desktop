@@ -1113,11 +1113,15 @@ export function ChatWorkbench({
       isProfileSession ||
       conversationId == null ||
       !metaForSave ||
-      !isTauriRuntime ||
       generating
     ) {
       return
     }
+    // On the web build there is no local file to save to, but we still
+    // want the autosave heartbeat so `conversationSave` -> `mirrorToCloudSave`
+    // runs and pushes the new messages to Convex (otherwise the desktop's
+    // realtime subscription never sees them). On Tauri this writes both the
+    // local `.braian` file and mirrors to the cloud.
     const t = window.setTimeout(() => {
       const payload = buildConversationSavePayload(thread, metaForSave)
       const s = JSON.stringify(payload)

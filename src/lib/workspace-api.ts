@@ -548,6 +548,15 @@ async function openCloudOnlyConversation(
       messages: [],
     }
     const merged = mod.applyCloudPullToThread(thread, pull)
+    // Persist the snapshot we just pulled so the autosave loop's first
+    // diff doesn't think every existing message is a fresh local addition
+    // and re-push the whole thread.
+    try {
+      const snap = await import('@/lib/cloud/snapshot-store')
+      if (pull.newSnapshot) snap.writeSnapshot(pull.newSnapshot)
+    } catch {
+      // best-effort
+    }
     return { conversation, thread: merged }
   } catch (err) {
     console.error('[braian/cloud] openCloudOnlyConversation failed', err)
