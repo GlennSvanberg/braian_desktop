@@ -18,3 +18,5 @@ src-tauri/target
 # `convex/_generated/` is intentionally checked in: stub types so the project
 # type-checks without a deployment. Running `npx convex dev` overwrites the
 # stubs with the real generated types for your deployment.
+
+.vercel

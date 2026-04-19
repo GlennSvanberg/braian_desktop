@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+src-tauri/target
+.git
+.cursor
+.tanstack
+.output
+.vinxi
+.wrangler
+.nitro
+**/.DS_Store
+*.local
+.env
+.env.local
