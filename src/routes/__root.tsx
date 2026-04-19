@@ -64,7 +64,7 @@ export const Route = createRootRoute({
       },
       {
         rel: 'apple-touch-icon',
-        href: '/logo192.png',
+        href: '/braian-logo.png',
       },
       {
         rel: 'manifest',
