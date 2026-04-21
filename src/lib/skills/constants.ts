@@ -7,7 +7,7 @@ export const SKILL_MD_FILENAME = 'SKILL.md'
 /** Default folder for the always-injected “how to create skills” skill. */
 export const CREATE_SKILL_DIRNAME = 'create-skill'
 
-/** Skill folder with dashboard/webapp builder instructions. */
+/** Skill folder with dashboard / Arrow app builder instructions. */
 export const APP_BUILDER_SKILL_DIRNAME = 'app-builder'
 
 /** Legacy flat markdown filename for create-skill compatibility. */

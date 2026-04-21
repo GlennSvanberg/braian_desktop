@@ -1,52 +1,80 @@
 ---
 name: app-builder
-description: Braian workspace webapp (Vite in .braian/webapp). Use after switch_to_app_builder and lazy tool discovery.
+description: Braian workspace Arrow JS sandbox apps (.braian/arrow-apps). Use after switch_to_app_builder and lazy tool discovery.
 ---
 
-## Workspace webapp (Vite + React + TypeScript)
+## Workspace Arrow apps (sandboxed UI)
 
-The interactive UI for this workspace lives under **`.braian/webapp/`** (bundled template: Vite 7, React 19, Tailwind v4, **react-router-dom**). **Dashboard -> Apps** shows the **published** production build (large iframe). **Dev preview** (hot reload) runs from **Dashboard -> App settings** or from the chat **artifact** in App mode.
+Interactive UI for this workspace lives as **Arrow JS** sandboxes under **`.braian/arrow-apps/<appId>/`**, indexed by **`.braian/arrow-apps.json`**. **Dashboard → Apps** lists apps and opens a live preview. **App mode** shows the active app in the chat **artifact** panel.
 
-**Visual system:** Use **semantic Tailwind classes** from the template: `bg-app-bg-0`, `bg-app-bg-1`, `text-app-text-1`, `border-app-border`, `text-app-accent-600`, etc. (defined in **`src/index.css`**). **Do not** replace the app with plain white pages and default black text - that breaks Braian theming. The root layout **`BraianShell`** in **`src/layouts/BraianShell.tsx`** wraps all routes; keep it in **`App.tsx`**.
+There is **no** Vite, **no** React in the sandbox, **no** `npm run dev`, and **no** `.braian/webapp/` flow — only Arrow + tools.
 
-### Sacred landing (`/`) - entry point only
+### Official contract (keep in sync with tools)
 
-- **`/`** is **only** the **My apps** index. It is implemented as **`MyAppsLandingPage`** in **`src/app-routes.tsx`** (same file as **`APP_ROUTES`**).
-- **Never** replace **`MyAppsLandingPage`** with a feature screen (forms, validators, dashboards, games, etc.). **Never** remove the **`APP_ROUTES` -> `<Link>` list** - users need real navigation, not prose like "open `/foo`".
-- **Every new mini-app** - including when the user says "simple" or "just a small app" - belongs on a **sub-path** (e.g. **`/email-checker`**): add **`src/pages/<Name>Page.tsx`**, append one object to **`APP_ROUTES`** in **`app-routes.tsx`**, then call **`set_workspace_webapp_preview_path`** with **`/that-path`** (not **`/`**).
-- **`App.tsx`** must keep **`<Route path="/" element={<MyAppsLandingPage />} />`**. Do not point **`/`** at feature UI.
-- At most adjust **short copy** inside **`MyAppsLandingPage`**; structure and themed styling must stay.
+Build each app for `sandbox({ source })` with exactly one entry **`main.ts`** (or `main.js`), optional **`main.css`**.
 
-### Multi-page app (routing)
+- Use **`@arrow-js/core`** primitives only: **`reactive`**, **`html`**, **`component`**, **`watch`**, **`onCleanup`** when needed. Identifiers can be used as globals in the sandbox (they are injected).
+- **No JSX**, no React hooks, no Vue, no direct `document`/`window` mutation in user code.
+- **Default export** from `main.ts` must be the root `html` template literal (or a `component(...)` result).
+- **Live reactive slots** must be **callables** (Arrow rule): wrap dynamic reads in a function in the template slot — not a one-time static value.
+- **Events:** use `@click` (and other `@`-bindings) with a function handler per [Arrow docs](https://arrow-js.com/).
+- **`output(payload)`** — global in the VM; send **one JSON-serializable** value to the host (`events.output` in Braian). Use for form submits or status.
 
-- Each feature lives on its own path (e.g. **`/calculator`**, **`/register`**, **`/email-checker`**).
-- **Do not** collapse new work into the root route or delete **`BraianShell`**.
-- After you create or edit a sub-page, call **`set_workspace_webapp_preview_path`** with **that page's path**. Use **`/`** only when the user should see the **My apps** index - not to show a feature you just built.
+### File layout (Braian)
 
-### Edit
+| Path | Purpose |
+|------|---------|
+| `.braian/arrow-apps.json` | Index: `{ schemaVersion: 1, activeAppId, apps: [{ id, title, updatedAtMs }] }` |
+| `.braian/arrow-apps/<appId>/main.ts` | Entry source (required) |
+| `.braian/arrow-apps/<appId>/main.css` | Optional styles |
+| `.braian/arrow-apps/<appId>/manifest.json` | Optional duplicate metadata (written by `write_arrow_app`) |
 
-- Change **`src/**`** (`App.tsx`, `app-routes.tsx`, `pages/`, `layouts/`, `index.css`). Use `read_workspace_file`, `write_workspace_file`, `patch_workspace_file`.
-- Paths are relative to the **workspace root**; webapp files use prefix `.braian/webapp/...`.
+**`appId`:** lowercase slug, starts with letter or digit, only `a-z`, `0-9`, hyphens (e.g. `email-checker`, `invoice-dashboard`).
 
-### Scaffold
+### Tools (always use these names)
 
-- If **`package.json`** is missing (or the user wants a clean template), call **`init_workspace_webapp`** (`overwrite: true` only when replacing an existing app).
+- **`list_arrow_apps`** — read the index.
+- **`read_arrow_app`** — return `main.ts` / `main.css` / manifest for an id.
+- **`write_arrow_app`** — create or replace `main.ts`, optional `main.css`, update index entry, bump `updatedAtMs`. Sets **`activeAppId`** to the new id when none was set.
+- **`delete_arrow_app`** — remove the app folder and index entry.
+- **`set_active_arrow_app`** — which app the **Apps** tab / App-mode artifact shows (must exist in index).
 
-### One-shot commands (not the dev server)
+You may also use normal **`read_workspace_file`** / **`write_workspace_file`** on paths under `.braian/arrow-apps/` if you need raw edits.
 
-- Use **`run_workspace_shell`** with **`cwd: ".braian/webapp"`** for `npm install`, typecheck, etc.
-- **Do not** run **`npm run dev`** via the shell tool - it is long-running. Braian starts the dev server via **Start dev preview** in the UI or the artifact panel.
-- To refresh what **Dashboard -> Apps** shows, call **`publish_workspace_webapp`** or ask the user to click **Publish** in Braian (runs `npm run build` with the correct `--base` for the static server). Until then, **unpublished** source edits are not what the published iframe shows.
+### Minimal examples
 
-### Published app vs dev preview
+**Counter**
 
-- **Publish** (tool or UI) updates **`dist/`** and the **Dashboard -> Apps** iframe. The UI shows when there are **unpublished changes** compared to the last publish.
-- **Dev preview** is for editing: **Start dev preview** / **Stop dev preview**. The **Preview path** field and **`set_workspace_webapp_preview_path`** apply to **both** published and dev URLs.
-- To inspect dev server output after a start failure or runtime errors, call **`read_workspace_webapp_dev_logs`** (ring buffer from the managed dev process).
+```ts
+const state = reactive({ count: 0 })
+
+export default html`
+  <button @click="${() => state.count++}">Count: ${() => state.count}</button>
+`
+```
+
+**Notify host**
+
+```ts
+output({ type: 'ready', app: 'demo' })
+
+export default html`<p>Hello from Arrow</p>`
+```
+
+### Theming
+
+Prefer semantic, readable HTML and scoped **`main.css`**. Avoid unreadable tiny gray-on-gray text. The host shell is themed; sandbox runs in a card — keep contrast reasonable.
+
+### After changes
+
+Call **`set_active_arrow_app`** when the user should see a different app. After **`write_arrow_app`**, the user may need to finish the chat turn or hit **Reload** on the Apps view for the latest `main.ts` to load.
 
 ### Troubleshooting
 
-- **`Cannot find name 'process'`** in **`vite.config.ts`** during **`tsc -b`**: run **`npm i -D @types/node`** in **`.braian/webapp`** (the bundled template includes it; older copies may not).
-- **`publish_workspace_webapp`** (or **`npm run build`** via shell) surfaces compile errors in the returned log.
-- **`read_workspace_webapp_dev_logs`** for Vite/npm messages from the dev preview process.
-- Ensure **`npm install`** completed successfully before **Publish** or dev preview.
+- **Syntax errors in `main.ts`:** fix and re-run `write_arrow_app`; errors surface in the artifact panel.
+- **Empty panel:** ensure `export default` exists and is an Arrow template.
+- **Unknown app id:** run `list_arrow_apps` first.
+
+### Agent payload shape (reference)
+
+Aligned with Arrow’s documented `create_arrow_sandbox` tool schema: virtual files object with **`main.ts`** required, **`main.css`** optional, no unsupported imports.

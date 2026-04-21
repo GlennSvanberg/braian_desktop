@@ -1,4 +1,9 @@
 import {
+  isPersonalWorkspaceSessionId,
+  isUserProfileSessionId,
+} from '@/lib/chat-sessions/detached'
+import { isCloudWorkspaceSessionId } from '@/lib/cloud/workspace'
+import {
   conversationList,
   conversationOpen,
   workspaceList,
@@ -6,6 +11,7 @@ import {
   type ConversationSavePayload,
 } from '@/lib/workspace-api'
 
+import { pushFullArrowWorkspaceFromDisk } from './arrow-apps-sync'
 import { pushConversation } from './sync'
 
 /**
@@ -94,4 +100,41 @@ export async function backfillLocalConversationsToCloud(): Promise<{
     }
   }
   return { scanned, pushed, failed }
+}
+
+function shouldBackfillArrowApps(workspaceId: string): boolean {
+  if (isPersonalWorkspaceSessionId(workspaceId)) return false
+  if (isUserProfileSessionId(workspaceId)) return false
+  if (isCloudWorkspaceSessionId(workspaceId)) return false
+  return true
+}
+
+/**
+ * Pushes every folder workspace’s Arrow apps from disk to Convex once per
+ * session (same timing as conversation backfill).
+ */
+export async function backfillLocalArrowAppsToCloud(): Promise<{
+  workspaces: number
+  failed: number
+}> {
+  let workspaces = 0
+  let failed = 0
+  let list
+  try {
+    list = await workspaceList()
+  } catch (err) {
+    console.error('[braian/cloud] arrow backfill workspaceList failed', err)
+    return { workspaces, failed }
+  }
+  for (const ws of list) {
+    if (!shouldBackfillArrowApps(ws.id)) continue
+    workspaces += 1
+    try {
+      await pushFullArrowWorkspaceFromDisk(ws.id)
+    } catch (err) {
+      failed += 1
+      console.error('[braian/cloud] arrow backfill failed', ws.id, err)
+    }
+  }
+  return { workspaces, failed }
 }

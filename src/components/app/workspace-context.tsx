@@ -24,6 +24,7 @@ import {
   workspaceTouch,
 } from '@/lib/workspace-api'
 
+import { CloudArrowAppsWorkspaceSync } from './cloud-arrow-apps-workspace-sync'
 import { CloudConversationsSync } from './cloud-conversations-sync'
 
 const ACTIVE_WS_KEY = 'braian.io.activeWorkspaceId'
@@ -375,6 +376,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   return (
     <WorkspaceContext.Provider value={value}>
       <CloudConversationsSync onCloudList={handleCloudListSync} />
+      <CloudArrowAppsWorkspaceSync activeWorkspaceId={activeWorkspaceId} />
       {children}
     </WorkspaceContext.Provider>
   )

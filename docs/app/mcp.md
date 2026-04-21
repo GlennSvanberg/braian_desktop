@@ -118,7 +118,7 @@ For remote OAuth-style bearer usage, you can also add:
 
 When present, Braian maps this into the `rmcp` authorization header path.
 
-Workspace file, command, document canvas (`apply_document_canvas_patch` / `open_document_canvas`), skills, and webapp helpers stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
+Workspace file, command, document canvas (`apply_document_canvas_patch` / `open_document_canvas`), skills, and Arrow app tools stay separate; routing instructions remind the model to use `mcp__*` tools for external systems and built-in tools for files under the workspace.
 
 ## Fast dev loop (no Tauri)
 
@@ -179,7 +179,7 @@ Use the **gear icon** next to a workspace name in the sidebar (**Workspace setti
 
 ## Related
 
-- [Tools](/docs/tools) — built-in assistant tools (files, commands, skills, webapp)
+- [Tools](/docs/tools) — built-in assistant tools (files, commands, skills, Arrow apps)
 - [Capabilities](/docs/capabilities) — workspace scope and limits
 - [Overview](/docs/overview) — workspaces and desktop vs browser
 - [Model context](/docs/model-context) — what the model sees each turn (including MCP tool definitions when Connections are enabled)

@@ -8,7 +8,7 @@ In the chat toolbar, **Context** opens the **Model context** dialog: **Last sent
 
 For a normal chat attached to a **workspace folder** (not "new chat" without a folder, and not the **You** profile coach), sections are assembled in this order:
 
-1. **Routing (Core)** — A numbered **decision tree** for the current turn, plus a short addendum for **document/triage** or **code** mode, and in **App** mode an extra **App mode** subsection (workspace webapp, live preview).
+1. **Routing (Core)** — A numbered **decision tree** for the current turn, plus a short addendum for **document/triage** or **code** mode, and in **App** mode an extra **App mode** subsection (workspace Arrow apps, live sandbox preview).
 2. **Skills** — A **catalog** listing every skill's `name`, `description`, and main path (usually `.braian/skills/<slug>/SKILL.md`) as metadata only. Full skill bodies load **on demand** via `read_workspace_skill`.
 3. **User context** — **Current client time** (workspace chats do not inject your global profile; the **You** / profile coach chat uses profile sections instead).
 4. **Workspace instructions** — Root **`AGENTS.md`** when present (size-capped).
@@ -19,7 +19,7 @@ For a normal chat attached to a **workspace folder** (not "new chat" without a f
    - **Attached workspace files** (excerpts from @-attachments),
    - **Prior conversations** (attached),
    - **Document canvas snapshot** (latest side-panel markdown + **revision**, optional **selection** excerpt),
-   - **Workspace webapp builder** — When **App** mode is on, app-builder instructions from **`.braian/skills/app-builder/SKILL.md`** (with fallbacks).
+   - **Workspace Arrow app builder** — When **App** mode is on, app-builder instructions from **`.braian/skills/app-builder/SKILL.md`** (with fallbacks).
 
 Detached chats (no workspace folder yet) and synthetic sessions skip workspace-only sections where the app cannot resolve paths.
 
@@ -34,8 +34,8 @@ The **sidebar → You** chat uses a **separate** prompt: profile coach instructi
 ## Tools vs system text
 
 - **Eager tools** (always registered in workspace chats): canvas helpers, **`add_workspace_memory`**, structured memory tools (`remember_workspace_*`, `search_workspace_memory`, …), **conversation archive** tools (`search_conversation_archive`, `open_conversation_span`, `get_conversation_summary`), **`search_codebase_index`**, **`get_related_files_for_memory`**, and provider web search when configured.
-- **Lazy tools** (document mode): coding and **webapp helper** tools may appear as "lazy" until the model calls **`switch_to_*`** and completes **tool discovery**.
-- **Code** mode: workspace file tools are eager; webapp helpers may stay lazy until `switch_to_app_builder` + discovery.
+- **Lazy tools** (document mode): coding and **Arrow app** tools may appear as "lazy" until the model calls **`switch_to_*`** and completes **tool discovery**.
+- **Code** mode: workspace file tools are eager; Arrow app tools may stay lazy until `switch_to_app_builder` + discovery.
 - **MCP issues**: when MCP connections fail, warnings appear in a **Connections (MCP) issues** section.
 
 ## Per-chat MCP selection

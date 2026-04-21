@@ -43,11 +43,11 @@ Paths are always **relative to the workspace root**. The shell tool provides ful
 
 In a **saved** workspace chat (desktop app), the header includes **Document** | **Code** | **App**:
 
-- **Code** — All workspace **coding** tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. **Webapp helper** tools (`init_workspace_webapp`, `read_workspace_webapp_dev_logs`) stay **lazy** until the assistant uses **`switch_to_app_builder`** and discovery (same as Document). The routing prompt includes a tool selection guide for files and commands.
-- **Document** — Default assistant behavior; coding and webapp helpers are loaded **lazily** when the assistant calls **`switch_to_code_agent`** or **`switch_to_app_builder`** and completes the tool-discovery step. The model is only told about each workflow when the corresponding switch tool is available in the current turn.
-- **App** — **Full code mode** (eager coding tools) **plus** eager **webapp helpers** (`init_workspace_webapp`, `read_workspace_webapp_dev_logs`) and the **app-builder** instructions so the model can edit **`.braian/webapp/`**. The chat side panel shows a **live Vite preview** (same idea as the Webapp route). See [Workspace webapp](/docs/dashboard).
+- **Code** — All workspace **coding** tools (read, write, patch, search, list, shell, command) are **on** for that chat immediately. **Arrow app** tools (`list_arrow_apps`, `write_arrow_app`, …) stay **lazy** until the assistant uses **`switch_to_app_builder`** and discovery (same as Document). The routing prompt includes a tool selection guide for files and commands.
+- **Document** — Default assistant behavior; coding and Arrow app tools are loaded **lazily** when the assistant calls **`switch_to_code_agent`** or **`switch_to_app_builder`** and completes the tool-discovery step. The model is only told about each workflow when the corresponding switch tool is available in the current turn.
+- **App** — **Full code mode** (eager coding tools) **plus** eager **Arrow app** tools and the **app-builder** instructions so the model can edit **`.braian/arrow-apps/`**. The chat side panel shows a **live Arrow sandbox** preview. See [Workspace dashboard](/docs/dashboard).
 
-You can switch modes yourself, or stay on **Document** and ask the assistant to enable webapp or code capabilities through its tools when needed.
+You can switch modes yourself, or stay on **Document** and ask the assistant to enable app or code capabilities through its tools when needed.
 
 ## Workspace skills (`.braian/skills`)
 
@@ -61,22 +61,23 @@ In a **real workspace** on the **desktop app**, the assistant also gets tools to
 
 These tools are **not** available in the **You** profile coach, detached "new chat" without a folder, or in the browser-only dev preview.
 
-## Workspace webapp helpers
+## Workspace Arrow app tools
 
-When webapp helpers are active for a turn, the assistant can:
+When Arrow app tools are active for a turn, the assistant can:
 
 | Tool | What it does |
 |------|----------------|
-| `init_workspace_webapp` | Copy the bundled Vite template into `.braian/webapp/` (optional `overwrite`). |
-| `read_workspace_webapp_dev_logs` | Read recent stdout/stderr from the Braian-managed Vite dev server (ring buffer). |
-
-The dev server itself is started from the UI, not via `npm run dev` in the shell tool.
+| `list_arrow_apps` | Read `.braian/arrow-apps.json` and listed apps. |
+| `read_arrow_app` | Read `main.ts`, optional `main.css`, manifest for one `appId`. |
+| `write_arrow_app` | Create or update an app (slug `appId`, `title`, `mainTs`, optional `mainCss`). |
+| `delete_arrow_app` | Remove an app from disk and the index. |
+| `set_active_arrow_app` | Set which app opens in **Dashboard → Apps** and the App-mode artifact. |
 
 ## Related
 
 - [Model context](/docs/model-context)
 - [Overview](/docs/overview)
-- [Workspace webapp](/docs/dashboard)
+- [Workspace dashboard](/docs/dashboard)
 - [Connections (MCP)](/docs/mcp)
 - [How memory works](/docs/how-memory-works)
 - [Capabilities](/docs/capabilities)

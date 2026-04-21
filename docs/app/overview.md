@@ -9,7 +9,7 @@ A **workspace** is a folder you choose as the active project root. The assistant
 - **Chat** is where you talk to the assistant.
 - The **document canvas** (side panel) holds long-form markdown the assistant can update as a working document—specs, drafts, reports—while chat stays conversational.
 - **You** (sidebar) opens a dedicated **profile** chat: the assistant can update your global preferences and identity fields stored on this device; that session uses a different prompt than workspace chats. See [Model context](/docs/model-context).
-- **Webapp** (sidebar) opens a per-workspace **Vite + React** preview under `.braian/webapp/`. See [Workspace webapp](/docs/dashboard).
+- **Apps** (sidebar) opens per-workspace **Arrow JS** sandbox apps under `.braian/arrow-apps/`. See [Workspace dashboard](/docs/dashboard).
 
 Some assistant actions only work after the conversation is **saved** (a real thread, not only “new chat”). If something is unavailable, start or open a saved chat and try again.
 
@@ -23,7 +23,7 @@ Some assistant actions only work after the conversation is **saved** (a real thr
 ## Next topics
 
 - [Model context](/docs/model-context) — how prompts, skills, and profile are assembled each turn
-- [Workspace webapp](/docs/dashboard)
+- [Workspace dashboard](/docs/dashboard)
 - [Tools the assistant can use](/docs/tools)
 - [Connections (MCP)](/docs/mcp) — `.braian/mcp.json`, Cursor-style servers, status checks
 - [How memory works](/docs/how-memory-works)

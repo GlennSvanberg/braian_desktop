@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useConvexAuth } from 'convex/react'
 
-import { backfillLocalConversationsToCloud } from '@/lib/cloud/backfill'
+import {
+  backfillLocalArrowAppsToCloud,
+  backfillLocalConversationsToCloud,
+} from '@/lib/cloud/backfill'
 import { isCloudConfigured } from '@/lib/cloud/convex-client'
 import { isTauri } from '@/lib/tauri-env'
 
@@ -32,6 +35,12 @@ function CloudInitialBackfillInner() {
         if (result.scanned > 0) {
           console.info(
             `[braian/cloud] backfill complete: scanned=${result.scanned} pushed=${result.pushed} failed=${result.failed}`,
+          )
+        }
+        const arrow = await backfillLocalArrowAppsToCloud()
+        if (arrow.workspaces > 0) {
+          console.info(
+            `[braian/cloud] arrow backfill: workspaces=${arrow.workspaces} failed=${arrow.failed}`,
           )
         }
       } catch (err) {

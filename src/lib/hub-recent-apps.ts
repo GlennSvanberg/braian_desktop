@@ -2,7 +2,7 @@ import { workspaceReadTextFile, workspaceWriteTextFile } from '@/lib/workspace-a
 import { isTauri } from '@/lib/tauri-env'
 
 const HUB_RECENT_APPS_PATH = '.braian/hub-recent-apps.json'
-const WEBAPP_APPS_PATH = '.braian/webapp-apps.json'
+const ARROW_APPS_INDEX_PATH = '.braian/arrow-apps.json'
 const READ_MAX = 64 * 1024
 const MAX_ENTRIES = 24
 
@@ -23,16 +23,23 @@ function normalizePath(p: string): string {
   return t.startsWith('/') ? t : `/${t}`
 }
 
-function parseWebappRoutesJson(raw: string): { path: string; label: string }[] {
+function parseArrowAppsForLabels(
+  raw: string,
+): { path: string; label: string }[] {
   try {
-    const o = JSON.parse(raw) as { routes?: { path?: string; label?: string }[] }
-    const routes = o.routes
-    if (!Array.isArray(routes)) return []
-    return routes
-      .map((r) => ({
-        path: typeof r.path === 'string' ? normalizePath(r.path) : '',
-        label: typeof r.label === 'string' ? r.label : '',
-      }))
+    const o = JSON.parse(raw) as {
+      apps?: { id?: string; title?: string }[]
+    }
+    const apps = o.apps
+    if (!Array.isArray(apps)) return []
+    return apps
+      .map((a) => {
+        const id = typeof a.id === 'string' ? a.id.trim() : ''
+        const title = typeof a.title === 'string' ? a.title.trim() : ''
+        if (!id) return { path: '', label: '' }
+        const path = normalizePath(id.startsWith('/') ? id : `/${id}`)
+        return { path, label: title || id }
+      })
       .filter((r) => r.path && r.label)
   } catch {
     return []
@@ -46,10 +53,10 @@ async function resolveLabelFromManifest(
   try {
     const { text } = await workspaceReadTextFile(
       workspaceId,
-      WEBAPP_APPS_PATH,
+      ARROW_APPS_INDEX_PATH,
       READ_MAX,
     )
-    const routes = parseWebappRoutesJson(text)
+    const routes = parseArrowAppsForLabels(text)
     const hit = routes.find((r) => r.path === path)
     return hit?.label ?? null
   } catch {
@@ -91,8 +98,8 @@ export async function loadHubRecentApps(
 }
 
 /**
- * Record that the user navigated to a workspace webapp route (dev preview or published Apps).
- * Call after successful `workspaceWebappPreviewPathSet` or when opening a route from the dashboard.
+ * Record that the user opened a workspace Arrow app (path like `/my-app`).
+ * Call after `set_active_arrow_app` or when opening an app from the dashboard.
  */
 export async function touchHubRecentApp(
   workspaceId: string,

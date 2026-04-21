@@ -45,7 +45,7 @@ import { buildConversationArchiveTools } from './conversation-archive-tools'
 import { buildSemanticMemoryTools } from './semantic-memory-tools'
 import { buildWorkspaceMemoryTools } from './workspace-memory-tools'
 import { buildProviderNativeSearchTools } from './provider-native-search-tools'
-import { buildWorkspaceWebappTools } from './webapp-tools'
+import { buildArrowAppTools } from './arrow-app-tools'
 import { buildReasoningModelOptions } from './reasoning-model-options'
 
 import type {
@@ -57,7 +57,7 @@ import type { ReasoningModelOptions } from './reasoning-model-options'
 
 import type { ModelMessage, Tool } from '@tanstack/ai'
 
-/** Fallback webapp instructions if `.braian/skills/app-builder/SKILL.md` is unavailable. */
+/** Fallback Arrow app instructions if `.braian/skills/app-builder/SKILL.md` is unavailable. */
 export const APP_BUILDER_SYSTEM = APP_BUILDER_INSTRUCTIONS_FALLBACK
 
 export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Desktop. Your job is to get to know the user in a friendly, efficient way and to keep their **global profile** up to date.
@@ -66,7 +66,7 @@ export const PROFILE_COACH_SYSTEM = `You are the **profile coach** in Braian Des
 - Ask short, natural questions (name, where they are, languages they prefer for answers, timezone or locale if relevant, role or context that helps assistants across workspaces).
 - When the user shares something they want remembered, call **update_user_profile** with only the fields that changed. Do not invent facts.
 - If they clear or correct something, use the tool with null or empty string for that field, or an updated list for languages.
-- You have **no** workspace files, code, document canvas, or webapp tools — only **update_user_profile**. If they ask for other work, say that normal chats in a workspace handle that, and stay focused on profile here.
+- You have **no** workspace files, code, document canvas, or Arrow app tools — only **update_user_profile**. If they ask for other work, say that normal chats in a workspace handle that, and stay focused on profile here.
 
 **Privacy:** Only store what they explicitly give you or clearly confirm.`
 
@@ -177,10 +177,11 @@ const TOOL_SOURCE_BY_NAME: Record<string, string> = {
   switch_to_code_agent: 'src/lib/ai/switch-code-agent-tool.ts',
   switch_to_app_builder: 'src/lib/ai/switch-app-builder-tool.ts',
   __lazy__tool__discovery__: '@tanstack/ai (lazy tool discovery)',
-  init_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
-  read_workspace_webapp_dev_logs: 'src/lib/ai/webapp-tools.ts',
-  set_workspace_webapp_preview_path: 'src/lib/ai/webapp-tools.ts',
-  publish_workspace_webapp: 'src/lib/ai/webapp-tools.ts',
+  list_arrow_apps: 'src/lib/ai/arrow-app-tools.ts',
+  read_arrow_app: 'src/lib/ai/arrow-app-tools.ts',
+  write_arrow_app: 'src/lib/ai/arrow-app-tools.ts',
+  delete_arrow_app: 'src/lib/ai/arrow-app-tools.ts',
+  set_active_arrow_app: 'src/lib/ai/arrow-app-tools.ts',
   update_user_profile: 'src/lib/ai/user-profile-tools.ts',
   add_workspace_memory: 'src/lib/ai/workspace-memory-tools.ts',
   search_workspace_memory: 'src/lib/ai/semantic-memory-tools.ts',
@@ -569,7 +570,7 @@ export async function buildTanStackChatTurnArgs(
   const switchToCodeTool =
     agentMode === 'document' ? buildSwitchToCodeAgentTool(ctx) : null
   const switchToAppTool = buildSwitchToAppBuilderTool(ctx)
-  const webappTools = buildWorkspaceWebappTools(ctx)
+  const arrowAppTools = buildArrowAppTools(ctx)
   const skillTools = buildSkillTools(ctx)
   const mcpToolsStart = nowMs()
   const { tools: mcpTools, warnings: mcpWarnings, serverNames: mcpServerNames } =
@@ -626,7 +627,7 @@ export async function buildTanStackChatTurnArgs(
     ...skillTools,
     ...(switchToCodeTool ? [switchToCodeTool] : []),
     ...(switchToAppTool ? [switchToAppTool] : []),
-    ...webappTools,
+    ...arrowAppTools,
     ...mcpTools,
     ...nativeSearchTools,
   ]
@@ -696,7 +697,7 @@ export async function buildTanStackChatTurnArgs(
     buildBraianRoutingPrompt({
       hasSwitchToAppBuilder: switchToAppTool != null,
       hasSwitchToCodeAgent: switchToCodeTool != null,
-      hasWebappTools: webappTools.length > 0,
+      hasArrowAppTools: arrowAppTools.length > 0,
       hasCodeTools: codingTools.length > 0,
       hasCanvasTools: canvasTools.length > 0,
       hasCanvasSnapshot:
@@ -887,7 +888,7 @@ export async function buildTanStackChatTurnArgs(
     )
     systemSections.push({
       id: 'app-builder',
-      label: 'Workspace webapp builder',
+      label: 'Workspace Arrow app builder',
       source: SOURCE_APP_BUILDER,
       text: appBuilderText,
     })

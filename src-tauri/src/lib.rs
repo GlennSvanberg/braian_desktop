@@ -12,13 +12,9 @@ mod workspace_files;
 mod workspace_mcp_config;
 mod workspace_mcp_runtime;
 mod workspace_git;
-mod workspace_webapp_dev;
-mod workspace_webapp_static;
 mod workspace_hub;
 mod memory_index;
 mod retrieval_index;
-
-use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -44,10 +40,6 @@ pub fn run() {
       if let Err(e) = workspace::ensure_personal_workspace(app.handle()) {
         log::error!("Failed to ensure personal workspace: {e}");
       }
-      app.manage(workspace_webapp_dev::WebappDevState::default());
-      app.manage(workspace_webapp_static::WebappStaticServerState::start(
-        app.handle().clone(),
-      ));
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -94,15 +86,6 @@ pub fn run() {
       workspace_mcp_runtime::workspace_mcp_list_tools,
       workspace_mcp_runtime::workspace_mcp_call_tool,
       workspace_mcp_runtime::workspace_mcp_sessions_disconnect,
-      workspace_webapp_dev::webapp_dev_start,
-      workspace_webapp_dev::webapp_dev_stop,
-      workspace_webapp_dev::webapp_dev_status,
-      workspace_webapp_dev::webapp_dev_logs,
-      workspace_webapp_dev::webapp_preview_path_set,
-      workspace_webapp_dev::webapp_init_from_template,
-      workspace_webapp_static::webapp_static_server_url,
-      workspace_webapp_static::webapp_publish,
-      workspace_webapp_static::webapp_publish_status,
       workspace_hub::workspace_hub_snapshot,
       workspace_hub::workspace_hub_recent_file_touch,
       memory_index::memory_index_upsert,
@@ -118,10 +101,9 @@ pub fn run() {
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|app_handle, event| {
+    .run(|_app_handle, event| {
       if let tauri::RunEvent::Exit = event {
         workspace_mcp_runtime::workspace_mcp_broker_shutdown();
-        workspace_webapp_dev::webapp_dev_stop_all(&app_handle);
       }
     });
 }

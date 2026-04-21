@@ -1,3 +1,4 @@
+import { useConvexAuth, useQuery } from 'convex/react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -11,7 +12,6 @@ import {
   Info,
   LayoutGrid,
   MessageSquare,
-  Package,
   Pin,
   Plug,
   Sparkles,
@@ -20,6 +20,8 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useWorkspace } from '@/components/app/workspace-context'
+import { isCloudConfigured } from '@/lib/cloud/convex-client'
+import { isCloudWorkspaceSessionId } from '@/lib/cloud/workspace'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
@@ -37,15 +39,14 @@ import {
   type WorkspaceHubSnapshot,
 } from '@/lib/workspace-hub-types'
 import { workspaceHubSnapshot } from '@/lib/workspace-hub-api'
+import { persistActiveArrowAppId } from '@/lib/workspace-arrow-apps/io'
 import type { ConversationDto } from '@/lib/workspace-api'
-import {
-  workspaceReadTextFile,
-  workspaceWebappPreviewPathSet,
-  workspaceWebappPublishStatus,
-} from '@/lib/workspace-api'
+import { workspaceReadTextFile } from '@/lib/workspace-api'
 import { workspaceGitListCheckpoints, workspaceGitStatus } from '@/lib/workspace/git-history-api'
 import { isTauri } from '@/lib/tauri-env'
 import { cn } from '@/lib/utils'
+
+import { api } from '../../../convex/_generated/api'
 
 /** Matches `DashboardTab` in workspace-dashboard (avoid circular import). */
 type HubDashboardTab =
@@ -221,9 +222,6 @@ export function WorkspaceHubOverview({
   )
   const [loadError, setLoadError] = useState<string | null>(null)
   const [agentsFilePresent, setAgentsFilePresent] = useState(false)
-  const [publishStatus, setPublishStatus] = useState<Awaited<
-    ReturnType<typeof workspaceWebappPublishStatus>
-  > | null>(null)
   const [gitStatus, setGitStatus] = useState<Awaited<
     ReturnType<typeof workspaceGitStatus>
   > | null>(null)
@@ -236,6 +234,28 @@ export function WorkspaceHubOverview({
   const [busySuggestionPath, setBusySuggestionPath] = useState<string | null>(
     null,
   )
+
+  const { isAuthenticated: cloudAuth, isLoading: cloudAuthLoading } = useConvexAuth()
+  const cloudArrowBundle = useQuery(
+    api.arrowApps.workspaceBundle,
+    !isTauriRuntime &&
+      isCloudConfigured() &&
+      isCloudWorkspaceSessionId(workspaceId) &&
+      cloudAuth &&
+      !cloudAuthLoading
+      ? { workspaceClientId: workspaceId }
+      : 'skip',
+  )
+
+  const webappAppRoutesDisplay = useMemo(() => {
+    if (isTauriRuntime) return snapshot?.webappAppRoutes ?? []
+    if (!cloudArrowBundle) return []
+    return cloudArrowBundle.apps.map((a) => ({
+      path: `/${a.appId}`,
+      label: a.title || a.appId,
+    }))
+  }, [isTauriRuntime, snapshot?.webappAppRoutes, cloudArrowBundle])
+
   const reload = useCallback(async () => {
     if (!isTauriRuntime) {
       setSnapshot({
@@ -244,7 +264,6 @@ export function WorkspaceHubOverview({
         recentFiles: [],
         insightItems: [],
       })
-      setPublishStatus(null)
       setGitStatus(null)
       setLastCheckpointMs(null)
       setMcpServerCount(0)
@@ -255,20 +274,17 @@ export function WorkspaceHubOverview({
     }
     setLoadError(null)
     try {
-      const [snap, pub, gs, mcp, agentsProbe, sug, appsRecent] =
-        await Promise.all([
-          workspaceHubSnapshot(workspaceId),
-          workspaceWebappPublishStatus(workspaceId),
-          workspaceGitStatus(workspaceId),
-          workspaceMcpConfigGet(workspaceId),
-          workspaceReadTextFile(workspaceId, AGENTS_RELATIVE_PATH, 16).catch(
-            () => null,
-          ),
-          listPendingMemorySuggestions(workspaceId),
-          loadHubRecentApps(workspaceId),
-        ])
+      const [snap, gs, mcp, agentsProbe, sug, appsRecent] = await Promise.all([
+        workspaceHubSnapshot(workspaceId),
+        workspaceGitStatus(workspaceId),
+        workspaceMcpConfigGet(workspaceId),
+        workspaceReadTextFile(workspaceId, AGENTS_RELATIVE_PATH, 16).catch(
+          () => null,
+        ),
+        listPendingMemorySuggestions(workspaceId),
+        loadHubRecentApps(workspaceId),
+      ])
       setSnapshot(snap)
-      setPublishStatus(pub)
       setGitStatus(gs)
       setMcpServerCount(Object.keys(mcp.mcpServers ?? {}).length)
       setPendingSuggestions(sug)
@@ -343,15 +359,6 @@ export function WorkspaceHubOverview({
           : { type: 'dashboard', tab: 'overview' },
       })
     }
-    if (publishStatus?.hasUnpublishedChanges) {
-      items.push({
-        id: 'unpublished',
-        label: 'App has unpublished changes',
-        Icon: Package,
-        tone: 'warning',
-        to: { type: 'dashboard', tab: 'workspace-settings' },
-      })
-    }
     if (gitStatus?.enabled && gitStatus.isRepo && gitStatus.dirty) {
       items.push({
         id: 'git-dirty',
@@ -366,7 +373,6 @@ export function WorkspaceHubOverview({
     sortedConversations,
     pendingSuggestionCount,
     unreadCount,
-    publishStatus?.hasUnpublishedChanges,
     gitStatus?.enabled,
     gitStatus?.isRepo,
     gitStatus?.dirty,
@@ -396,13 +402,27 @@ export function WorkspaceHubOverview({
 
   const openAppRoute = useCallback(
     async (path: string, labelHint?: string | null) => {
-      if (!isTauriRuntime) return
       try {
-        await workspaceWebappPreviewPathSet({ workspaceId, path })
+        const raw = path.trim().replace(/^\//, '')
+        if (!isTauriRuntime) {
+          if (!isCloudWorkspaceSessionId(workspaceId)) return
+          const r = await persistActiveArrowAppId(workspaceId, raw)
+          if (!r.ok) {
+            console.error('[braian] set active arrow app', r.error)
+            return
+          }
+          void navigate({ to: '/dashboard', search: { tab: 'apps' }, replace: false })
+          return
+        }
+        const r = await persistActiveArrowAppId(workspaceId, raw)
+        if (!r.ok) {
+          console.error('[braian] set active arrow app', r.error)
+          return
+        }
         await touchHubRecentApp(workspaceId, path, labelHint ?? null)
         void navigate({ to: '/dashboard', search: { tab: 'apps' }, replace: false })
       } catch (e) {
-        console.error('[braian] preview path', e)
+        console.error('[braian] active arrow app', e)
       }
     },
     [isTauriRuntime, navigate, workspaceId],
@@ -623,32 +643,21 @@ export function WorkspaceHubOverview({
               <div
                 className={cn(
                   'border-border bg-muted/15 flex gap-2.5 rounded-lg border px-3 py-3',
-                  publishStatus?.hasUnpublishedChanges && 'border-warning/40 bg-warning/5',
-                  publishStatus?.hasPublishedDist &&
-                    !publishStatus?.hasUnpublishedChanges &&
-                    'border-success/25 bg-success/5',
+                  (webappAppRoutesDisplay.length ?? 0) > 0 && 'border-success/25 bg-success/5',
                 )}
               >
                 <HubRowIcon
-                  icon={Package}
-                  tint={
-                    publishStatus?.hasUnpublishedChanges
-                      ? 'warning'
-                      : publishStatus?.hasPublishedDist
-                        ? 'success'
-                        : 'accent'
-                  }
+                  icon={LayoutGrid}
+                  tint={(webappAppRoutesDisplay.length ?? 0) > 0 ? 'success' : 'accent'}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-text-3 text-xs font-medium">Published app</p>
-                  <p className="text-text-1 mt-0.5 text-sm font-semibold leading-snug">
-                    {publishStatus?.hasPublishedDist ? 'Built' : 'Not built'}
+                  <p className="text-text-3 text-xs font-medium">Arrow apps</p>
+                  <p className="text-text-1 mt-0.5 text-2xl font-semibold tabular-nums">
+                    {webappAppRoutesDisplay.length ?? 0}
                   </p>
-                  {publishStatus?.hasUnpublishedChanges ? (
-                    <p className="text-warning mt-0.5 text-xs font-medium">Unpublished changes</p>
-                  ) : publishStatus?.hasPublishedDist ? (
-                    <p className="text-success mt-0.5 text-xs">Published</p>
-                  ) : null}
+                  <p className="text-text-3 mt-0.5 text-xs">
+                    {isTauriRuntime ? 'in .braian/arrow-apps' : 'synced to cloud'}
+                  </p>
                 </div>
               </div>
               <div className="border-border bg-muted/15 flex gap-2.5 rounded-lg border px-3 py-3">
@@ -728,11 +737,11 @@ export function WorkspaceHubOverview({
                 </Button>
               }
             />
-            {!isTauriRuntime ? (
+            {!isTauriRuntime && !isCloudWorkspaceSessionId(workspaceId) ? (
               <p className="text-text-3 text-sm">Apps are available in the desktop app.</p>
-            ) : snapshot?.webappAppRoutes?.length ? (
+            ) : webappAppRoutesDisplay.length ? (
               <ul className="flex flex-col gap-2">
-                {snapshot.webappAppRoutes.map((r) => (
+                {webappAppRoutesDisplay.map((r) => (
                   <li key={r.path}>
                     <button
                       type="button"
@@ -750,8 +759,19 @@ export function WorkspaceHubOverview({
               </ul>
             ) : (
               <p className="text-text-3 text-sm">
-                No sub-apps found in <code className="text-text-2 text-xs">app-routes.tsx</code> yet.
-                Initialize the workspace webapp or publish to refresh the list.
+                {isTauriRuntime ? (
+                  <>
+                    No Arrow apps in <code className="text-text-2 text-xs">.braian/arrow-apps.json</code> yet. Use
+                    App mode in a workspace chat and <code className="text-text-2 text-xs">write_arrow_app</code>,
+                    or add apps manually under <code className="text-text-2 text-xs">.braian/arrow-apps/</code>.
+                  </>
+                ) : (
+                  <>
+                    No Arrow apps in your cloud workspace yet. Use App mode in chat (signed in) and{' '}
+                    <code className="text-text-2 text-xs">write_arrow_app</code>, or open Braian Desktop to sync from a
+                    folder workspace.
+                  </>
+                )}
               </p>
             )}
           </section>

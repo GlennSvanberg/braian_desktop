@@ -9,6 +9,10 @@ import { v } from 'convex/values'
  * - One synthetic "personal" workspace bucket per user. Workspaces aren't
  *   actually modelled; everything a user owns lives under their `ownerId`.
  * - `conversations` and `messages` are mirrored from the desktop file store.
+ * - `arrowWorkspaceMeta` + `arrowApps` mirror per-workspace Arrow sandbox apps
+ *   (`.braian/arrow-apps.json` + `.braian/arrow-apps/<id>/`), keyed by the same
+ *   `workspaceClientId` string the desktop SQLite uses for folder workspaces
+ *   and `CLOUD_WORKSPACE_SESSION_ID` for the web-only cloud bucket.
  *
  * Identifiers:
  * - `clientId` is the desktop conversation `id` (UUID generated locally).
@@ -88,4 +92,32 @@ export default defineSchema({
       'conversationClientId',
       'clientMsgId',
     ]),
+
+  /**
+   * Per-workspace Arrow app index metadata (active app + ordering is derived
+   * from app rows; this row only tracks `activeAppId` + LWW stamp).
+   */
+  arrowWorkspaceMeta: defineTable({
+    ownerId: v.id('users'),
+    workspaceClientId: v.string(),
+    activeAppId: v.union(v.string(), v.null()),
+    updatedAtMs: v.number(),
+  }).index('byOwnerAndWorkspace', ['ownerId', 'workspaceClientId']),
+
+  /**
+   * One row per Arrow app under a workspace. Large `mainTs` payloads are
+   * client-bounded before upload; Convex document limits still apply.
+   */
+  arrowApps: defineTable({
+    ownerId: v.id('users'),
+    workspaceClientId: v.string(),
+    appId: v.string(),
+    title: v.string(),
+    mainTs: v.string(),
+    mainCss: v.optional(v.string()),
+    manifestJson: v.optional(v.string()),
+    /** Client-authored LWW field; bumps on writes and soft-deletes. */
+    updatedAtMs: v.number(),
+    deletedAtMs: v.optional(v.number()),
+  }).index('byOwnerWsAndApp', ['ownerId', 'workspaceClientId', 'appId']),
 })

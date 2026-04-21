@@ -71,7 +71,7 @@ export type ChatTurnContext = {
   conversationId: string | null
   /** Profile coach chat (sidebar → You): only `update_user_profile` tool. */
   turnKind?: ChatTurnKind
-  /** Document vs coding vs workspace webapp builder (App = full code + webapp helper tools). */
+  /** Document vs coding vs workspace Arrow app builder (App = full code + Arrow app tools). */
   agentMode?: AgentMode
   /** Called when the model switches agent mode (e.g. `switch_to_code_agent`, `switch_to_app_builder`). */
   onAgentModeChange?: (mode: AgentMode) => void

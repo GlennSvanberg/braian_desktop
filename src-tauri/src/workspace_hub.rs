@@ -1,10 +1,9 @@
 //! Workspace hub: manifest-driven dashboard data under `.braian/` (dashboard.json,
-//! webapp-apps.json, recent-files.json, insights.json).
+//! arrow-apps.json, recent-files.json, insights.json).
 
 use std::fs;
 use std::path::Path;
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -12,10 +11,9 @@ use crate::braian_store::{ensure_braian_layout, workspace_root_path};
 use crate::db;
 
 const DASHBOARD_JSON: &str = ".braian/dashboard.json";
-const WEBAPP_APPS_JSON: &str = ".braian/webapp-apps.json";
+const ARROW_APPS_JSON: &str = ".braian/arrow-apps.json";
 const RECENT_FILES_JSON: &str = ".braian/recent-files.json";
 const INSIGHTS_JSON: &str = ".braian/insights.json";
-const APP_ROUTES_TSX: &str = ".braian/webapp/src/app-routes.tsx";
 const RECENT_MAX: usize = 50;
 
 fn now_ms() -> i64 {
@@ -62,13 +60,24 @@ pub struct WebappAppRouteDto {
   pub label: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WebappAppsManifestFile {
-  pub schema_version: u32,
-  pub generated_at_ms: i64,
+struct ArrowAppIndexEntry {
+  id: String,
   #[serde(default)]
-  pub routes: Vec<WebappAppRouteDto>,
+  title: String,
+  #[allow(dead_code)]
+  #[serde(default)]
+  updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ArrowAppsIndexFile {
+  #[serde(default)]
+  schema_version: u32,
+  #[serde(default)]
+  apps: Vec<ArrowAppIndexEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,59 +125,35 @@ pub struct WorkspaceHubSnapshot {
   pub insight_items: Vec<HubInsightItemDto>,
 }
 
-/// Extract `path` / `label` pairs from `app-routes.tsx` source (APP_ROUTES entries).
-pub fn parse_app_routes_from_tsx(content: &str) -> Vec<WebappAppRouteDto> {
-  let re = Regex::new(
-    r#"path:\s*['"]([^'"]+)['"]\s*,\s*label:\s*['"]([^'"]+)['"]"#,
-  )
-  .expect("valid regex");
-  re.captures_iter(content)
-    .filter_map(|c| {
-      let path = c.get(1)?.as_str().to_string();
-      let label = c.get(2)?.as_str().to_string();
-      if path.is_empty() || label.is_empty() {
-        return None;
-      }
-      Some(WebappAppRouteDto { path, label })
-    })
-    .collect()
-}
-
-fn read_webapp_apps_from_disk(root: &Path) -> Vec<WebappAppRouteDto> {
-  let manifest_path = root.join(WEBAPP_APPS_JSON);
-  if let Ok(raw) = fs::read_to_string(&manifest_path) {
-    if let Ok(m) = serde_json::from_str::<WebappAppsManifestFile>(&raw) {
-      if !m.routes.is_empty() {
-        return m.routes;
-      }
-    }
-  }
-  let tsx = root.join(APP_ROUTES_TSX);
-  let Ok(raw) = fs::read_to_string(&tsx) else {
+fn read_arrow_apps_as_routes(root: &Path) -> Vec<WebappAppRouteDto> {
+  let manifest_path = root.join(ARROW_APPS_JSON);
+  let Ok(raw) = fs::read_to_string(&manifest_path) else {
     return vec![];
   };
-  parse_app_routes_from_tsx(&raw)
-}
-
-/// Writes `.braian/webapp-apps.json` from current `app-routes.tsx` (and timestamps).
-pub fn write_webapp_apps_manifest(workspace_root: &Path) -> Result<(), String> {
-  ensure_braian_layout(workspace_root)?;
-  let tsx = workspace_root.join(APP_ROUTES_TSX);
-  let routes = if tsx.is_file() {
-    let raw = fs::read_to_string(&tsx).map_err(|e| e.to_string())?;
-    parse_app_routes_from_tsx(&raw)
-  } else {
-    vec![]
+  let Ok(m) = serde_json::from_str::<ArrowAppsIndexFile>(&raw) else {
+    return vec![];
   };
-  let file = WebappAppsManifestFile {
-    schema_version: 1,
-    generated_at_ms: now_ms(),
-    routes,
-  };
-  let path = workspace_root.join(WEBAPP_APPS_JSON);
-  let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-  fs::write(&path, format!("{json}\n")).map_err(|e| e.to_string())?;
-  Ok(())
+  if m.schema_version != 1 {
+    return vec![];
+  }
+  m.apps
+    .into_iter()
+    .filter(|a| !a.id.trim().is_empty())
+    .map(|a| {
+      let id = a.id.trim().to_string();
+      let path = if id.starts_with('/') {
+        id.clone()
+      } else {
+        format!("/{id}")
+      };
+      let label = if a.title.trim().is_empty() {
+        id.clone()
+      } else {
+        a.title.trim().to_string()
+      };
+      WebappAppRouteDto { path, label }
+    })
+    .collect()
 }
 
 fn read_dashboard(root: &Path) -> Option<HubDashboardManifest> {
@@ -207,7 +192,7 @@ pub fn workspace_hub_snapshot(
   let conn = db::open_connection(&app).map_err(|e| e.to_string())?;
   let root = workspace_root_path(&conn, &workspace_id)?;
   let dashboard = read_dashboard(&root);
-  let webapp_app_routes = read_webapp_apps_from_disk(&root);
+  let webapp_app_routes = read_arrow_apps_as_routes(&root);
   let recent_files = read_recent_files(&root);
   let insight_items = read_insights(&root);
   Ok(WorkspaceHubSnapshot {
@@ -280,27 +265,21 @@ pub fn workspace_hub_recent_file_touch(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::io::Write;
 
   #[test]
-  fn parse_app_routes_extracts_pairs() {
-    let src = r#"
-export const APP_ROUTES = [
-  {
-    path: '/calculator',
-    label: 'Calculator',
-    element: <X />,
-  },
-  {
-    path: '/email-checker',
-    label: 'Email checker',
-    element: <Y />,
-  },
-]
-"#;
-    let r = parse_app_routes_from_tsx(src);
-    assert_eq!(r.len(), 2);
-    assert_eq!(r[0].path, "/calculator");
-    assert_eq!(r[0].label, "Calculator");
-    assert_eq!(r[1].path, "/email-checker");
+  fn read_arrow_apps_maps_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join(ARROW_APPS_JSON);
+    let mut f = fs::File::create(&p).unwrap();
+    writeln!(
+      f,
+      r#"{{"schemaVersion":1,"apps":[{{"id":"calc","title":"Calculator","updatedAtMs":1}}]}}"#
+    )
+    .unwrap();
+    let routes = read_arrow_apps_as_routes(dir.path());
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].path, "/calc");
+    assert_eq!(routes[0].label, "Calculator");
   }
 }

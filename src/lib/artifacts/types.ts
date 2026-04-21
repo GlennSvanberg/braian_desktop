@@ -98,9 +98,11 @@ export type VisualArtifactPayload = {
   alt?: string
 }
 
-/** Live workspace webapp preview (App agent mode); managed Vite dev server + iframe. */
+/** Workspace Arrow sandbox app (App agent mode); optional hint for which app id to show. */
 export type AppPreviewArtifactPayload = {
   kind: 'app-preview'
+  /** When set, canvas prefers this app id; otherwise shell uses `.braian/arrow-apps.json` activeAppId. */
+  appId?: string
 }
 
 export type WorkspaceArtifactPayload =

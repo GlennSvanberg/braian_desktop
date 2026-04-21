@@ -41,7 +41,7 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'tools',
     title: 'Tools',
     description:
-      'Canvas, workspace files, commands, skills, webapp helpers, and code-agent tools.',
+      'Canvas, workspace files, commands, skills, Arrow app tools, and code-agent tools.',
     body: toolsMd,
   },
   {
@@ -55,7 +55,7 @@ const entries: readonly (InAppDocMeta & { body: string })[] = [
     slug: 'dashboard',
     title: 'Workspace dashboard',
     description:
-      'Dashboard route: Dashboard (hub), Apps, Settings (webapp + workspace tools), Memory; Vite project under .braian/webapp.',
+      'Dashboard route: Dashboard (hub), Apps, Settings (apps + workspace tools), Memory; Arrow apps under .braian/arrow-apps/.',
     body: dashboardMd,
   },
   {

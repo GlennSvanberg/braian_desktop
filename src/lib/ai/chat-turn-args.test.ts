@@ -315,7 +315,7 @@ describe('buildTanStackChatTurnArgs', () => {
     ])
   })
 
-  it('uses lazy webapp tools and switch_to_app_builder in document mode', async () => {
+  it('uses lazy Arrow app tools and switch_to_app_builder in document mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -326,18 +326,12 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const initWebapp = r.toolsDisplay.find(
-      (t) => t.name === 'init_workspace_webapp',
-    )
-    expect(initWebapp?.lazy).toBe(true)
-    const setPreviewPath = r.toolsDisplay.find(
-      (t) => t.name === 'set_workspace_webapp_preview_path',
-    )
-    expect(setPreviewPath?.lazy).toBe(true)
-    const publishWebapp = r.toolsDisplay.find(
-      (t) => t.name === 'publish_workspace_webapp',
-    )
-    expect(publishWebapp?.lazy).toBe(true)
+    const writeApp = r.toolsDisplay.find((t) => t.name === 'write_arrow_app')
+    expect(writeApp?.lazy).toBe(true)
+    const setActive = r.toolsDisplay.find((t) => t.name === 'set_active_arrow_app')
+    expect(setActive?.lazy).toBe(true)
+    const listApps = r.toolsDisplay.find((t) => t.name === 'list_arrow_apps')
+    expect(listApps?.lazy).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)
@@ -345,7 +339,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections[0]?.text).toContain('switch_to_app_builder')
   })
 
-  it('app mode: eager coding + eager webapp helpers, app-builder section, no switch tools', async () => {
+  it('app mode: eager coding + eager Arrow app tools, app-builder section, no switch tools', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -356,32 +350,19 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const initWebapp = r.toolsDisplay.find(
-      (t) => t.name === 'init_workspace_webapp',
-    )
-    expect(initWebapp?.lazy).toBeUndefined()
+    const writeApp = r.toolsDisplay.find((t) => t.name === 'write_arrow_app')
+    expect(writeApp?.lazy).toBeUndefined()
     const readFile = r.toolsDisplay.find((t) => t.name === 'read_workspace_file')
     expect(readFile?.lazy).toBeUndefined()
-    expect(r.toolsDisplay.some((t) => t.name === 'init_workspace_webapp')).toBe(
+    expect(r.toolsDisplay.some((t) => t.name === 'write_arrow_app')).toBe(true)
+    expect(r.toolsDisplay.some((t) => t.name === 'list_arrow_apps')).toBe(true)
+    expect(r.toolsDisplay.some((t) => t.name === 'set_active_arrow_app')).toBe(
       true,
     )
-    expect(
-      r.toolsDisplay.some((t) => t.name === 'read_workspace_webapp_dev_logs'),
-    ).toBe(true)
-    expect(
-      r.toolsDisplay.some((t) => t.name === 'set_workspace_webapp_preview_path'),
-    ).toBe(true)
-    expect(
-      r.toolsDisplay.some((t) => t.name === 'publish_workspace_webapp'),
-    ).toBe(true)
-    const setPreviewPath = r.toolsDisplay.find(
-      (t) => t.name === 'set_workspace_webapp_preview_path',
-    )
-    expect(setPreviewPath?.lazy).toBeUndefined()
-    const publishWebapp = r.toolsDisplay.find(
-      (t) => t.name === 'publish_workspace_webapp',
-    )
-    expect(publishWebapp?.lazy).toBeUndefined()
+    expect(r.toolsDisplay.some((t) => t.name === 'read_arrow_app')).toBe(true)
+    expect(r.toolsDisplay.some((t) => t.name === 'delete_arrow_app')).toBe(true)
+    const setActive = r.toolsDisplay.find((t) => t.name === 'set_active_arrow_app')
+    expect(setActive?.lazy).toBeUndefined()
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(false)
@@ -391,13 +372,13 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections.some((s) => s.id === 'app-builder')).toBe(true)
     expect(r.systemSections[0]?.id).toBe('routing-code')
     expect(r.systemSections[0]?.label).toBe('Routing (App agent)')
-    expect(r.systemSections[0]?.text).toContain('workspace webapp')
-    expect(r.systemSections[0]?.text).toContain('.braian/webapp')
+    expect(r.systemSections[0]?.text).toContain('Arrow')
+    expect(r.systemSections[0]?.text).toContain('.braian/arrow-apps')
     expect(r.isCodeMode).toBe(true)
     expect(r.maxIterations).toBe(48)
   })
 
-  it('code mode keeps webapp tools lazy', async () => {
+  it('code mode keeps Arrow app tools lazy', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -408,14 +389,10 @@ describe('buildTanStackChatTurnArgs', () => {
       priorMessages: [],
       skipSettingsValidation: true,
     })
-    const initWebapp = r.toolsDisplay.find(
-      (t) => t.name === 'init_workspace_webapp',
-    )
-    expect(initWebapp?.lazy).toBe(true)
-    const publishWebapp = r.toolsDisplay.find(
-      (t) => t.name === 'publish_workspace_webapp',
-    )
-    expect(publishWebapp?.lazy).toBe(true)
+    const writeApp = r.toolsDisplay.find((t) => t.name === 'write_arrow_app')
+    expect(writeApp?.lazy).toBe(true)
+    const listApps = r.toolsDisplay.find((t) => t.name === 'list_arrow_apps')
+    expect(listApps?.lazy).toBe(true)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
     ).toBe(true)
@@ -494,7 +471,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.maxIterations).toBe(16)
   })
 
-  it('omits webapp tools when workspace is simple-chats bucket even in app mode', async () => {
+  it('omits Arrow app tools when workspace is simple-chats bucket even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -506,7 +483,7 @@ describe('buildTanStackChatTurnArgs', () => {
       skipSettingsValidation: true,
     })
     expect(
-      r.toolsDisplay.some((t) => t.name === 'init_workspace_webapp'),
+      r.toolsDisplay.some((t) => t.name === 'write_arrow_app'),
     ).toBe(false)
     expect(
       r.toolsDisplay.some((t) => t.name === 'switch_to_app_builder'),
@@ -537,7 +514,7 @@ describe('buildTanStackChatTurnArgs', () => {
     expect(r.systemSections.some((s) => s.id === 'memory')).toBe(false)
   })
 
-  it('omits webapp tools for user profile workspace id even in app mode', async () => {
+  it('omits Arrow app tools for user profile workspace id even in app mode', async () => {
     const r = await buildTanStackChatTurnArgs({
       userText: 'hi',
       context: {
@@ -549,7 +526,7 @@ describe('buildTanStackChatTurnArgs', () => {
       skipSettingsValidation: true,
     })
     expect(
-      r.toolsDisplay.some((t) => t.name === 'init_workspace_webapp'),
+      r.toolsDisplay.some((t) => t.name === 'write_arrow_app'),
     ).toBe(false)
     expect(
       r.systemSections.some((s) => s.id === 'app-builder'),

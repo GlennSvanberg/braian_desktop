@@ -41,7 +41,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/webapp-template"],
+    "resources": [],
     "externalBin": ["bin/braian-mcpd"]
   }
 }

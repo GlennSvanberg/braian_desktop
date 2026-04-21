@@ -4,7 +4,7 @@
 - **User profile:** **Sidebar → You** stores a small **global profile** (name, languages, notes, etc.) on this device. It is injected into **workspace** chats as part of **user context** so replies can match how you want to be addressed; the **You** chat exists only to edit that profile. See [Model context](/docs/model-context).
 - **Workspace scope:** File access and commands are limited to the **active workspace** folder. The assistant cannot browse arbitrary paths on your PC outside that root.
 - **Attachments:** When you attach or reference workspace files, the app may include excerpts in context; large files can be truncated.
-- **Workspace webapp:** The Vite app under `.braian/webapp/` runs as a **local dev server** in Braian. It is not a public site by default. See [Workspace webapp](/docs/dashboard).
+- **Workspace Arrow apps:** Interactive UI under `.braian/arrow-apps/` runs in a **sandbox** in Braian Desktop. It is not a public site by default. See [Workspace dashboard](/docs/dashboard).
 - **Workspace snapshots:** You can opt in to **automatic Git checkpoints** at the workspace folder root (restore recent trees from **Settings**). This uses **libgit2** inside the desktop app, not your system `git` binary. See [Workspace snapshots](/docs/workspace-history).
 - **Connections (MCP):** Optional **Model Context Protocol** servers are listed per workspace in **`.braian/mcp.json`** (Cursor-compatible `mcpServers`). The UI can **probe** stdio or remote entries for a quick health check; attaching those tools to chat is separate from built-in workspace tools. See [Connections (MCP)](/docs/mcp).
 
@@ -26,7 +26,7 @@
 
 - [Overview](/docs/overview)
 - [Model context](/docs/model-context)
-- [Workspace webapp](/docs/dashboard)
+- [Workspace dashboard](/docs/dashboard)
 - [Tools](/docs/tools)
 - [Connections (MCP)](/docs/mcp)
 - [How memory works](/docs/how-memory-works)

@@ -1,7 +1,7 @@
 export type BuildRoutingPromptOptions = {
   hasSwitchToAppBuilder: boolean
   hasSwitchToCodeAgent: boolean
-  hasWebappTools: boolean
+  hasArrowAppTools: boolean
   hasCodeTools: boolean
   hasCanvasTools: boolean
   hasCanvasSnapshot: boolean
@@ -33,12 +33,12 @@ function buildProviderWebSearchLine(
   return '**Live web:** For current events, fresh facts, or information likely after your training cutoff, call the provider native search tool when it helps: **`web_search`** (OpenAI and Anthropic) or **`google_search`** (Google Gemini). Prefer workspace files, attachments, and structured workspace memory when they already answer the question. Summarize what the tool returns and cite sources when the tool provides them.'
 }
 
-function buildWebappRoutingLine(options: BuildRoutingPromptOptions): string | null {
+function buildArrowAppRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasSwitchToAppBuilder) {
-    return '**Braian workspace webapp** — real interactive UI (forms, React): call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and webapp helper tools unlock. Edit `.braian/webapp/src/**`; use `init_workspace_webapp` if there is no `package.json`; use `publish_workspace_webapp` when the user should update the **published** app shown on **Dashboard → Apps**. **Dashboard → Settings** has template, deps, and dev preview. App-mode **artifact** starts dev preview automatically when possible. Do **not** use standalone `.html` only when the user asked for the in-workspace Vite app. **New mini-apps:** always a sub-route (`/email-checker`, etc.) via `app-routes.tsx` + `src/pages/` — **never** implement new features on `/` or replace the My apps landing.'
+    return '**Braian workspace Arrow apps** — interactive UI in a **sandboxed** Arrow JS bundle: call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and **Arrow app** tools unlock. Implement UI with **`write_arrow_app`** (and related tools) under `.braian/arrow-apps/<appId>/` plus `.braian/arrow-apps.json`. Use **`set_active_arrow_app`** so **Dashboard → Apps** and the App-mode **artifact** open the right app. Follow the **app-builder** skill: `reactive`, `html` template literals, `output(payload)` for host messages — **no JSX**, no Vite, no `npm run dev`.'
   }
-  if (options.hasWebappTools) {
-    return '**Braian workspace webapp** — implement UI in `.braian/webapp/` (Vite + React). Use file and shell tools plus `init_workspace_webapp`, `publish_workspace_webapp`, and `read_workspace_webapp_dev_logs` when relevant. **Dashboard → Apps** shows the **published** build only; **Dashboard → Settings** has template, deps, and dev preview (legacy URLs `/workspace/<id>/webapp` still work). App-mode **artifact** auto-starts dev preview when possible. Do **not** satisfy webapp requests with unrelated standalone `.html` only. **New mini-apps** go on their own path (`/slug`); not on `/`.'
+  if (options.hasArrowAppTools) {
+    return '**Braian workspace Arrow apps** — use `list_arrow_apps`, `read_arrow_app`, `write_arrow_app`, `delete_arrow_app`, and `set_active_arrow_app` with file tools for `.braian/arrow-apps/**`. **Dashboard → Apps** and **App mode** render the selected app in an Arrow sandbox. Prefer small, focused apps (one `main.ts` default export).'
   }
   return null
 }
@@ -97,7 +97,7 @@ export function buildBraianRoutingPrompt(
   const lines = [
     ...buildBaseRoutingLines(),
     buildProviderWebSearchLine(options),
-    buildWebappRoutingLine(options),
+    buildArrowAppRoutingLine(options),
     buildCodeRoutingLine(options),
     buildCanvasRoutingLine(options),
     buildSkillsRoutingLine(options),
@@ -141,21 +141,19 @@ You are a **coding agent** with full workspace access. All paths are **relative 
 - **Windows notes:** the shell tool uses \`cmd.exe /C\`. For PowerShell, run \`powershell.exe -Command "..."\` or \`pwsh -Command "..."\` via the shell tool. Python is typically \`python\` or \`py\`.
 - Summarize stdout/stderr honestly. If a command fails, report the error and attempt to fix it.`
 
-/** App mode: full code access plus workspace webapp helpers; shown after \`CODE_MODE_ROUTING_ADDENDUM\`. */
-export const APP_MODE_ROUTING_ADDENDUM = `### App mode (workspace webapp)
+/** App mode: full code access plus Arrow sandbox app tools; shown after \`CODE_MODE_ROUTING_ADDENDUM\`. */
+export const APP_MODE_ROUTING_ADDENDUM = `### App mode (workspace Arrow apps)
 
-You build the workspace **Vite + React** app under \`.braian/webapp/\`.
+You build **Arrow JS** sandbox UIs stored under \`.braian/arrow-apps/<appId>/\` and indexed in \`.braian/arrow-apps.json\`.
 
-- **Sacred landing (\`/\`):** \`MyAppsLandingPage\` in \`app-routes.tsx\` is **only** the **My apps** index (links from \`APP_ROUTES\`). **Never** replace it with feature UI. **Never** implement a new "simple app" on \`/\` — always add \`src/pages/<Name>Page.tsx\`, append \`APP_ROUTES\`, and \`set_workspace_webapp_preview_path\` to that path (e.g. \`/email-checker\`).
-- **Theming:** Use template semantic classes (\`bg-app-bg-0\`, \`text-app-text-1\`, \`border-app-border\`, \`text-app-accent-600\`, … from \`index.css\`). **Do not** ship plain white/black unstyled pages. Keep \`BraianShell\` wrapping \`Routes\` in \`App.tsx\`.
-- The template is a **multi-page SPA**: each feature lives on its own route (e.g. \`/calculator\`, \`/register\`). Add pages under \`src/pages/\`, register them in \`src/app-routes.tsx\`, and **do not** replace the whole app with a single screen when the user asks for a new small app.
-- After you add or edit a sub-page, call \`set_workspace_webapp_preview_path\` with that path (e.g. \`/calculator\`) so published and dev iframes open the right route; use \`/\` for the landing page.
-- Edit \`.braian/webapp/src/**\` with file tools. Run \`npm install\` via \`run_workspace_shell\` with \`cwd: ".braian/webapp"\`. For a production build you may use \`run_workspace_shell\` with \`npm run build\`, or call \`publish_workspace_webapp\` so Braian runs the build with the correct \`base\` and updates the **published** app on **Dashboard → Apps**. **Do not** run \`npm run dev\` in the shell tool (long-running).
-- Use \`init_workspace_webapp\` when \`package.json\` is missing or the user wants the template reset (\`overwrite: true\`).
-- Use \`publish_workspace_webapp\` when the user wants **Dashboard → Apps** to show the latest UI (or after major changes they care about).
-- Use \`read_workspace_webapp_dev_logs\` for output from the Braian-managed Vite dev process after preview issues.
-- **Published vs dev:** **Dashboard → Apps** shows only the **published** build; **Dashboard → Settings** has dev preview and template tools (legacy **Webapp** URLs still work). In **App mode**, the **artifact** panel runs **dev preview** (auto-started when possible). Publish again to refresh the Apps tab.
+- **Entry:** \`main.ts\` must **default-export** an Arrow \`html\` template or \`component(...)\`. Core APIs (\`reactive\`, \`html\`, \`watch\`, \`onCleanup\`) are available as in the Arrow sandbox docs. **No JSX**, no React, no Vite.
+- **Live values:** dynamic parts of a template must be **callables** (see Arrow docs): use the pattern with a function wrapper in the expression slot, not a one-time static interpolation.
+- **Events:** use Arrow \`@event\` bindings on elements (e.g. \`@click\`) with a function handler, per Arrow docs.
+- **Host:** call \`output(payload)\` with **JSON-serializable** data when the UI should notify Braian (forms, saves).
+- **Tools:** \`write_arrow_app\` (create/update), \`list_arrow_apps\`, \`read_arrow_app\`, \`delete_arrow_app\`, \`set_active_arrow_app\` (which app shows in **Dashboard → Apps** and the App-mode artifact). Each app needs a stable **slug** \`appId\` (\`a-z\`, \`0-9\`, hyphens).
+- **Optional \`main.css\`:** pass styles as a string in \`write_arrow_app\` when needed.
+- **Dashboard:** lists apps from the index; user can open **Apps** tab to preview. No npm publish step.
 - If a **document canvas snapshot** is present, focus on the surface the user is clearly iterating on.`
 
 /** Fallback if \`.braian/skills/app-builder/SKILL.md\` is missing or invalid (no frontmatter). */
-export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace webapp:** Interactive UI in \`.braian/webapp/\` (Vite + React + TypeScript + Tailwind). **\`/\` is only My apps** (\`MyAppsLandingPage\` in \`app-routes.tsx\`). **Every** new mini-app — including “simple” tools — goes on **\`/kebab-slug\`**: new \`src/pages/*Page.tsx\`, append \`APP_ROUTES\`, preview path = that slug (not \`/\`). Never replace the landing or root route with feature UI. Use semantic theme classes; keep \`BraianShell\` in \`App.tsx\`. **Dashboard → Apps** is **published** only; **Dashboard → Settings** has dev preview and template; use \`publish_workspace_webapp\` (or UI Publish) to refresh the published app. Use \`run_workspace_shell\` with \`cwd: ".braian/webapp"\` for \`npm install\` — not \`npm run dev\`. Use \`init_workspace_webapp\` when needed; \`read_workspace_webapp_dev_logs\` for dev-server issues.`
+export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace Arrow apps:** Each app is \`.braian/arrow-apps/<appId>/main.ts\` (+ optional \`main.css\`) with a default export Arrow template. Use \`reactive\`, \`html\`, \`output\`; no JSX/React/Vite. Use \`write_arrow_app\`, \`set_active_arrow_app\`, and \`list_arrow_apps\`. See bundled **app-builder** skill for full rules and examples.`

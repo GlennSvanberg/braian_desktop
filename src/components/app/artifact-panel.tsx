@@ -1,6 +1,7 @@
 import { ImageIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
-import { WorkspaceWebappPreviewCore } from '@/components/app/workspace-webapp-preview-core'
+import { ArrowWorkspaceSandbox } from '@/components/app/arrow-workspace-sandbox'
 import {
   MarkdownDocumentCanvas,
   type CanvasSelectionSubmitPayload,
@@ -19,12 +20,92 @@ import {
   isVisualArtifact,
   isWorkspaceTextFileArtifact,
 } from '@/lib/artifacts/types'
+import { loadArrowAppsIndex } from '@/lib/workspace-arrow-apps/io'
+import { useWorkspaceArrowCloudBundle } from '@/lib/workspace-arrow-apps/use-workspace-arrow-cloud-bundle'
 import type { AgentMode } from '@/lib/workspace-api'
+import { isTauri } from '@/lib/tauri-env'
 import { cn } from '@/lib/utils'
+
+function WorkspaceArrowArtifactView({
+  workspaceId,
+  sessionKey,
+  generating,
+  hintAppId,
+}: {
+  workspaceId: string
+  sessionKey: string
+  generating: boolean
+  hintAppId?: string | null
+}) {
+  const [reloadNonce, setReloadNonce] = useState(0)
+  const prevGenerating = useRef(generating)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [resolvedAppId, setResolvedAppId] = useState<string | null>(null)
+  const { isCloudWeb, inlineSourcesForApp } = useWorkspaceArrowCloudBundle(workspaceId)
+
+  useEffect(() => {
+    if (prevGenerating.current && !generating) {
+      setReloadNonce((n) => n + 1)
+    }
+    prevGenerating.current = generating
+  }, [generating])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadErr(null)
+    void (async () => {
+      try {
+        const index = await loadArrowAppsIndex(workspaceId)
+        if (cancelled) return
+        const hinted =
+          typeof hintAppId === 'string' && hintAppId.trim()
+            ? hintAppId.trim().replace(/^\//, '')
+            : null
+        const pick =
+          hinted && index.apps.some((a) => a.id === hinted)
+            ? hinted
+            : index.activeAppId && index.apps.some((a) => a.id === index.activeAppId)
+              ? index.activeAppId
+              : index.apps[0]?.id ?? null
+        setResolvedAppId(pick)
+      } catch (e) {
+        if (!cancelled) {
+          setLoadErr(e instanceof Error ? e.message : String(e))
+          setResolvedAppId(null)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId, sessionKey, reloadNonce, hintAppId])
+
+  if (!resolvedAppId) {
+    return (
+      <div className="bg-card border-border flex h-full min-h-0 flex-col items-center justify-center rounded-xl border p-6 text-center shadow-sm">
+        <p className="text-text-3 text-sm">
+          {loadErr
+            ? loadErr
+            : 'No Arrow apps in this workspace yet. Switch to App mode and ask the assistant to create one (see app-builder skill).'}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <ArrowWorkspaceSandbox
+      workspaceId={workspaceId}
+      appId={resolvedAppId}
+      reloadNonce={reloadNonce}
+      inlineSources={!isTauri() && isCloudWeb ? inlineSourcesForApp(resolvedAppId) : null}
+      className="h-full min-h-0"
+    />
+  )
+}
 
 type ArtifactPanelProps = {
   payload: WorkspaceArtifactPayload | null
-  /** When `app`, the panel shows the workspace Vite webapp preview when workspace + session are set. */
+  /** When `app`, the panel shows the workspace Arrow sandbox app. */
   agentMode?: AgentMode
   appPreviewWorkspaceId?: string | null
   appPreviewSessionKey?: string | null
@@ -209,14 +290,21 @@ export function ArtifactPanel({
     appPreviewSessionKey != null
 
   if (showAppPreviewFromMode) {
+    if (!isTauriRuntime) {
+      return (
+        <div className="bg-card border-border flex h-full min-h-0 flex-col items-center justify-center rounded-xl border p-6 text-center shadow-sm">
+          <p className="text-text-3 text-sm">
+            Arrow workspace apps run in Braian Desktop with a local workspace folder.
+          </p>
+        </div>
+      )
+    }
     return (
-      <WorkspaceWebappPreviewCore
+      <WorkspaceArrowArtifactView
         workspaceId={appPreviewWorkspaceId}
-        isTauriRuntime={isTauriRuntime}
-        layout="artifact"
-        variant="embedded"
+        sessionKey={appPreviewSessionKey}
         generating={appPreviewGenerating}
-        className="h-full min-h-0"
+        hintAppId={null}
       />
     )
   }
@@ -234,14 +322,21 @@ export function ArtifactPanel({
     appPreviewWorkspaceId != null &&
     appPreviewSessionKey != null
   ) {
+    if (!isTauriRuntime) {
+      return (
+        <div className="bg-card border-border flex h-full min-h-0 flex-col items-center justify-center rounded-xl border p-6 text-center shadow-sm">
+          <p className="text-text-3 text-sm">
+            Arrow workspace apps run in Braian Desktop with a local workspace folder.
+          </p>
+        </div>
+      )
+    }
     return (
-      <WorkspaceWebappPreviewCore
+      <WorkspaceArrowArtifactView
         workspaceId={appPreviewWorkspaceId}
-        isTauriRuntime={isTauriRuntime}
-        layout="artifact"
-        variant="embedded"
+        sessionKey={appPreviewSessionKey}
         generating={appPreviewGenerating}
-        className="h-full min-h-0"
+        hintAppId={payload.appId ?? null}
       />
     )
   }
