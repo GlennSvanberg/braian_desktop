@@ -59,7 +59,7 @@ const writeSchema = z.object({
   mainTs: z
     .string()
     .describe(
-      'Full contents of main.ts: Arrow sandbox entry with default export html`...` or component. Use reactive, html, output(); no JSX.',
+      'Full contents of main.ts: must pass Braian validation — default-export `html`…` or `component(` from @arrow-js/core (or globals); use @click not onClick; never @braian/* or React. See app-builder skill.',
     ),
   mainCss: z
     .string()
@@ -238,6 +238,17 @@ export function buildArrowAppTools(
         }
       }
       try {
+        const { validateArrowMainTsFull } = await import(
+          '@/lib/workspace-arrow-apps/validate-arrow-main-ts'
+        )
+        const gate = await validateArrowMainTsFull(parsed.mainTs)
+        if (!gate.ok) {
+          return {
+            ok: false as const,
+            error: gate.errors.join('\n'),
+          }
+        }
+
         const now = Date.now()
         const index = await readIndex(workspaceId)
         const others = index.apps.filter((a) => a.id !== appId)

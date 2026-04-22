@@ -35,10 +35,10 @@ function buildProviderWebSearchLine(
 
 function buildArrowAppRoutingLine(options: BuildRoutingPromptOptions): string | null {
   if (options.hasSwitchToAppBuilder) {
-    return '**Braian workspace Arrow apps** — interactive UI in a **sandboxed** Arrow JS bundle: call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and **Arrow app** tools unlock. Implement UI with **`write_arrow_app`** (and related tools) under `.braian/arrow-apps/<appId>/` plus `.braian/arrow-apps.json`. Use **`set_active_arrow_app`** so **Dashboard → Apps** and the App-mode **artifact** open the right app. Follow the **app-builder** skill: `reactive`, `html` template literals, `output(payload)` for host messages — **no JSX**, no Vite, no `npm run dev`.'
+    return '**Braian workspace Arrow apps** — interactive UI in a **sandboxed** Arrow JS bundle: call `switch_to_app_builder`, then complete `__lazy__tool__discovery__` with the returned tool names so file/shell and **Arrow app** tools unlock. Implement UI with **`write_arrow_app`** (and related tools) under `.braian/arrow-apps/<appId>/` plus `.braian/arrow-apps.json`. Use **`set_active_arrow_app`** so **Dashboard → Apps** and the App-mode **artifact** open the right app. Follow the **app-builder** skill: import from `@arrow-js/core` (or globals only), **default-export an `html` template** (not `export default function`), use **`@click`** (never `onClick`), **`output(payload)`** when needed — **no `@braian/*`**, **no React/JSX/Vite**, no `npm run dev`. **`write_arrow_app` rejects invalid `main.ts`** until checks pass.'
   }
   if (options.hasArrowAppTools) {
-    return '**Braian workspace Arrow apps** — use `list_arrow_apps`, `read_arrow_app`, `write_arrow_app`, `delete_arrow_app`, and `set_active_arrow_app` with file tools for `.braian/arrow-apps/**`. **Dashboard → Apps** and **App mode** render the selected app in an Arrow sandbox. Prefer small, focused apps (one `main.ts` default export).'
+    return '**Braian workspace Arrow apps** — use `list_arrow_apps`, `read_arrow_app`, `write_arrow_app`, `delete_arrow_app`, and `set_active_arrow_app` with file tools for `.braian/arrow-apps/**`. **Dashboard → Apps** and **App mode** render the selected app in an Arrow sandbox. Prefer small, focused apps (one `main.ts`). **`write_arrow_app` validates `main.ts`** (imports, default export shape, `@click` vs React handlers) before saving.'
   }
   return null
 }
@@ -146,14 +146,15 @@ export const APP_MODE_ROUTING_ADDENDUM = `### App mode (workspace Arrow apps)
 
 You build **Arrow JS** sandbox UIs stored under \`.braian/arrow-apps/<appId>/\` and indexed in \`.braian/arrow-apps.json\`.
 
-- **Entry:** \`main.ts\` must **default-export** an Arrow \`html\` template or \`component(...)\`. Core APIs (\`reactive\`, \`html\`, \`watch\`, \`onCleanup\`) are available as in the Arrow sandbox docs. **No JSX**, no React, no Vite.
+- **Entry:** \`main.ts\` must **default-export** \`html\`…\` or \`component(...)\` — **never** \`export default function App()\`. Import from **\`@arrow-js/core\`** only (or use injected globals). **Never** \`@braian/*\`, **never** React.
 - **Live values:** dynamic parts of a template must be **callables** (see Arrow docs): use the pattern with a function wrapper in the expression slot, not a one-time static interpolation.
-- **Events:** use Arrow \`@event\` bindings on elements (e.g. \`@click\`) with a function handler, per Arrow docs.
+- **Events:** Arrow \`@click\`, \`@input\`, etc. — **never** React-style \`onClick=\` / \`onChange=\`.
 - **Host:** call \`output(payload)\` with **JSON-serializable** data when the UI should notify Braian (forms, saves).
-- **Tools:** \`write_arrow_app\` (create/update), \`list_arrow_apps\`, \`read_arrow_app\`, \`delete_arrow_app\`, \`set_active_arrow_app\` (which app shows in **Dashboard → Apps** and the App-mode artifact). Each app needs a stable **slug** \`appId\` (\`a-z\`, \`0-9\`, hyphens).
+- **Tools:** \`write_arrow_app\` **runs validation** on \`main.ts\` before persisting (static rules + sandbox smoke test in the desktop/webview host). Fix reported errors and retry. Also: \`list_arrow_apps\`, \`read_arrow_app\`, \`delete_arrow_app\`, \`set_active_arrow_app\`. Each app needs a stable **slug** \`appId\` (\`a-z\`, \`0-9\`, hyphens).
 - **Optional \`main.css\`:** pass styles as a string in \`write_arrow_app\` when needed.
 - **Dashboard:** lists apps from the index; user can open **Apps** tab to preview. No npm publish step.
 - If a **document canvas snapshot** is present, focus on the surface the user is clearly iterating on.`
 
 /** Fallback if \`.braian/skills/app-builder/SKILL.md\` is missing or invalid (no frontmatter). */
-export const APP_BUILDER_INSTRUCTIONS_FALLBACK = `**Workspace Arrow apps:** Each app is \`.braian/arrow-apps/<appId>/main.ts\` (+ optional \`main.css\`) with a default export Arrow template. Use \`reactive\`, \`html\`, \`output\`; no JSX/React/Vite. Use \`write_arrow_app\`, \`set_active_arrow_app\`, and \`list_arrow_apps\`. See bundled **app-builder** skill for full rules and examples.`
+export const APP_BUILDER_INSTRUCTIONS_FALLBACK =
+  '**Workspace Arrow apps:** Each app is `.braian/arrow-apps/<appId>/main.ts` (+ optional `main.css`) with default-exported Arrow `html` template or `component(...)` from `@arrow-js/core` (or globals). No `@braian/*`, no React or `onClick=`. `write_arrow_app` **validates** before save. Use `set_active_arrow_app` and `list_arrow_apps`. See bundled **app-builder** skill.'

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { arrowAppMainCssRelative, arrowAppMainTsRelative } from '@/lib/workspace-arrow-apps/constants'
+import { reportArrowSandboxRuntimeError } from '@/lib/workspace-arrow-apps/sandbox-runtime-bridge'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
 import { cn } from '@/lib/utils'
 
@@ -81,6 +82,13 @@ export function ArrowWorkspaceSandbox({
             shadowDOM,
             onError: (err) => {
               const msg = err instanceof Error ? err.message : String(err)
+              setLoadError(msg)
+              reportArrowSandboxRuntimeError({
+                workspaceId,
+                appId,
+                phase: 'runtime',
+                message: msg,
+              })
               onRuntimeError?.(msg)
             },
           },
@@ -97,6 +105,12 @@ export function ArrowWorkspaceSandbox({
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
         setLoadError(msg)
+        reportArrowSandboxRuntimeError({
+          workspaceId,
+          appId,
+          phase: 'compile',
+          message: msg,
+        })
         onRuntimeError?.(msg)
       }
     })()

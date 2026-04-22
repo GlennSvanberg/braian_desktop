@@ -14,11 +14,16 @@ There is **no** Vite, **no** React in the sandbox, **no** `npm run dev`, and **n
 Build each app for `sandbox({ source })` with exactly one entry **`main.ts`** (or `main.js`), optional **`main.css`**.
 
 - Use **`@arrow-js/core`** primitives only: **`reactive`**, **`html`**, **`component`**, **`watch`**, **`onCleanup`** when needed. Identifiers can be used as globals in the sandbox (they are injected).
+- **Never** invent packages such as **`@braian/arrow`** — they do not exist in the VM and will fail validation.
 - **No JSX**, no React hooks, no Vue, no direct `document`/`window` mutation in user code.
-- **Default export** from `main.ts` must be the root `html` template literal (or a `component(...)` result).
+- **Default export** from `main.ts` must be the root **`html` tagged template** (or **`component(...)`** returning that). **Never** `export default function App() { return html… }` (React style).
 - **Live reactive slots** must be **callables** (Arrow rule): wrap dynamic reads in a function in the template slot — not a one-time static value.
-- **Events:** use `@click` (and other `@`-bindings) with a function handler per [Arrow docs](https://arrow-js.com/).
+- **Events:** use `@click` (and other `@`-bindings) with a function handler per [Arrow docs](https://arrow-js.com/). **Never** `onClick=` / `onChange=` (React).
 - **`output(payload)`** — global in the VM; send **one JSON-serializable** value to the host (`events.output` in Braian). Use for form submits or status.
+
+### Automatic validation (Braian)
+
+The **`write_arrow_app`** tool runs **static checks** on every `main.ts` (banned imports, React handlers, wrong default-export shape). In the **desktop/webview host** it also runs a **quick sandbox smoke test** (compile + mount in a hidden node). **Invalid code is not written** — the model sees the error string and must fix and retry.
 
 ### File layout (Braian)
 
@@ -71,8 +76,8 @@ Call **`set_active_arrow_app`** when the user should see a different app. After 
 
 ### Troubleshooting
 
-- **Syntax errors in `main.ts`:** fix and re-run `write_arrow_app`; errors surface in the artifact panel.
-- **Empty panel:** ensure `export default` exists and is an Arrow template.
+- **Syntax errors in `main.ts`:** fix and re-run `write_arrow_app`; errors surface in the artifact panel (and the Apps preview after a host fix).
+- **Empty / blank panel:** ensure `export default` is a root **`html\`...\``** template (or `component(...)`), not a React-style function component. Use **`@click="${handler}"`**, never **`onClick`**. Imports: only **`@arrow-js/core`** (or omit imports and use injected globals) — there is **no** `@braian/arrow` or other host package inside the VM.
 - **Unknown app id:** run `list_arrow_apps` first.
 
 ### Agent payload shape (reference)

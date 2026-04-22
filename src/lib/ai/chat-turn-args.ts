@@ -16,6 +16,10 @@ import {
   userProfileGet,
 } from '@/lib/user-profile-api'
 import { isTauri } from '@/lib/tauri-env'
+import {
+  formatArrowSandboxErrorsForSystem,
+  takePendingArrowSandboxErrorsForChat,
+} from '@/lib/workspace-arrow-apps/sandbox-runtime-bridge'
 import { workspaceReadTextFile } from '@/lib/workspace-api'
 import { workspaceMcpConfigGet } from '@/lib/connections-api'
 import { disabledSetFromDoc } from '@/lib/mcp-config-types'
@@ -135,6 +139,8 @@ const SOURCE_PRIOR_CONVERSATIONS =
 const SOURCE_CANVAS_SNAPSHOT = 'src/lib/ai/chat-turn-args.ts (documentCanvasSnapshotPrompt)'
 const SOURCE_WORKSPACE_FILE_SNAPSHOT =
   'src/lib/ai/chat-turn-args.ts (workspaceFileCanvasSnapshotPrompt)'
+const SOURCE_ARROW_SANDBOX_RUNTIME =
+  'src/lib/workspace-arrow-apps/sandbox-runtime-bridge.ts (Arrow preview mount errors)'
 const SOURCE_USER_CONTEXT =
   'src/lib/ai/chat-turn-args.ts (client time only for workspace chats; profile is profile-chat only)'
 const SOURCE_PROFILE_COACH = 'src/lib/ai/chat-turn-args.ts (PROFILE_COACH_SYSTEM)'
@@ -727,6 +733,19 @@ export async function buildTanStackChatTurnArgs(
       source: SOURCE_ROUTING_DOC,
       text: routingText,
     })
+  }
+
+  if (workspaceScoped && ctx?.workspaceId != null) {
+    const pending = takePendingArrowSandboxErrorsForChat(ctx.workspaceId)
+    const arrowRuntimeText = formatArrowSandboxErrorsForSystem(pending)
+    if (arrowRuntimeText) {
+      systemSections.push({
+        id: 'arrow-sandbox-runtime',
+        label: 'Arrow app preview errors (since last turn)',
+        source: SOURCE_ARROW_SANDBOX_RUNTIME,
+        text: arrowRuntimeText,
+      })
+    }
   }
 
   if (workspaceScoped && ctx.workspaceId != null) {
