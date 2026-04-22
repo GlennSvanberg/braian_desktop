@@ -9,6 +9,12 @@ Interactive UI for this workspace lives as **Arrow JS** sandboxes under **`.brai
 
 There is **no** Vite, **no** React in the sandbox, **no** `npm run dev`, and **no** `.braian/webapp/` flow — only Arrow + tools.
 
+### Reference docs (read in this order)
+
+1. **Braian sandbox contract:** `docs/ARROW_SANDBOX_SUBSET.md` — what Arrow APIs actually run in QuickJS + virtual `source` (ignore Vite/SSR/hydration from generic Arrow docs).
+2. **On-brand UI:** `docs/ARROW_APP_DESIGN.md` — `:host` CSS tokens, typography, buttons, inputs (Shadow DOM does not inherit shell Tailwind).
+3. **Full Arrow API (selective use):** repo `.arrow-js/skill/api.md` (refresh vendored skill with `npx @arrow-js/skill@latest` — see `docs/ARROW_APPS.md`).
+
 ### Official contract (keep in sync with tools)
 
 Build each app for `sandbox({ source })` with exactly one entry **`main.ts`** (or `main.js`), optional **`main.css`**.
@@ -66,9 +72,34 @@ output({ type: 'ready', app: 'demo' })
 export default html`<p>Hello from Arrow</p>`
 ```
 
-### Theming
+### Theming and Braian look-and-feel
 
-Prefer semantic, readable HTML and scoped **`main.css`**. Avoid unreadable tiny gray-on-gray text. The host shell is themed; sandbox runs in a card — keep contrast reasonable.
+- **Always ship `main.css`** for any real UI (forms, dashboards, multi-section layouts). The sandbox uses **Shadow DOM**; Braian’s outer card is themed, but **your template does not inherit** `bg-app-*` / Tailwind from the host — you must define colors in `main.css`.
+- Follow **`docs/ARROW_APP_DESIGN.md`**: copy the **`:host { … }` token block** (dark default + optional `prefers-color-scheme: light`), then use classes like **`ba-app`**, **`ba-card`**, **`ba-btn ba-btn--primary`** so apps match the **green-accent neutral** shell ([docs/STYLING.md](docs/STYLING.md)).
+- **Starter `main.css`** (minimal — expand from ARROW_APP_DESIGN):
+
+```css
+:host {
+  color-scheme: dark;
+  --ba-bg-0: #0f1114;
+  --ba-bg-1: #151a1f;
+  --ba-border: #222a32;
+  --ba-text-1: #f2f2ee;
+  --ba-text-2: #cbc7be;
+  --ba-text-3: #8f8a80;
+  --ba-accent: #3e8e6c;
+  --ba-accent-hover: #347a5d;
+  --ba-radius: 0.5rem;
+  --ba-font: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--ba-font);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--ba-text-2);
+  background: var(--ba-bg-0);
+}
+```
+
+- In **`main.ts`**, wrap the root in **`<main class="ba-app">`** (and inner **`ba-card`** / **`ba-btn`** as needed) after you add the full component rules from the design doc.
 
 ### After changes
 

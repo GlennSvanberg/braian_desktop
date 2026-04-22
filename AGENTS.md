@@ -25,7 +25,7 @@ An **opt-in cloud sync layer** lives in `convex/` and `src/lib/cloud/`. It is of
 - **TanStack AI usage (skill):** Install `tanstack-skills/tanstack-skills@tanstack-ai` via `npx skills add …` — see [`docs/AI.md`](docs/AI.md#agent-skill-usage-patterns) for the exact command and skills.sh link.
 - **Execution boundary:** Prefer **Tauri commands** (and later MCP) for filesystem and shell-like actions; keep paths scoped to the user’s workspace. The model can use a shell-**shaped** tool that is **implemented** in Rust, not arbitrary webview shell access.
 - **UI contract:** Real adapters should preserve artifact/stream chunk shapes used by the workspace panel (`src/lib/ai/types.ts`, `src/lib/artifacts/`).
-- **Workspace mini-apps (Arrow):** Interactive apps live under `.braian/arrow-apps/` and are built with **Arrow JS** sandboxes, not the old Vite `.braian/webapp` template. Agent instructions: bundled [`src-tauri/skills-default/app-builder/SKILL.md`](src-tauri/skills-default/app-builder/SKILL.md) and maintainer notes in [`docs/ARROW_APPS.md`](docs/ARROW_APPS.md).
+- **Workspace mini-apps (Arrow):** Interactive apps live under `.braian/arrow-apps/` and are built with **Arrow JS** sandboxes, not the old Vite `.braian/webapp` template. Agent instructions: bundled [`src-tauri/skills-default/app-builder/SKILL.md`](src-tauri/skills-default/app-builder/SKILL.md); API subset for sandboxes [`docs/ARROW_SANDBOX_SUBSET.md`](docs/ARROW_SANDBOX_SUBSET.md); on-brand `main.css` [`docs/ARROW_APP_DESIGN.md`](docs/ARROW_APP_DESIGN.md); maintainer notes [`docs/ARROW_APPS.md`](docs/ARROW_APPS.md).
 
 ## Commands
 

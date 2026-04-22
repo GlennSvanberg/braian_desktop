@@ -21,6 +21,26 @@ Braian’s **workspace apps** are **[Arrow JS](https://arrow-js.com/)** sandboxe
 - Bundled skill: `src-tauri/skills-default/app-builder/SKILL.md`
 - Tools: `src/lib/ai/arrow-app-tools.ts` (`list_arrow_apps`, `read_arrow_app`, `write_arrow_app`, `delete_arrow_app`, `set_active_arrow_app`)
 - Routing text: `APP_MODE_ROUTING_ADDENDUM` in `src/lib/ai/braian-routing-prompt.ts`
+- **What Braian actually runs:** [ARROW_SANDBOX_SUBSET.md](ARROW_SANDBOX_SUBSET.md) (subset of Arrow APIs inside QuickJS sandbox)
+- **Visual DNA for `main.css`:** [ARROW_APP_DESIGN.md](ARROW_APP_DESIGN.md)
+
+### Refreshing the official Arrow skill (maintainers)
+
+Generic Arrow documentation is **vendored** under `.arrow-js/skill/` and referenced from `.cursorrules` and `.github/copilot-instructions.md`.
+
+1. From the **repository root**, run:
+
+   ```bash
+   npx @arrow-js/skill@latest
+   ```
+
+   Confirm the generator writes or updates files under **`.arrow-js/skill/`** (paths may vary by package version).
+
+2. **Review the diff** — merge upstream wording changes; keep Braian-specific notes in this file and in [ARROW_SANDBOX_SUBSET.md](ARROW_SANDBOX_SUBSET.md).
+
+3. If the skill package **adds or renames** markdown files, update the `<!-- arrow-js-skill:start -->` … `<!-- arrow-js-skill:end -->` block in `.cursorrules` and `.github/copilot-instructions.md` so the bullet list matches what exists on disk.
+
+4. **Do not** treat every section of the official skill as applicable to **workspace Arrow apps**: Braian uses **`sandbox({ source })`** with virtual `main.ts` / `main.css` only — no Vite scaffold, SSR, or hydration in that path. See [ARROW_SANDBOX_SUBSET.md](ARROW_SANDBOX_SUBSET.md).
 
 ### Validation before save
 
